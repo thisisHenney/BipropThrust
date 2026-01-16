@@ -1,0 +1,70 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environment
+venv/
+ENV/
+env/
+.venv
+
+# PyInstaller
+*.manifest
+*.spec
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Qt
+*.ui.autosave
+*.qmlc
+*.jsc
+*.pyc
+
+# OpenFOAM case files (temporary/result files)
+*.foam
+processor*/
+postProcessing/
+dynamicCode/
+0/
+[1-9]*/
+log.*
+*.log
+
+# Application data
+*.json.backup
+temp_*/
+
+# OS
+Thumbs.db
+.directory
+
+# Custom
+.gg/
+old_code/
