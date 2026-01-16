@@ -91,7 +91,7 @@ class AppData:
     def _ensure_dirs(self) -> None:
         """Ensure all required directories exist."""
         # Create user directory
-        make_dir(self.user_path, force=True)
+        make_dir(self.user_path, exist_ok=True)
 
         # Verify critical paths exist
         for path_name in ["app_path", "config_path", "res_path"]:

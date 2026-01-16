@@ -1,0 +1,194 @@
+"""
+BipropThrust - OpenFOAM Bipropellant Thruster Simulation GUI
+
+Main entry point for the application.
+
+Usage:
+    python main.py              # Start with temporary case
+    python main.py <case_path>  # Open existing case
+"""
+
+import sys
+from pathlib import Path
+from datetime import datetime
+
+from PySide6.QtWidgets import QApplication
+from PySide6.QtCore import Qt
+
+from common.app_data import app_data
+from view.main.main_window import MainWindow
+
+
+class BipropThrustApp:
+    """
+    Main application controller.
+
+    Handles application initialization, case management,
+    and main window lifecycle.
+    """
+
+    def __init__(self, case_path: str = ""):
+        """
+        Initialize the application.
+
+        Args:
+            case_path: Path to case directory. If empty, creates temp case.
+        """
+        self.app = None
+        self.main_window = None
+        self.case_path = case_path
+        self._setup_application()
+
+    def _setup_application(self) -> None:
+        """Setup Qt application with proper attributes."""
+        # Enable high DPI scaling
+        QApplication.setHighDpiScaleFactorRoundingPolicy(
+            Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
+        )
+
+        # Create Qt application
+        self.app = QApplication(sys.argv)
+
+        # Set application metadata
+        self.app.setApplicationName(app_data.name)
+        self.app.setApplicationVersion(app_data.version)
+        self.app.setOrganizationName("NEXTfoam")
+
+    def _get_or_create_case_path(self) -> str:
+        """
+        Get case path or create temporary case.
+
+        Returns:
+            Path to case directory
+        """
+        if self.case_path:
+            # Validate provided case path
+            path = Path(self.case_path)
+            if path.exists() and path.is_dir():
+                print(f"Opening case: {self.case_path}")
+                return str(path.resolve())
+            else:
+                print(f"Warning: Invalid case path '{self.case_path}'")
+                print("Creating temporary case instead...")
+
+        # Create temporary case
+        temp_case_path = self._create_temp_case()
+        print(f"Created temporary case: {temp_case_path}")
+        return temp_case_path
+
+    def _create_temp_case(self) -> str:
+        """
+        Create a temporary case directory.
+
+        Returns:
+            Path to temporary case directory
+        """
+        # Create temp directory with timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        temp_name = f"temp_{timestamp}"
+
+        # Temp cases stored in user_path/temp/
+        temp_base = Path(app_data.user_path) / "temp"
+        temp_base.mkdir(parents=True, exist_ok=True)
+
+        temp_case = temp_base / temp_name
+        temp_case.mkdir(exist_ok=True)
+
+        return str(temp_case)
+
+    def start(self) -> None:
+        """
+        Start the application.
+
+        Creates main window, loads case, and shows UI.
+        """
+        try:
+            # Get or create case path
+            case_path = self._get_or_create_case_path()
+
+            # Create main window
+            self.main_window = MainWindow(case_path)
+
+            # Initialize and show
+            self.main_window.initialize()
+            self.main_window.show()
+
+            print(f"{app_data.title} started successfully")
+
+        except Exception as e:
+            print(f"Error starting application: {e}")
+            import traceback
+            traceback.print_exc()
+            sys.exit(1)
+
+    def run(self) -> int:
+        """
+        Run the application event loop.
+
+        Returns:
+            Application exit code
+        """
+        return self.app.exec()
+
+    def cleanup_old_temp_cases(self, days: int = 7) -> None:
+        """
+        Clean up old temporary cases.
+
+        Args:
+            days: Delete temp cases older than this many days
+        """
+        temp_base = Path(app_data.user_path) / "temp"
+        if not temp_base.exists():
+            return
+
+        current_time = datetime.now()
+        deleted_count = 0
+
+        try:
+            for temp_dir in temp_base.iterdir():
+                if not temp_dir.is_dir() or not temp_dir.name.startswith("temp_"):
+                    continue
+
+                # Get directory modification time
+                mtime = datetime.fromtimestamp(temp_dir.stat().st_mtime)
+                age_days = (current_time - mtime).days
+
+                # Delete if older than threshold
+                if age_days > days:
+                    import shutil
+                    shutil.rmtree(temp_dir, ignore_errors=True)
+                    deleted_count += 1
+                    print(f"Deleted old temp case: {temp_dir.name} (age: {age_days} days)")
+
+            if deleted_count > 0:
+                print(f"Cleaned up {deleted_count} old temporary case(s)")
+
+        except Exception as e:
+            print(f"Error cleaning up temp cases: {e}")
+
+
+def main():
+    """Main entry point."""
+    # Parse command line arguments
+    case_path = ""
+    if len(sys.argv) > 1:
+        case_path = sys.argv[1]
+
+    # Create and start application
+    app = BipropThrustApp(case_path)
+
+    # Clean up old temp cases (optional, runs in background)
+    app.cleanup_old_temp_cases(days=7)
+
+    # Start UI
+    app.start()
+
+    # Run event loop
+    exit_code = app.run()
+
+    # Exit
+    sys.exit(exit_code)
+
+
+if __name__ == "__main__":
+    main()
