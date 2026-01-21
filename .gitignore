@@ -66,3 +66,6 @@ Thumbs.db
 .directory
 
 # Custom
+.gg/
+old_code/
+.claude/
