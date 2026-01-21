@@ -1,0 +1,41 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2212                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      setFieldsDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+pNoz  25000;  //exit nozzle min pressure from CEA2 or previous computing results 
+pInj  1e5; //1.8e5;  //incresea from 1 bar to 9 bar
+
+defaultFieldValues
+(
+    volScalarFieldValue p  $pNoz
+);
+
+regions
+(
+    cylinderToCell
+    {
+        p1 (-0.002 0 0);
+        p2 ( 0.018 0 0);  //not include throat
+//        p2 ( 0.022 0 0);  //include throat        
+        radius 0.004;
+        fieldValues
+        (
+            volScalarFieldValue p  $pInj
+        );
+    }
+);
+
+
+// ************************************************************************* //

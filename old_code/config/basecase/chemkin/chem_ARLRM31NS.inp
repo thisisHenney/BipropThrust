@@ -1,0 +1,70 @@
+! RM65N -> RM29NT1 -> RM31N
+! 29 species 31 reactions
+!
+ELEMENTS
+C  H  O  N
+END
+SPECIES
+CH3    CH3NHNH2   CH3NN   CH3NNH   CH3NNH2   CH3O   CH4
+CO     CO2        H       H2       H2O       H2CN   HCN
+HNC    HNCO       HNO3    HONO     O         O2     OH
+N      N2         N2O4    NH       NH2       NH3    NO
+NO2    AR
+END
+REACTIONS
+!Reactions 1-205
+NO2(+M)=NO+O(+M)                         7.600E+18    -1.27   73290.00 !Reaction1   <- 65N
+     LOW  /  2.4700E+28   -0.3370E+01   7.4800E+04/
+H2O/4.40/ N2/1.00/ CO2/2.30/ 
+NO+OH(+M)=HONO(+M)                       1.988E+12    -0.05    -721.00 !Reaction4   -> first discon. peak amp. tuned
+     LOW  /  5.0800E+23   -3.5100E+00  -6.7600E+01/
+H2O/8.30/ N2/1.00/ CO2/1.50/
+HCN+H(+M)=H2CN(+M)                       3.310E+13     0.00    4844.00 !Reaction8
+     LOW  /  1.6000E+24   -2.7300E+00   7.6600E+03/
+H2O/5.00/ N2/1.00/ CO2/2.00/
+CO+OH=CO2+H                              1.510E+07     1.30    -758.00 !Reaction42
+OH+H2=H2O+H                              2.160E+10     1.50       0.00 !Reaction47  -> third discon. peak tuned
+O2+H=O+OH                                3.520E+16    -0.70   17070.00 !Reaction48
+O+H2=OH+H                                5.060E+04     2.67    6290.00 !Reaction49
+H+OH+M=H2O+M                             1.600E+22    -2.00       0.00 !Reaction61
+H2O/5.00/
+NO2+H=NO+OH                              1.300E+14     0.00   19610.00 !Reaction93  -> third discon. peak tuned
+NO2+O=NO+O2                              3.900E+12     0.00    -238.00 !Reaction94  <- 65N
+N+H2=NH+H                                2.330E+14     0.00   30830.00 !Reaction119
+NH2+H=NH+H2                              4.000E+13     0.00    3650.00 !Reaction124
+N+NO=N2+O                                3.270E+12     0.30       0.00 !Reaction164
+NO+H=N+OH                                1.700E+14     0.00   48800.00 !Reaction166
+HNC+OH=HNCO+H                            2.800E+13     0.00    3696.00 !Reaction170
+HNCO+H=NH2+CO                            2.250E+07     1.70    3800.00 !Reaction183
+HCN+M=HNC+M                              4.360E+26    -3.34   50194.00 !Reaction197 
+!Reactions 206-351
+H+CH3(+M)<=>CH4(+M)                      1.390E+16    -0.53     536.00 !Reaction229 
+     LOW  /  2.6200E+33   -4.7600E+00   2.4400E+03/
+     TROE/   0.7830  74.00  2941.00  6964.00/
+H2/2.00/ H2O/6.00/ CH4/3.00/ CO/1.50/ CO2/2.00/
+CH3+NO<=>HCN+H2O                         9.600E+13     0.00    8500.00 !Reaction345 -> second discon. CH4 burn time shift, tuned activation erg
+!Reactions 352-412
+HNO3+NO=HONO+NO2                         8.000E+06     2.00   11000.00 !Reaction365
+!Reactions 413-427
+!Reactions 428-443
+CH3+NO2=CH3O+NO                          1.400E+13     0.00       0.00 !Reaction436
+!Reactions 444-496
+CH3NNH+CH3=CH4+CH3NN                     4.600E+13     0.00    4850.00 !Reaction454 
+CH3NN=CH3+N2                             3.000E+06     0.00       0.00 !Reaction456
+CH3NHNH2=CH3NNH+H2                       3.160E+13     0.00   57000.00 !Reaction460
+CH3NHNH2+OH=CH3NNH2+H2O                  3.920E+13     0.00       0.00 !Reaction471 -> ignition part
+CH3NNH+OH=CH3NN+H2O                      3.920E+13     0.00       0.00 !Reaction472 -> ignition part
+CH3NHNH2+NO2=CH3NNH2+HONO                2.200E+11     0.00    5890.00 !Reaction492 -> first discon. MMH decom. time shift, tuned activation erg
+CH3NNH+NO2=CH3NN+HONO                    2.200E+11     0.00    5890.00 !Reaction493 -> first discon. MMH decom. time shift, tuned activation erg 
+CH3NNH2+NO2=CH3NNH+HONO                  1.000E+08     2.00       0.00 !Reaction494
+N2O4(+M)=NO2+NO2(+M)                     4.050E+18    -1.10   12840.00 !Reaction496
+     LOW  /  1.9600E+28   -3.8000E+00   1.2800E+04/
+!Reactions 497
+!Reactions 498-513
+H2CN+NH2=HCN+NH3                         9.200E+05     1.94   -1152.00 !Wang 2018
+!Single step
+!CH3NHNH2+0.8N2O4=>2.2H2O+0.8H2+CO+1.8N2  1.200E+07     0.00    2000.00 !Smooth curve
+CH3NHNH2+0.8N2O4=>2.2H2O+0.8H2+CO+1.8N2  2.240E+08     0.00    2273.00 !Step type
+     FORD / CH3NHNH2  1.0/
+     FORD / N2O4  0.8/
+END

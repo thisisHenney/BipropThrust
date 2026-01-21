@@ -1,0 +1,73 @@
+#!/bin/sh
+cd "${0%/*}" || exit                                # Run from this directory
+. ${WM_PROJECT_DIR:?}/bin/tools/RunFunctions        # Tutorial run functions
+#------------------------------------------------------------------------------
+
+cp -r ../2.meshing_MheadBL7/constant/cellToRegion ./constant/
+cp -r ../2.meshing_MheadBL7/constant/regionProperties ./constant/
+cp -r ../2.meshing_MheadBL7/constant/ccNimonic/polyMesh ./constant/ccNimonic/
+cp -r ../2.meshing_MheadBL7/constant/copperRing/polyMesh ./constant/copperRing/
+cp -r ../2.meshing_MheadBL7/constant/fluid/polyMesh ./constant/fluid/
+cp -r ../2.meshing_MheadBL7/constant/header/polyMesh ./constant/header/
+cp -r ../2.meshing_MheadBL7/constant/throatPtRh/polyMesh ./constant/throatPtRh/
+
+# Restore initial fields
+restore0Dir
+
+# make filmRegion mesh
+runApplication topoSet -region fluid
+runApplication extrudeToRegionMesh -region fluid -overwrite
+
+# change boundary patch names
+sed -i 's/minX/copperRing/g' constant/copperRing/polyMesh/boundary
+sed -i 's/minX/header/g' constant/header/polyMesh/boundary 
+sed -i 's/fluid_to_filmRegion_filmFaces/fluid_to_ccNimonic/g' constant/fluid/polyMesh/boundary
+sed -i 's/fluid_to_filmRegion_filmFaces/wallFilm_to_fluid/g' constant/filmRegion/polyMesh/boundary
+
+# change samplePatch in the boundary to coupled patch betwee fluid and solid region
+runApplication -s fluid changeDictionary -region fluid -constant
+runApplication -s filmRegion changeDictionary -region filmRegion -constant
+sed -i '28,30d' constant/filmRegion/polyMesh/boundary
+\sed -i '36,38d' constant/filmRegion/polyMesh/boundary
+
+# make iginition cellSets
+runApplication -s ignition topoSet -region fluid -dict system/topoSetDict.ignition
+runApplication -s TM setFields -region fluid -dict system/setFieldsDict.TM
+
+#paraFoam -touch
+#paraFoam -region fluid -touch
+#paraFoam -region header -touch
+#paraFoam -region copperRing -touch
+#paraFoam -region ccNimonic -touch
+#paraFoam -region throatPtRh -touch
+#paraFoam -region filmRegion -touch
+
+runApplication -s fluid decomposePar -region fluid
+runApplication -s filmRegion decomposePar -region filmRegion
+runApplication -s ccNimonic decomposePar -region ccNimonic
+runApplication -s copperRing decomposePar -region copperRing
+runApplication -s header decomposePar -region header
+runApplication -s throatPtRh decomposePar -region throatPtRh
+runApplication mpirun -np `getNumberOfProcessors` --hostfile system/hosts `getApplication` -parallel
+#runApplication mpirun -np `getNumberOfProcessors` `getApplication` -parallel    
+runApplication -s throatPtRh reconstructPar -region throatPtRh
+runApplication -s header reconstructPar -region header
+runApplication -s copperRing reconstructPar -region copperRing
+runApplication -s ccNimonic reconstructPar -region ccNimonic
+runApplication -s filmRegion reconstructPar -region filmRegion
+runApplication -s fluid reconstructPar -region fluid
+
+#runApplication decomposePar -allRegions
+##runApplication mpirun -np `getNumberOfProcessors` --hostfile system/hosts `getApplication` -parallel    
+#runApplication mpirun -np `getNumberOfProcessors` `getApplication` -parallel    
+#runApplication reconstructPar -allRegions -newTimes
+#rm -rf processor* > /dev/null 2>&1
+
+#foamCalc mag U #-latestTime #-time 100
+#sample #-latestTime
+postProcess -region fluid -latestTime -field U -func "mag(U)"
+postProcess -region fluid -latestTime -func "flowRatePatch(name=outlet)"
+postProcess -region fluid -latestTime -func "patchAverage(name=outlet,T,p,mag(U),rho,phi)"
+postProcess -region fluid -latestTime -func "minMaxComponents(T,p,mag(U),rho)"
+
+# ----------------------------------------------------------------- end-of-file

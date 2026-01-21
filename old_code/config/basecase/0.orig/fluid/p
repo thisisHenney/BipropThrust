@@ -1,0 +1,55 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2112                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    object      p;
+}
+// ************************************************************************* //
+
+dimensions          [1 -1 -2 0 0 0 0];
+
+internalField       uniform 25000;
+
+boundaryField
+{
+    "(fluid_to_.*)"
+    {
+        type            zeroGradient;
+    }
+
+    "(min.*|max.*)"
+    {
+//        type			zeroGradient;
+        type            subsonicSupersonicPressureOutlet;
+        value           $internalField; // 2100
+        p0              $internalField; // 37000 at exit p_min+0.5*rho_min*U_max^2
+        U               U;
+        phi             phi;
+        psi             thermo:psi;
+        refValue        $internalField;
+        refGradient     uniform 0;
+        valueFraction   uniform 1;
+//        type            waveTransmissive;
+//        phi             phi;
+//        psi             thermo:psi;
+//        gamma           1.154;
+//        type            outletMachNumberPressure;
+//        pBack           40000; //0.4*101325;
+//        c1              1;
+//        A1              4.90874e-6;
+//        relax           0.1;
+//        choked          false;
+//        value           $internalField;        
+    }    
+}
+
+
+// ************************************************************************* //

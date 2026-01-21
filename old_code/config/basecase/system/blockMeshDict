@@ -1,0 +1,102 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2112                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      blockMeshDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+scale   0.001;
+
+vertices
+(
+    ( -4.0  -10.0  -10.0)
+    ( 36.0  -10.0  -10.0)
+    ( 36.0   10.0  -10.0)
+    ( -4.0   10.0  -10.0)
+    ( -4.0  -10.0   10.0)
+    ( 36.0  -10.0   10.0)
+    ( 36.0   10.0   10.0)
+    ( -4.0   10.0   10.0)
+);
+
+blocks
+(
+    hex (0 1 2 3 4 5 6 7) (161 81 81) simpleGrading (1 1 1)   //vol=0.016
+//    hex (0 1 2 3 4 5 6 7) (201 101 101) simpleGrading (1 1 1)   //vol=0.008=delS 200 micron
+//    hex (0 1 2 3 4 5 6 7) (249 123 123) simpleGrading (1 1 1)   //vol=0.004
+//    hex (0 1 2 3 4 5 6 7) (301 150 150) simpleGrading (1 1 1)   //vol=0.002
+//    hex (0 1 2 3 4 5 6 7) (401 191 191) simpleGrading (1 1 1)   //vol=0.001=delS 100 micron
+//    hex (0 1 2 3 4 5 6 7) (501 243 243) simpleGrading (1 1 1)   //vol=0.0005
+);
+
+edges
+(
+);
+
+boundary
+(
+    maxY
+    {
+        type wall;
+        faces
+        (
+            (3 7 6 2)
+        );
+    }
+    minX
+    {
+        type wall;
+        faces
+        (
+            (0 4 7 3)
+        );
+    }
+    maxX
+    {
+        type wall;
+        faces
+        (
+            (2 6 5 1)
+        );
+    }
+    minY
+    {
+        type wall;
+        faces
+        (
+            (1 5 4 0)
+        );
+    }
+    minZ
+    {
+        type wall;
+        faces
+        (
+            (0 3 2 1)
+        );
+    }
+    maxZ
+    {
+        type wall;
+        faces
+        (
+            (4 5 6 7)
+        );
+    }
+);
+
+mergePatchPairs
+(
+);
+
+
+// ************************************************************************* //

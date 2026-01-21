@@ -1,0 +1,51 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2212                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      setFieldsDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+TNoz  300;
+TInj  330;
+
+CH3NHNH2Noz  0.0;
+CH3NHNH2Inj  1.0;
+
+ARNoz  1.0;
+ARInj  0.0;
+
+defaultFieldValues
+(
+    volScalarFieldValue T  $TNoz
+    volScalarFieldValue CH3NHNH2  $CH3NHNH2Noz
+    volScalarFieldValue AR  $ARNoz
+);
+
+regions
+(
+    cylinderToCell
+    {
+        p1 (-0.002 0 0);
+        p2 ( 0.018 0 0);  //not include throat
+//        p2 ( 0.022 0 0);  //include throat        
+        radius 0.004;
+        fieldValues
+        (
+            volScalarFieldValue T  $TInj
+            volScalarFieldValue CH3NHNH2  $CH3NHNH2Inj
+            volScalarFieldValue AR  $ARInj
+        );
+    }
+);
+
+
+// ************************************************************************* //
