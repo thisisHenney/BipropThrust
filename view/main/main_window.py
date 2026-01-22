@@ -24,6 +24,7 @@ from common.app_data import app_data
 from common.case_data import case_data
 from common.app_context import AppContext
 from view.main.menu_handler import MenuHandler
+from view.main.center_widget import CenterWidget
 
 
 class MainWindow(QMainWindow):
@@ -153,9 +154,37 @@ class MainWindow(QMainWindow):
         self.context.register("vtk_pre", self.vtk_pre)
         self.context.register("vtk_post", self.vtk_post)
 
+        # Customize vtk_pre toolbar
+        self._setup_vtk_pre_toolbar()
+
         # Residual plot widget
         self.residual_graph = ResidualPlotWidget(self)
         self.context.register("residual_graph", self.residual_graph)
+
+    def _setup_vtk_pre_toolbar(self) -> None:
+        """Customize vtk_pre toolbar - hide OpenFOAM button, add probe tool."""
+        # Hide "Load OpenFOAM" action
+        for action in self.vtk_pre.toolbar.actions():
+            if action.text() == "Load OpenFOAM":
+                action.setVisible(False)
+                break
+
+        # Add point probe tool
+        self.vtk_pre.add_tool("point_probe")
+
+        # Get point_probe tool and connect signal
+        probe_tool = self.vtk_pre._optional_tools.get("point_probe")
+        if probe_tool:
+            probe_tool.center_moved.connect(self._on_probe_position_changed)
+
+    def _on_probe_position_changed(self, x: float, y: float, z: float) -> None:
+        """Handle probe position change - sync to geometry panel."""
+        # Get geometry panel from center widget
+        geom_panel = self.center_widget.panel_views.get("geometry")
+        if geom_panel:
+            geom_panel.edit_pos_x.setText(f"{x:.6g}")
+            geom_panel.edit_pos_y.setText(f"{y:.6g}")
+            geom_panel.edit_pos_z.setText(f"{z:.6g}")
 
     def _setup_dock(self) -> None:
         """Setup dock widget layout."""
@@ -175,13 +204,8 @@ class MainWindow(QMainWindow):
         self.dock_manager = DockWidget(self)
         self.context.register("dock", self.dock_manager)
 
-        # Create temporary center widget
-        self.center_widget = QWidget()
-        center_layout = QVBoxLayout(self.center_widget)
-        center_label = QLabel("Center Widget\n(Navigation Tree + Panels)")
-        center_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        center_label.setStyleSheet("font-size: 14pt; color: #888;")
-        center_layout.addWidget(center_label)
+        # Create center widget with navigation tree and panels
+        self.center_widget = CenterWidget(self, self.context)
 
         # Add widgets to dock
         self.dock_manager.add_center_dock(self.center_widget)

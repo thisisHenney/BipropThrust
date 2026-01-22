@@ -23,11 +23,13 @@ class GeometryData:
         name: Geometry name (stem of filename)
         path: Full path to geometry file (STL)
         is_visible: Whether geometry is visible in viewport
+        position: Position offset (x, y, z) in meters
     """
 
     name: str = ""
     path: str = ""
     is_visible: bool = True
+    position: tuple[float, float, float] = field(default_factory=lambda: (0.0, 0.0, 0.0))
 
     def __post_init__(self):
         """Validate geometry data after creation."""
@@ -41,6 +43,9 @@ class GeometryData:
     @classmethod
     def from_dict(cls, data: dict) -> "GeometryData":
         """Create from dictionary."""
+        # Convert position list to tuple if needed
+        if "position" in data and isinstance(data["position"], list):
+            data["position"] = tuple(data["position"])
         return cls(**data)
 
 
@@ -172,6 +177,43 @@ class CaseData(BaseCase):
         self.objects[name].is_visible = visible
         self._update_modified_time()
         return True
+
+    def set_geometry_position(
+        self, name: str, x: float, y: float, z: float
+    ) -> bool:
+        """
+        Set geometry position offset.
+
+        Args:
+            name: Geometry name
+            x: X position offset in meters
+            y: Y position offset in meters
+            z: Z position offset in meters
+
+        Returns:
+            True if updated, False if geometry not found
+        """
+        if name not in self.objects:
+            return False
+
+        self.objects[name].position = (x, y, z)
+        self._update_modified_time()
+        return True
+
+    def get_geometry_position(self, name: str) -> Optional[tuple[float, float, float]]:
+        """
+        Get geometry position offset.
+
+        Args:
+            name: Geometry name
+
+        Returns:
+            Position tuple (x, y, z) or None if not found
+        """
+        if name not in self.objects:
+            return None
+
+        return self.objects[name].position
 
     def clear_geometries(self, keep_protected: bool = True) -> None:
         """
