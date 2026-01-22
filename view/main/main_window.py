@@ -10,7 +10,12 @@ from pathlib import Path
 
 from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QLabel, QMessageBox
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QAction
 
+from nextlib.widgets.dock import DockWidget
+from nextlib.execute.exec_widget import ExecWidget
+from nextlib.vtk import PreprocessWidget, PostprocessWidget
+from nextlib.graph.pyqtgraph.residual_plot_widget import ResidualPlotWidget
 from nextlib.utils.window import center_on_screen
 from nextlib.utils.file import copy_files
 from nextlib.dialogbox.dialogbox import DirDialogBox
@@ -18,6 +23,7 @@ from nextlib.dialogbox.dialogbox import DirDialogBox
 from common.app_data import app_data
 from common.case_data import case_data
 from common.app_context import AppContext
+from view.main.menu_handler import MenuHandler
 
 
 class MainWindow(QMainWindow):
@@ -44,23 +50,148 @@ class MainWindow(QMainWindow):
         # Service registry
         self.context = AppContext()
 
+        # Components (will be initialized in _setup_components)
+        self.exec_widget = None
+        self.vtk_pre = None
+        self.vtk_post = None
+        self.residual_graph = None
+        self.dock_manager = None
+        self.center_widget = None
+        self.menu_handler = None
+
         # Setup UI
-        self._setup_ui()
+        self._setup_menu()
+        self._setup_components()
+        self._setup_dock()
         self._setup_window()
 
-    def _setup_ui(self) -> None:
-        """Setup basic UI components."""
-        # Create central widget with simple layout for now
-        central_widget = QWidget()
-        layout = QVBoxLayout(central_widget)
+    def _setup_menu(self) -> None:
+        """Setup menu bar."""
+        menubar = self.menuBar()
 
-        # Add a simple label
-        label = QLabel(f"{self.app_data.title}\n\nInitializing...")
-        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        label.setStyleSheet("font-size: 16pt; color: #666;")
-        layout.addWidget(label)
+        # File menu
+        file_menu = menubar.addMenu("&File")
 
-        self.setCentralWidget(central_widget)
+        self.action_new = QAction("&New", self)
+        self.action_new.setShortcut("Ctrl+N")
+        file_menu.addAction(self.action_new)
+
+        self.action_open = QAction("&Open...", self)
+        self.action_open.setShortcut("Ctrl+O")
+        file_menu.addAction(self.action_open)
+
+        self.action_save = QAction("&Save", self)
+        self.action_save.setShortcut("Ctrl+S")
+        file_menu.addAction(self.action_save)
+
+        self.action_save_as = QAction("Save &As...", self)
+        self.action_save_as.setShortcut("Ctrl+Shift+S")
+        file_menu.addAction(self.action_save_as)
+
+        file_menu.addSeparator()
+
+        self.action_exit = QAction("E&xit", self)
+        self.action_exit.setShortcut("Alt+F4")
+        file_menu.addAction(self.action_exit)
+
+        # Run menu
+        run_menu = menubar.addMenu("&Run")
+
+        self.action_run = QAction("&Run", self)
+        self.action_run.setShortcut("F5")
+        run_menu.addAction(self.action_run)
+
+        self.action_stop = QAction("&Stop", self)
+        run_menu.addAction(self.action_stop)
+
+        # View menu
+        view_menu = menubar.addMenu("&View")
+
+        self.action_view_mesh = QAction("&Mesh", self)
+        view_menu.addAction(self.action_view_mesh)
+
+        self.action_view_post = QAction("&Post", self)
+        view_menu.addAction(self.action_view_post)
+
+        self.action_view_residuals = QAction("&Residuals", self)
+        view_menu.addAction(self.action_view_residuals)
+
+        self.action_view_log = QAction("&Log", self)
+        view_menu.addAction(self.action_view_log)
+
+        # Tools menu
+        tools_menu = menubar.addMenu("&Tools")
+
+        self.action_file_explorer = QAction("Open &File Explorer", self)
+        tools_menu.addAction(self.action_file_explorer)
+
+        self.action_terminal = QAction("Open &Terminal", self)
+        tools_menu.addAction(self.action_terminal)
+
+        # Help menu
+        help_menu = menubar.addMenu("&Help")
+
+        self.action_about = QAction("&About", self)
+        help_menu.addAction(self.action_about)
+
+        # Create menu handler and connect signals
+        self.menu_handler = MenuHandler(self)
+        self.menu_handler.connect_actions()
+
+    def _setup_components(self) -> None:
+        """Setup main components (VTK, Exec, Graph)."""
+        # Execution widget (log output)
+        self.exec_widget = ExecWidget(self)
+        self.context.register("exec", self.exec_widget)
+
+        # Connect to statusbar
+        self.exec_widget.connect_to_statusbar(self.statusBar())
+
+        # VTK widgets for pre/post visualization
+        self.vtk_pre = PreprocessWidget(self)
+        self.vtk_post = PostprocessWidget(self)
+        self.context.register("vtk_pre", self.vtk_pre)
+        self.context.register("vtk_post", self.vtk_post)
+
+        # Residual plot widget
+        self.residual_graph = ResidualPlotWidget(self)
+        self.context.register("residual_graph", self.residual_graph)
+
+    def _setup_dock(self) -> None:
+        """Setup dock widget layout."""
+        # Create central widget container for dock manager
+        self._central_container = QWidget()
+        self._central_container.setLayout(QVBoxLayout())
+        self._central_container.layout().setContentsMargins(0, 0, 0, 0)
+        self.setCentralWidget(self._central_container)
+
+        # Create ui object for DockWidget compatibility
+        class _UI:
+            pass
+        self.ui = _UI()
+        self.ui.centralwidget = self._central_container
+
+        # Create dock manager
+        self.dock_manager = DockWidget(self)
+        self.context.register("dock", self.dock_manager)
+
+        # Create temporary center widget
+        self.center_widget = QWidget()
+        center_layout = QVBoxLayout(self.center_widget)
+        center_label = QLabel("Center Widget\n(Navigation Tree + Panels)")
+        center_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        center_label.setStyleSheet("font-size: 14pt; color: #888;")
+        center_layout.addWidget(center_label)
+
+        # Add widgets to dock
+        self.dock_manager.add_center_dock(self.center_widget)
+        self.dock_manager.add_side_dock(self.exec_widget, "Log", area="bottom")
+        self.dock_manager.add_side_dock(self.vtk_pre, "Mesh", is_tab=True)
+        self.dock_manager.add_side_dock(self.vtk_post, "Post", is_tab=True)
+        self.dock_manager.add_side_dock(self.residual_graph, "Residuals", is_tab=True)
+
+        # Show Mesh tab by default
+        self.dock_manager.change_dock_tab(2)
 
     def _setup_window(self) -> None:
         """Setup window properties."""
@@ -73,6 +204,9 @@ class MainWindow(QMainWindow):
 
         # Center on screen
         center_on_screen(self)
+
+        # Setup statusbar
+        self.statusBar().showMessage("Ready", 3000)
 
     def _update_window_title(self) -> None:
         """Update window title with current case path."""
@@ -91,6 +225,9 @@ class MainWindow(QMainWindow):
         """
         print(f"Initializing main window with case: {self.case_path}")
 
+        # Initialize components
+        self.exec_widget.set_defaults()
+
         # Load or create case
         if self.case_path:
             self._load_case(self.case_path)
@@ -101,8 +238,7 @@ class MainWindow(QMainWindow):
         self._update_window_title()
 
         # Update status
-        if hasattr(self, 'statusBar'):
-            self.statusBar().showMessage('Ready', 3000)
+        self.statusBar().showMessage("Ready", 3000)
 
     def _load_case(self, case_path: str) -> None:
         """
@@ -123,6 +259,9 @@ class MainWindow(QMainWindow):
 
         # Try to load existing case data
         self.case_data.load()
+
+        # Set working path for exec widget
+        self.exec_widget.set_working_path(str(path.resolve()))
 
         print(f"Case loaded: {self.case_data.path}")
 
@@ -151,6 +290,45 @@ class MainWindow(QMainWindow):
             print(f"Error copying base case: {e}")
             # Create empty directory as fallback
             Path(case_path).mkdir(parents=True, exist_ok=True)
+
+    def open_case(self, path: str = "") -> None:
+        """
+        Open a case from path.
+
+        Args:
+            path: Case path. If empty, shows folder dialog.
+        """
+        if not path:
+            path = DirDialogBox.open_folder(self, "Open Case")
+
+        if not path:
+            return
+
+        self.case_path = path
+        self._load_case(path)
+        self._update_window_title()
+
+    def create_new_case(self, user_select: bool = True) -> None:
+        """
+        Create a new case.
+
+        Args:
+            user_select: If True, show folder dialog for case location
+        """
+        if user_select:
+            path = DirDialogBox.create_folder(self, "Create New Case")
+            if not path:
+                return
+        else:
+            # Create temp case
+            from datetime import datetime
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            path = str(Path(self.app_data.user_path) / "temp" / f"temp_{timestamp}")
+
+        self.case_path = path
+        self._create_case_from_template(path)
+        self._load_case(path)
+        self._update_window_title()
 
     def closeEvent(self, event):
         """
@@ -266,12 +444,14 @@ class MainWindow(QMainWindow):
 
     def _cleanup(self) -> None:
         """Cleanup resources before closing."""
-        # Save case data (only if not temp or already saved)
+        # Save case data (only if not temp)
         if self.case_data.path and "temp" not in self.case_path:
             self.case_data.save()
             print("Case data saved")
 
-        # TODO: Cleanup other resources (VTK, exec, etc.)
+        # Cleanup exec widget
+        if self.exec_widget:
+            self.exec_widget.end()
 
     def __repr__(self) -> str:
         """String representation."""
