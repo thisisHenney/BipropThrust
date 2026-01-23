@@ -1,28 +1,30 @@
 """
-Panel Views - Settings Panels for Main Window
+Panel Views - Settings Views for Main Window
 
-Each panel provides specific configuration UI for different aspects
-of the simulation setup.
+Each view provides logic for different aspects of the simulation setup.
+UI widgets are defined in center_form_ui.py (Qt Designer generated).
 """
 
-from .geometry_panel import GeometryPanel
-from .mesh_generation_panel import MeshGenerationPanel
-from .initial_conditions_panel import InitialConditionsPanel
-from .models_panel import ModelsPanel
-from .numerical_conditions_panel import NumericalConditionsPanel
-from .materials_panel import MaterialsPanel
-from .spray_mmh_panel import SprayMMHPanel
-from .spray_nto_panel import SprayNTOPanel
-from .run_panel import RunPanel
+from .geometry_view import GeometryView
+from .mesh_generation_view import MeshGenerationView
+
+# TODO: Add other view imports when implemented
+# from .initial_conditions_view import InitialConditionsView
+# from .models_view import ModelsView
+# from .numerical_conditions_view import NumericalConditionsView
+# from .materials_view import MaterialsView
+# from .spray_mmh_view import SprayMMHView
+# from .spray_nto_view import SprayNTOView
+# from .run_view import RunView
 
 __all__ = [
-    "GeometryPanel",
-    "MeshGenerationPanel",
-    "InitialConditionsPanel",
-    "ModelsPanel",
-    "NumericalConditionsPanel",
-    "MaterialsPanel",
-    "SprayMMHPanel",
-    "SprayNTOPanel",
-    "RunPanel",
+    "GeometryView",
+    "MeshGenerationView",
+    # "InitialConditionsView",
+    # "ModelsView",
+    # "NumericalConditionsView",
+    # "MaterialsView",
+    # "SprayMMHView",
+    # "SprayNTOView",
+    # "RunView",
 ]

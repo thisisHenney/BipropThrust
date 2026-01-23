@@ -104,6 +104,8 @@ class GeometryPanel(QWidget):
         self._setup_ui()
         self._connect_signals()
 
+        # Note: load_data() will be called by MainWindow after case is loaded
+
     def _setup_ui(self) -> None:
         """Setup the UI layout."""
         layout = QVBoxLayout(self)
@@ -233,7 +235,7 @@ class GeometryPanel(QWidget):
             self.vtk_pre.obj_manager.selection_changed.connect(self._on_vtk_selection_changed)
 
     def _on_add_clicked(self) -> None:
-        """Handle Add button click - open file dialog for STL files."""
+        """Handle Add button click - open file dialog and copy STL files to triSurface."""
         add_files = FileDialogBox.open_files(
             self, "Select STL files",
             "STL Files (*.stl);;All Files (*)",
@@ -243,17 +245,34 @@ class GeometryPanel(QWidget):
         if not add_files:
             return
 
-        # Add files to case_data and tree first
+        # Get triSurface directory
+        tri_surface_path = Path(self.case_data.path) / "2.meshing_MheadBL" / "constant" / "triSurface"
+        tri_surface_path.mkdir(parents=True, exist_ok=True)
+
+        # Copy files to triSurface and add to tree
+        copied_files = []
         for f in add_files:
-            file = Path(f)
-            self.case_data.add_geometry(file)
-            name = file.stem
+            src_file = Path(f)
+            dst_file = tri_surface_path / src_file.name
+
+            # Copy file to triSurface
+            import shutil
+            try:
+                shutil.copy2(src_file, dst_file)
+                print(f"Copied {src_file.name} to triSurface")
+            except Exception as e:
+                print(f"Error copying {src_file.name}: {e}")
+                continue
+
+            # Add to case_data and tree
+            self.case_data.add_geometry(dst_file)
+            name = dst_file.stem
             self.tree.insert([], name)
+            copied_files.append(str(dst_file))
 
         # Load STL files asynchronously to prevent GUI lock
-        if self.vtk_pre:
-            self._pending_files = add_files
-            self._start_async_loading(add_files)
+        if self.vtk_pre and copied_files:
+            self._start_async_loading(copied_files)
         else:
             self.case_data.save()
 
@@ -326,7 +345,7 @@ class GeometryPanel(QWidget):
         self.mesh_loader.error.disconnect(self._on_loading_error)
 
     def _on_remove_clicked(self) -> None:
-        """Handle Remove button click - remove selected geometry."""
+        """Handle Remove button click - remove selected geometry from tree, VTK, and triSurface."""
         pos = self.tree.get_current_pos()
         if pos is None:
             return
@@ -342,15 +361,22 @@ class GeometryPanel(QWidget):
             # Refresh view
             self.vtk_pre.vtk_widget.GetRenderWindow().Render()
 
+        # Remove STL file from triSurface directory
+        tri_surface_path = Path(self.case_data.path) / "2.meshing_MheadBL" / "constant" / "triSurface"
+        stl_file = tri_surface_path / f"{obj_name}.stl"
+
+        if stl_file.exists():
+            try:
+                stl_file.unlink()
+                print(f"Deleted {stl_file.name} from triSurface")
+            except Exception as e:
+                print(f"Error deleting {stl_file.name}: {e}")
+
         self.case_data.remove_geometry(obj_name)
         self.case_data.save()
 
     def _on_apply_clicked(self) -> None:
         """Handle Apply button click - apply position changes."""
-        pos = self.tree.get_current_pos()
-        if pos is None:
-            return
-
         # Get position values
         try:
             x = float(self.edit_pos_x.text()) if self.edit_pos_x.text() else 0.0
@@ -358,6 +384,21 @@ class GeometryPanel(QWidget):
             z = float(self.edit_pos_z.text()) if self.edit_pos_z.text() else 0.0
         except ValueError:
             print("Invalid position values")
+            return
+
+        pos = self.tree.get_current_pos()
+
+        if pos is None:
+            # No tree item selected - apply to point probe if available
+            if self.vtk_pre:
+                probe_tool = self.vtk_pre._optional_tools.get("point_probe")
+                if probe_tool and probe_tool.is_visible:
+                    # Set point probe position
+                    probe_tool.set_center(x, y, z)
+                    # Save to case data
+                    self.case_data.point_probe_position = (x, y, z)
+                    self.case_data.save()
+                    print(f"Point probe position set to ({x}, {y}, {z})")
             return
 
         obj_name = self.tree.get_text(pos)
@@ -591,9 +632,35 @@ class GeometryPanel(QWidget):
         return True
 
     def load_data(self) -> None:
-        """Load geometry data from case_data."""
-        self.tree_geometry.clear()
+        """Load geometry data from triSurface folder."""
+        self.tree.clear_all()
 
-        for geom in self.case_data.geometry.files:
-            name = Path(geom).stem
+        # Get triSurface directory path
+        tri_surface_path = Path(self.case_data.path) / "2.meshing_MheadBL" / "constant" / "triSurface"
+
+        if not tri_surface_path.exists():
+            print(f"triSurface directory not found: {tri_surface_path}")
+            return
+
+        # Find all STL files in triSurface (excluding mesh.stl)
+        stl_files = []
+        for stl_file in tri_surface_path.glob("*.stl"):
+            if stl_file.name.lower() != "mesh.stl":
+                stl_files.append(stl_file)
+
+        if not stl_files:
+            return
+
+        # Add files to tree and case_data
+        for stl_file in stl_files:
+            name = stl_file.stem
             self.tree.insert([], name)
+            # Add to case_data if not already there
+            if not self.case_data.get_geometry(name):
+                self.case_data.add_geometry(stl_file)
+
+        # Load STL files asynchronously to VTK
+        if self.vtk_pre and stl_files:
+            self._start_async_loading([str(f) for f in stl_files])
+        else:
+            self.case_data.save()

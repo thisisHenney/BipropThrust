@@ -172,19 +172,41 @@ class MainWindow(QMainWindow):
         # Add point probe tool
         self.vtk_pre.add_tool("point_probe")
 
-        # Get point_probe tool and connect signal
+        # Hide point_probe button in toolbar
+        for action in self.vtk_pre.toolbar.actions():
+            if action.text() == "Point Probe":
+                action.setVisible(False)
+                break
+
+        # Get point_probe tool and connect signals
         probe_tool = self.vtk_pre._optional_tools.get("point_probe")
         if probe_tool:
             probe_tool.center_moved.connect(self._on_probe_position_changed)
+            probe_tool.visibility_changed.connect(self._on_probe_visibility_changed)
 
     def _on_probe_position_changed(self, x: float, y: float, z: float) -> None:
         """Handle probe position change - sync to geometry panel."""
         # Get geometry panel from center widget
         geom_panel = self.center_widget.panel_views.get("geometry")
         if geom_panel:
-            geom_panel.edit_pos_x.setText(f"{x:.6g}")
-            geom_panel.edit_pos_y.setText(f"{y:.6g}")
-            geom_panel.edit_pos_z.setText(f"{z:.6g}")
+            geom_panel.ui.edit_input_position_x.setText(f"{x:.6g}")
+            geom_panel.ui.edit_input_position_y.setText(f"{y:.6g}")
+            geom_panel.ui.edit_input_position_z.setText(f"{z:.6g}")
+
+    def _on_probe_visibility_changed(self, visible: bool) -> None:
+        """Handle probe visibility change - restore saved position when shown."""
+        if not visible:
+            return
+
+        # Load saved position from case_data
+        x, y, z = self.case_data.point_probe_position
+
+        # Only restore if position is not at origin (0,0,0)
+        if x != 0.0 or y != 0.0 or z != 0.0:
+            probe_tool = self.vtk_pre._optional_tools.get("point_probe")
+            if probe_tool:
+                probe_tool.set_center(x, y, z)
+                print(f"Point probe position restored to ({x}, {y}, {z})")
 
     def _setup_dock(self) -> None:
         """Setup dock widget layout."""
@@ -260,6 +282,16 @@ class MainWindow(QMainWindow):
 
         # Update window title with case path
         self._update_window_title()
+
+        # Load geometry data after case is loaded
+        geom_panel = self.center_widget.panel_views.get("geometry")
+        if geom_panel:
+            geom_panel.load_data()
+
+        # Load mesh generation data after case is loaded
+        mesh_panel = self.center_widget.panel_views.get("mesh")
+        if mesh_panel:
+            mesh_panel.load_data()
 
         # Update status
         self.statusBar().showMessage("Ready", 3000)

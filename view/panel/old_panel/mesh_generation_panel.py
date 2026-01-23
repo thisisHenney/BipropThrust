@@ -15,6 +15,9 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
 
+from nextlib.vtk.core import MeshLoader
+from nextlib.openfoam.PyFoamCase.foamfile import FoamFile
+
 from common.app_data import app_data
 from common.case_data import case_data
 
@@ -64,6 +67,9 @@ class MeshGenerationPanel(QWidget):
         # Get services from context
         self.exec_widget = context.get("exec") if context else None
         self.vtk_pre = context.get("vtk_pre") if context else None
+
+        # Mesh loader for OpenFOAM mesh
+        self.mesh_loader = MeshLoader()
 
         # Setup UI
         self._setup_ui()
@@ -320,7 +326,11 @@ class MeshGenerationPanel(QWidget):
         self.edit_expansion1.textChanged.connect(self._calculate_total_height)
 
     def _on_generate_clicked(self) -> None:
-        """Handle Generate Mesh button click."""
+        """Handle Generate Mesh button click - run OpenFOAM mesh generation."""
+        if not self.exec_widget:
+            print("ExecWidget not available")
+            return
+
         # Get base grid values
         x = self.edit_basegrid_x.text() or "100"
         y = self.edit_basegrid_y.text() or "100"
@@ -328,13 +338,178 @@ class MeshGenerationPanel(QWidget):
 
         print(f"Generating mesh with base grid: ({x}, {y}, {z})")
 
-        # TODO: Update blockMeshDict with values
-        # TODO: Run mesh generation command
+        # Update blockMeshDict with geometry bounding box and base grid
+        if not self._update_blockmesh_dict(x, y, z):
+            print("Failed to update blockMeshDict")
+            return
 
-        if self.exec_widget:
-            # Example command - would need to be adapted for actual OpenFOAM
-            cmd = "./Allrun"
-            self.exec_widget.run(cmd)
+        # TODO: Update snappyHexMeshDict with boundary layer settings
+
+        # Set working directory to case path
+        self.exec_widget.set_working_path(str(self.case_data.path))
+
+        # Register callbacks
+        self.exec_widget.set_function_after_finished(self._on_mesh_generated)
+        self.exec_widget.set_function_restore_ui(self._restore_ui)
+
+        # OpenFOAM mesh generation commands
+        commands = [
+            "blockMesh",           # Generate base block mesh
+            "surfaceFeatures",     # Extract surface features from STL
+            "snappyHexMesh -overwrite"  # Generate final mesh with snapping
+        ]
+
+        # Disable Generate button during execution
+        self.btn_generate.setEnabled(False)
+
+        # Run mesh generation commands
+        self.exec_widget.run(commands)
+
+    def _restore_ui(self) -> None:
+        """Restore UI state after command execution (success, error, or cancel)."""
+        self.btn_generate.setEnabled(True)
+
+    def _update_blockmesh_dict(self, cells_x: str, cells_y: str, cells_z: str) -> bool:
+        """Update blockMeshDict with geometry bounding box vertices and base grid cells.
+
+        Args:
+            cells_x: Number of cells in x direction
+            cells_y: Number of cells in y direction
+            cells_z: Number of cells in z direction
+
+        Returns:
+            True if successful, False otherwise
+        """
+        if not self.vtk_pre:
+            print("VTK widget not available")
+            return False
+
+        # Get all geometry objects
+        obj_manager = self.vtk_pre.obj_manager
+        geometry_objects = [obj for obj in obj_manager.get_all() if obj.group == "geometry"]
+
+        if not geometry_objects:
+            print("No geometry objects found. Cannot calculate bounding box.")
+            return False
+
+        # Calculate combined bounding box of all geometry objects
+        bounds = [float('inf'), float('-inf'),
+                  float('inf'), float('-inf'),
+                  float('inf'), float('-inf')]
+
+        for obj in geometry_objects:
+            obj_bounds = obj.actor.GetBounds()
+            bounds[0] = min(bounds[0], obj_bounds[0])  # xmin
+            bounds[1] = max(bounds[1], obj_bounds[1])  # xmax
+            bounds[2] = min(bounds[2], obj_bounds[2])  # ymin
+            bounds[3] = max(bounds[3], obj_bounds[3])  # ymax
+            bounds[4] = min(bounds[4], obj_bounds[4])  # zmin
+            bounds[5] = max(bounds[5], obj_bounds[5])  # zmax
+
+        xmin, xmax, ymin, ymax, zmin, zmax = bounds
+        print(f"Geometry bounding box: ({xmin:.4f}, {ymin:.4f}, {zmin:.4f}) to ({xmax:.4f}, {ymax:.4f}, {zmax:.4f})")
+
+        # Update blockMeshDict
+        try:
+            # Path to blockMeshDict (always in 2.meshing_MheadBL subfolder)
+            case_path = Path(self.case_data.path) / "2.meshing_MheadBL"
+            blockmesh_path = case_path / "system" / "blockMeshDict"
+
+            if not blockmesh_path.exists():
+                print(f"blockMeshDict not found: {blockmesh_path}")
+                return False
+
+            # Load blockMeshDict using FoamFile
+            foam_file = FoamFile(str(blockmesh_path))
+            if not foam_file.load():
+                print(f"Failed to load blockMeshDict from {blockmesh_path}")
+                return False
+
+            # Create vertices list (8 corners of bounding box)
+            # Round to 2 decimal places
+            vertices = [
+                [round(xmin, 2), round(ymin, 2), round(zmin, 2)],  # 0
+                [round(xmax, 2), round(ymin, 2), round(zmin, 2)],  # 1
+                [round(xmax, 2), round(ymax, 2), round(zmin, 2)],  # 2
+                [round(xmin, 2), round(ymax, 2), round(zmin, 2)],  # 3
+                [round(xmin, 2), round(ymin, 2), round(zmax, 2)],  # 4
+                [round(xmax, 2), round(ymin, 2), round(zmax, 2)],  # 5
+                [round(xmax, 2), round(ymax, 2), round(zmax, 2)],  # 6
+                [round(xmin, 2), round(ymax, 2), round(zmax, 2)],  # 7
+            ]
+
+            # Update vertices in blockMeshDict
+            if not foam_file.has_key("vertices"):
+                print("vertices key not found in blockMeshDict")
+                return False
+
+            foam_file.set_value("vertices", vertices, show_type="list")
+
+            # Update blocks section with base grid cells
+            # Use map_key='cells' to access the cells parameter in blocks[0]
+            new_cells = [int(cells_x), int(cells_y), int(cells_z)]
+            foam_file.set_value('blocks[0]', new_cells, map_key='cells')
+
+            # Verify the update
+            verify_cells = foam_file.get_value('blocks[0]', map_key='cells')
+            print(f"Updated blockMeshDict cells: {verify_cells}")
+
+            # Save the updated blockMeshDict
+            foam_file.save()
+            print(f"Updated blockMeshDict: {blockmesh_path}")
+            return True
+
+        except Exception as e:
+            print(f"Error updating blockMeshDict: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
+    def _on_mesh_generated(self) -> None:
+        """Handle mesh generation completion - load and display generated mesh."""
+        print("Mesh generation completed. Loading mesh...")
+
+        if not self.vtk_pre:
+            print("VTK preview widget not available")
+            return
+
+        # Clear existing mesh objects (keep geometry)
+        obj_manager = self.vtk_pre.obj_manager
+        mesh_objects = [obj for obj in obj_manager.get_all() if obj.group == "mesh"]
+        for obj in mesh_objects:
+            obj_manager.remove(obj.id)
+
+        # Load generated OpenFOAM mesh
+        try:
+            # Create temporary .foam file for loading
+            case_path = Path(self.case_data.path)
+            foam_file = case_path / "case.foam"
+
+            # Create .foam file if it doesn't exist
+            if not foam_file.exists():
+                foam_file.touch()
+
+            # Load mesh using MeshLoader
+            actors = self.mesh_loader.load_openfoam(foam_file)
+
+            if actors:
+                # Add mesh actors to VTK
+                if isinstance(actors, list):
+                    for i, actor in enumerate(actors):
+                        obj_manager.add(actor, name=f"mesh_region_{i}", group="mesh")
+                else:
+                    obj_manager.add(actors, name="mesh", group="mesh")
+
+                # Fit camera to show entire mesh
+                self.vtk_pre.camera.fit()
+                self.vtk_pre.vtk_widget.GetRenderWindow().Render()
+
+                print(f"Mesh loaded successfully ({len(actors) if isinstance(actors, list) else 1} regions)")
+            else:
+                print("Failed to load mesh - no actors returned")
+
+        except Exception as e:
+            print(f"Error loading mesh: {e}")
 
     def _calculate_total_height(self) -> None:
         """Calculate and display total boundary layer height."""
@@ -357,9 +532,72 @@ class MeshGenerationPanel(QWidget):
             self.edit_total_height.clear()
 
     def load_data(self) -> None:
-        """Load mesh settings from case_data."""
-        # TODO: Load values from OpenFOAM dict files
-        pass
+        """Load mesh settings from blockMeshDict."""
+        print("[DEBUG] MeshGenerationPanel.load_data() called")
+
+        # Default values
+        default_cells = ["100", "100", "100"]
+
+        try:
+            # Path to blockMeshDict
+            case_path = Path(self.case_data.path) / "2.meshing_MheadBL"
+            blockmesh_path = case_path / "system" / "blockMeshDict"
+            print(f"[DEBUG] blockMeshDict path: {blockmesh_path}")
+            print(f"[DEBUG] blockMeshDict exists: {blockmesh_path.exists()}")
+
+            if not blockmesh_path.exists():
+                print(f"blockMeshDict not found, using default values")
+                self.edit_basegrid_x.setText(default_cells[0])
+                self.edit_basegrid_y.setText(default_cells[1])
+                self.edit_basegrid_z.setText(default_cells[2])
+                return
+
+            # Load blockMeshDict
+            foam_file = FoamFile(str(blockmesh_path))
+            load_result = foam_file.load()
+            print(f"[DEBUG] FoamFile.load() result: {load_result}")
+
+            if not load_result:
+                print(f"Failed to load blockMeshDict, using default values")
+                self.edit_basegrid_x.setText(default_cells[0])
+                self.edit_basegrid_y.setText(default_cells[1])
+                self.edit_basegrid_z.setText(default_cells[2])
+                return
+
+            # Read cells from blocks[0]
+            cells = foam_file.get_value('blocks[0]', map_key='cells')
+            print(f"[DEBUG] Read cells from blockMeshDict: {cells}")
+            print(f"[DEBUG] cells type: {type(cells)}")
+
+            # cells is a list of lists: [[161, 81, 81]]
+            # Extract the first element which contains the actual cells
+            if cells and isinstance(cells, list) and len(cells) > 0:
+                actual_cells = cells[0] if isinstance(cells[0], list) else cells
+                print(f"[DEBUG] actual_cells: {actual_cells}")
+
+                if isinstance(actual_cells, list) and len(actual_cells) >= 3:
+                    self.edit_basegrid_x.setText(str(actual_cells[0]))
+                    self.edit_basegrid_y.setText(str(actual_cells[1]))
+                    self.edit_basegrid_z.setText(str(actual_cells[2]))
+                    print(f"Loaded blockMeshDict cells: ({actual_cells[0]}, {actual_cells[1]}, {actual_cells[2]})")
+                else:
+                    print(f"Invalid cells format: {actual_cells}, using default values")
+                    self.edit_basegrid_x.setText(default_cells[0])
+                    self.edit_basegrid_y.setText(default_cells[1])
+                    self.edit_basegrid_z.setText(default_cells[2])
+            else:
+                print(f"Invalid cells format: {cells}, using default values")
+                self.edit_basegrid_x.setText(default_cells[0])
+                self.edit_basegrid_y.setText(default_cells[1])
+                self.edit_basegrid_z.setText(default_cells[2])
+
+        except Exception as e:
+            print(f"Error loading blockMeshDict: {e}")
+            import traceback
+            traceback.print_exc()
+            self.edit_basegrid_x.setText(default_cells[0])
+            self.edit_basegrid_y.setText(default_cells[1])
+            self.edit_basegrid_z.setText(default_cells[2])
 
     def save_data(self) -> None:
         """Save mesh settings to case_data."""

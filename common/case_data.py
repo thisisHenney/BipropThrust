@@ -24,12 +24,14 @@ class GeometryData:
         path: Full path to geometry file (STL)
         is_visible: Whether geometry is visible in viewport
         position: Position offset (x, y, z) in meters
+        rotation: Rotation angles (rx, ry, rz) in degrees
     """
 
     name: str = ""
     path: str = ""
     is_visible: bool = True
     position: tuple[float, float, float] = field(default_factory=lambda: (0.0, 0.0, 0.0))
+    rotation: tuple[float, float, float] = field(default_factory=lambda: (0.0, 0.0, 0.0))
 
     def __post_init__(self):
         """Validate geometry data after creation."""
@@ -46,6 +48,15 @@ class GeometryData:
         # Convert position list to tuple if needed
         if "position" in data and isinstance(data["position"], list):
             data["position"] = tuple(data["position"])
+        # Convert rotation list to tuple if needed
+        if "rotation" in data and isinstance(data["rotation"], list):
+            data["rotation"] = tuple(data["rotation"])
+        # Convert probe_position list to tuple if needed, or set default if missing
+        if "probe_position" in data:
+            if isinstance(data["probe_position"], list):
+                data["probe_position"] = tuple(data["probe_position"])
+        else:
+            data["probe_position"] = (0.0, 0.0, 0.0)
         return cls(**data)
 
 
@@ -61,6 +72,7 @@ class CaseData(BaseCase):
         modified_time: ISO format timestamp of last modification
         objects: Dictionary of geometry objects {name: GeometryData}
         description: Optional case description
+        point_probe_position: Point probe position (x, y, z)
     """
 
     created_time: str = field(
@@ -71,6 +83,7 @@ class CaseData(BaseCase):
     )
     objects: dict[str, GeometryData] = field(default_factory=dict)
     description: str = ""
+    point_probe_position: tuple[float, float, float] = field(default_factory=lambda: (0.0, 0.0, 0.0))
 
     def add_geometry(self, file_path: str) -> str:
         """
@@ -214,6 +227,81 @@ class CaseData(BaseCase):
             return None
 
         return self.objects[name].position
+
+    def set_geometry_rotation(
+        self, name: str, rx: float, ry: float, rz: float
+    ) -> bool:
+        """
+        Set geometry rotation angles.
+
+        Args:
+            name: Geometry name
+            rx: X rotation angle in degrees
+            ry: Y rotation angle in degrees
+            rz: Z rotation angle in degrees
+
+        Returns:
+            True if updated, False if geometry not found
+        """
+        if name not in self.objects:
+            return False
+
+        self.objects[name].rotation = (rx, ry, rz)
+        self._update_modified_time()
+        return True
+
+    def get_geometry_rotation(self, name: str) -> Optional[tuple[float, float, float]]:
+        """
+        Get geometry rotation angles.
+
+        Args:
+            name: Geometry name
+
+        Returns:
+            Rotation tuple (rx, ry, rz) in degrees or None if not found
+        """
+        if name not in self.objects:
+            return None
+
+        return self.objects[name].rotation
+
+    def set_geometry_probe_position(
+        self, name: str, x: float, y: float, z: float
+    ) -> bool:
+        """
+        Set geometry point probe position.
+
+        Args:
+            name: Geometry name
+            x: X position in meters
+            y: Y position in meters
+            z: Z position in meters
+
+        Returns:
+            True if updated, False if geometry not found
+        """
+        if name not in self.objects:
+            return False
+
+        self.objects[name].probe_position = (x, y, z)
+        self._update_modified_time()
+        return True
+
+    def get_geometry_probe_position(self, name: str) -> Optional[tuple[float, float, float]]:
+        """
+        Get geometry point probe position.
+
+        Args:
+            name: Geometry name
+
+        Returns:
+            Probe position tuple (x, y, z) or None if not found
+        """
+        if name not in self.objects:
+            return None
+
+        # Handle old objects that don't have probe_position yet
+        return getattr(self.objects[name], 'probe_position', None)
 
     def clear_geometries(self, keep_protected: bool = True) -> None:
         """

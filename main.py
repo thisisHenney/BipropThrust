@@ -13,10 +13,29 @@ from pathlib import Path
 from datetime import datetime
 
 from PySide6.QtWidgets import QApplication
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QtMsgType
 
 from common.app_data import app_data
 from view.main.main_window import MainWindow
+
+
+def qt_message_handler(msg_type, _context, message):
+    """Custom Qt message handler to filter out specific warnings."""
+    # Filter out the device pixel ratio warning
+    if "cached device pixel ratio" in message.lower():
+        return
+
+    # Print other messages normally
+    if msg_type == QtMsgType.QtDebugMsg:
+        print(f"Qt Debug: {message}")
+    elif msg_type == QtMsgType.QtInfoMsg:
+        print(f"Qt Info: {message}")
+    elif msg_type == QtMsgType.QtWarningMsg:
+        print(f"Qt Warning: {message}")
+    elif msg_type == QtMsgType.QtCriticalMsg:
+        print(f"Qt Critical: {message}")
+    elif msg_type == QtMsgType.QtFatalMsg:
+        print(f"Qt Fatal: {message}")
 
 
 class BipropThrustApp:
@@ -41,6 +60,10 @@ class BipropThrustApp:
 
     def _setup_application(self) -> None:
         """Setup Qt application with proper attributes."""
+        # Install custom message handler to filter warnings
+        from PySide6.QtCore import qInstallMessageHandler
+        qInstallMessageHandler(qt_message_handler)
+
         # Enable high DPI scaling
         QApplication.setHighDpiScaleFactorRoundingPolicy(
             Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
@@ -94,7 +117,46 @@ class BipropThrustApp:
         temp_case = temp_base / temp_name
         temp_case.mkdir(exist_ok=True)
 
+        # Copy basecase template to temp case
+        self._copy_basecase_to(temp_case)
+
         return str(temp_case)
+
+    def _copy_basecase_to(self, target_path: Path) -> None:
+        """
+        Copy basecase template files to target case directory.
+
+        Args:
+            target_path: Target case directory path
+        """
+        import shutil
+
+        # Get basecase path (config/basecase in project root)
+        project_root = Path(__file__).parent
+        basecase_path = project_root / "config" / "basecase"
+
+        if not basecase_path.exists():
+            print(f"Warning: basecase template not found at {basecase_path}")
+            return
+
+        try:
+            # Copy all contents from basecase to target
+            # Use copytree with dirs_exist_ok to merge directories
+            for item in basecase_path.iterdir():
+                src = basecase_path / item.name
+                dst = target_path / item.name
+
+                if src.is_dir():
+                    shutil.copytree(src, dst, dirs_exist_ok=True)
+                else:
+                    shutil.copy2(src, dst)
+
+            print(f"Copied basecase template to {target_path}")
+
+        except Exception as e:
+            print(f"Error copying basecase template: {e}")
+            import traceback
+            traceback.print_exc()
 
     def start(self) -> None:
         """
