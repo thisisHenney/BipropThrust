@@ -642,8 +642,8 @@ QGroupBox::title {
                <rect>
                 <x>0</x>
                 <y>0</y>
-                <width>403</width>
-                <height>728</height>
+                <width>407</width>
+                <height>736</height>
                </rect>
               </property>
               <layout class="QVBoxLayout" name="verticalLayout_5">
@@ -2155,7 +2155,7 @@ QGroupBox::title {
                 </item>
                 <item>
                  <property name="text">
-                  <string>Convective Heat Transfer</string>
+                  <string>ConvectiveHeatTransfer</string>
                  </property>
                 </item>
                 <item>

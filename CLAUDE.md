@@ -19,11 +19,10 @@ BipropThrust/
 ├── view/                # UI 레이어
 │   ├── main/            # 메인 윈도우
 │   │   └── main_window.py
-│   └── panels/          # 설정 패널들 (미구현)
+│   └── panel/           # 설정 패널들
 ├── config/              # OpenFOAM 템플릿
-│   └── basecase/        # 기본 케이스 (미복사)
-├── res/                 # 리소스
-└── old_code/            # 참고용 이전 코드
+│   └── basecase/        # 기본 케이스
+└── res/                 # 리소스
 ```
 
 ## 현재 진행 상황
@@ -41,11 +40,11 @@ BipropThrust/
 - [x] MeshGenerationPanel 구현 (OpenFOAM 격자 생성, ExecWidget 연동)
 - [x] Point probe 위치 저장/복원 기능
 - [x] nextlib MeshLoader 비동기 로딩 구현
+- [x] RunView 구현 (시뮬레이션 실행, 잔차 그래프 모니터링)
+- [x] OpenFOAM 딕셔너리 파일 읽기/쓰기 (fvSchemes, fvSolution, controlDict 등)
 
 ### 다음 작업
-- [ ] 나머지 패널들 구현 (materials, initial_conditions, spray 등)
-- [ ] OpenFOAM 딕셔너리 파일 읽기/쓰기
-- [ ] 시뮬레이션 실행 기능 (Run 패널)
+- [ ] 후처리 기능 (Post 패널)
 
 ## 실행 방법
 ```bash

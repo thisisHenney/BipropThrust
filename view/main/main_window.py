@@ -206,7 +206,6 @@ class MainWindow(QMainWindow):
             probe_tool = self.vtk_pre._optional_tools.get("point_probe")
             if probe_tool:
                 probe_tool.set_center(x, y, z)
-                print(f"Point probe position restored to ({x}, {y}, {z})")
 
     def _setup_dock(self) -> None:
         """Setup dock widget layout."""
@@ -269,7 +268,6 @@ class MainWindow(QMainWindow):
         This is called after construction to load the case
         and setup all components.
         """
-        print(f"Initializing main window with case: {self.case_path}")
 
         # Initialize components
         self.exec_widget.set_defaults()
@@ -277,8 +275,7 @@ class MainWindow(QMainWindow):
         # Load or create case
         if self.case_path:
             self._load_case(self.case_path)
-        else:
-            print("Warning: No case path provided")
+        # If no case_path, window opens without a case loaded
 
         # Update window title with case path
         self._update_window_title()
@@ -292,6 +289,9 @@ class MainWindow(QMainWindow):
         mesh_panel = self.center_widget.panel_views.get("mesh")
         if mesh_panel:
             mesh_panel.load_data()
+
+        # Start with Geometry tab visible - hide mesh, show geometry
+        self.center_widget._show_geometry_objects()
 
         # Update status
         self.statusBar().showMessage("Ready", 3000)
@@ -307,7 +307,6 @@ class MainWindow(QMainWindow):
 
         # Check if case exists
         if not path.exists():
-            print(f"Case path does not exist, creating: {case_path}")
             self._create_case_from_template(case_path)
 
         # Set case data path
@@ -319,7 +318,6 @@ class MainWindow(QMainWindow):
         # Set working path for exec widget
         self.exec_widget.set_working_path(str(path.resolve()))
 
-        print(f"Case loaded: {self.case_data.path}")
 
     def _create_case_from_template(self, case_path: str) -> None:
         """
@@ -332,18 +330,14 @@ class MainWindow(QMainWindow):
         base_case_path = self.app_data.get_config_basecase_path()
 
         if not base_case_path.exists():
-            print(f"Warning: Base case template not found: {base_case_path}")
             # Create empty case directory
             Path(case_path).mkdir(parents=True, exist_ok=True)
             return
 
         # Copy base case to new location
-        print(f"Copying base case from {base_case_path} to {case_path}")
         try:
             copy_files(str(base_case_path), case_path)
-            print("Base case copied successfully")
         except Exception as e:
-            print(f"Error copying base case: {e}")
             # Create empty directory as fallback
             Path(case_path).mkdir(parents=True, exist_ok=True)
 
@@ -393,7 +387,6 @@ class MainWindow(QMainWindow):
         Args:
             event: Close event
         """
-        print("Closing main window...")
 
         # Check if case is temporary and unsaved
         if self.case_path and "temp" in self.case_path:
@@ -471,17 +464,14 @@ class MainWindow(QMainWindow):
 
         try:
             # Copy temp case to new location
-            print(f"Saving case to: {new_path}")
             copy_files(self.case_path, new_path)
 
             # Delete temp case
             self._delete_temp_case()
 
-            print(f"Case saved successfully to: {new_path}")
             return True
 
         except Exception as e:
-            print(f"Error saving case: {e}")
             QMessageBox.critical(
                 self,
                 'Save Error',
@@ -494,16 +484,14 @@ class MainWindow(QMainWindow):
         if self.case_path and "temp" in self.case_path:
             try:
                 shutil.rmtree(self.case_path, ignore_errors=True)
-                print(f"Temporary case deleted: {self.case_path}")
-            except Exception as e:
-                print(f"Error deleting temp case: {e}")
+            except Exception:
+                pass
 
     def _cleanup(self) -> None:
         """Cleanup resources before closing."""
         # Save case data (only if not temp)
         if self.case_data.path and "temp" not in self.case_path:
             self.case_data.save()
-            print("Case data saved")
 
         # Cleanup exec widget
         if self.exec_widget:

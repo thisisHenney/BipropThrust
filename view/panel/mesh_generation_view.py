@@ -185,26 +185,20 @@ class MeshGenerationView:
         hosts_path = Path(self.case_data.path) / "2.meshing_MheadBL" / "system" / "hosts"
 
         if not hosts_path.exists():
-            print(f"Hosts file not found: {hosts_path}")
             # Create empty hosts file if it doesn't exist
             hosts_path.parent.mkdir(parents=True, exist_ok=True)
             hosts_path.touch()
-            print(f"Created hosts file: {hosts_path}")
 
         # Open with appropriate text editor based on platform
         try:
             if sys.platform == "win32":
                 # Windows - use notepad
                 subprocess.Popen(["notepad", str(hosts_path)])
-                print(f"Opening hosts file with notepad: {hosts_path}")
             else:
                 # Linux - use gedit
                 subprocess.Popen(["gedit", str(hosts_path)])
-                print(f"Opening hosts file with gedit: {hosts_path}")
-        except Exception as e:
-            print(f"Error opening hosts file: {e}")
-            import traceback
-            traceback.print_exc()
+        except Exception:
+            pass
 
     def _on_generate_clicked(self):
         """Handle Generate button click - update blockMeshDict and load existing mesh."""
@@ -216,22 +210,33 @@ class MeshGenerationView:
         y = self.ui.lineEdit_basegrid_y.text() or "100"
         z = self.ui.lineEdit_basegrid_z.text() or "100"
 
-        print(f"Loading mesh with base grid: ({x}, {y}, {z})")
 
         # Update blockMeshDict with geometry bounding box and base grid
         if not self._update_blockmesh_dict(x, y, z):
-            print("Failed to update blockMeshDict")
             self.ui.button_mesh_generate.setEnabled(True)
             return
 
         # Update snappyHexMeshDict with locationsInMesh from geometry probe positions
         if not self._update_snappyhex_dict():
-            print("Failed to update snappyHexMeshDict")
+            self.ui.button_mesh_generate.setEnabled(True)
+            return
+
+        # Update snappyHexMeshDict with castellation settings from UI
+        if not self._update_castellation_settings():
+            self.ui.button_mesh_generate.setEnabled(True)
+            return
+
+        # Update snappyHexMeshDict with snap settings from UI
+        if not self._update_snap_settings():
+            self.ui.button_mesh_generate.setEnabled(True)
+            return
+
+        # Update snappyHexMeshDict with boundary layer settings from UI
+        if not self._update_boundary_layer_settings():
             self.ui.button_mesh_generate.setEnabled(True)
             return
 
         # Load existing mesh directly (skip Allrun execution for now)
-        print("Loading existing mesh from VTK folder...")
         self._on_mesh_generated()
         self._restore_ui()
 
@@ -285,7 +290,6 @@ class MeshGenerationView:
             True if successful, False otherwise
         """
         if not self.vtk_pre:
-            print("VTK widget not available")
             return False
 
         # Get all geometry objects
@@ -293,7 +297,6 @@ class MeshGenerationView:
         geom_objects = [obj for obj in all_objs if hasattr(obj, 'group') and obj.group == "geometry"]
 
         if not geom_objects:
-            print("No geometry objects found")
             return False
 
         # Calculate overall bounding box
@@ -311,7 +314,6 @@ class MeshGenerationView:
             bounds[5] = max(bounds[5], obj_bounds[5])  # zmax
 
         xmin, xmax, ymin, ymax, zmin, zmax = bounds
-        print(f"Geometry bounding box: ({xmin:.4f}, {ymin:.4f}, {zmin:.4f}) to ({xmax:.4f}, {ymax:.4f}, {zmax:.4f})")
 
         # Update blockMeshDict
         try:
@@ -320,13 +322,11 @@ class MeshGenerationView:
             blockmesh_path = case_path / "system" / "blockMeshDict"
 
             if not blockmesh_path.exists():
-                print(f"blockMeshDict not found: {blockmesh_path}")
                 return False
 
             # Load blockMeshDict using FoamFile
             foam_file = FoamFile(str(blockmesh_path))
             if not foam_file.load():
-                print(f"Failed to load blockMeshDict from {blockmesh_path}")
                 return False
 
             # Create vertices list (8 corners of bounding box)
@@ -344,7 +344,6 @@ class MeshGenerationView:
 
             # Update vertices in blockMeshDict
             if not foam_file.has_key("vertices"):
-                print("vertices key not found in blockMeshDict")
                 return False
 
             foam_file.set_value("vertices", vertices, show_type="list")
@@ -356,17 +355,12 @@ class MeshGenerationView:
 
             # Verify the update
             verify_cells = foam_file.get_value('blocks[0]', map_key='cells')
-            print(f"Updated blockMeshDict cells: {verify_cells}")
 
             # Save the updated blockMeshDict
             foam_file.save()
-            print(f"Updated blockMeshDict: {blockmesh_path}")
             return True
 
-        except Exception as e:
-            print(f"Error updating blockMeshDict: {e}")
-            import traceback
-            traceback.print_exc()
+        except Exception:
             return False
 
     def _update_snappyhex_dict(self) -> bool:
@@ -383,14 +377,12 @@ class MeshGenerationView:
             snappy_path = case_path / "system" / "snappyHexMeshDict"
 
             if not snappy_path.exists():
-                print(f"snappyHexMeshDict not found: {snappy_path}")
                 return False
 
             # Get all geometry objects from tree
             geometries = self.case_data.list_geometries()
 
             if not geometries:
-                print("No geometries found in case_data")
                 return False
 
             # Create locationsInMesh entries from ALL geometry objects
@@ -401,16 +393,13 @@ class MeshGenerationView:
                 # Use (0, 0, 0) if no probe position is set
                 if probe_pos is None:
                     probe_pos = (0.0, 0.0, 0.0)
-                    print(f"Warning: No probe position set for '{geom_name}', using (0, 0, 0)")
 
                 # Format: (( x  y  z) region_name)
                 x, y, z = probe_pos
                 location_line = f"        (( {x:<9.4f} {y:<9.4f} {z:<9.4f}) {geom_name})"
                 location_lines.append(location_line)
-                print(f"Added location for '{geom_name}': ({x:.4f} {y:.4f} {z:.4f})")
 
             if not location_lines:
-                print("Warning: No geometries found for locationsInMesh")
                 return False
 
             # Read the entire file
@@ -427,7 +416,6 @@ class MeshGenerationView:
             pattern = r'locationsInMesh\s*\(\s*(?:.*?)\s*\);'
 
             if not re.search(pattern, content, re.DOTALL):
-                print("Error: locationsInMesh block not found in snappyHexMeshDict")
                 return False
 
             # Replace the block
@@ -437,19 +425,13 @@ class MeshGenerationView:
             with open(snappy_path, 'w', encoding='utf-8') as f:
                 f.write(new_content)
 
-            print(f"Successfully updated snappyHexMeshDict: {snappy_path}")
-            print(f"Updated {len(location_lines)} location(s) in locationsInMesh")
             return True
 
-        except Exception as e:
-            print(f"Error updating snappyHexMeshDict: {e}")
-            import traceback
-            traceback.print_exc()
+        except Exception:
             return False
 
     def _on_mesh_generated(self):
         """Handle mesh generation completion - load and display generated mesh."""
-        print("Mesh generation completed")
 
         if not self.vtk_pre:
             return
@@ -461,14 +443,12 @@ class MeshGenerationView:
             if hasattr(obj, 'group') and obj.group == "geometry":
                 obj.actor.SetVisibility(False)
                 geom_count += 1
-        print(f"Hidden {geom_count} geometry objects")
 
         # Load mesh using OpenFOAM reader
         self.load_mesh_async()
 
     def load_mesh_async(self):
         """Load existing mesh asynchronously from OpenFOAM case folder."""
-        print("[DEBUG] MeshGenerationView.load_mesh_async() called")
 
         mesh_case_path = Path(self.case_data.path) / "2.meshing_MheadBL"
 
@@ -476,11 +456,8 @@ class MeshGenerationView:
         polymesh_folder = mesh_case_path / "constant" / "polyMesh"
 
         if not polymesh_folder.exists() or not (polymesh_folder / "points").exists():
-            print("No mesh found - polyMesh folder missing")
             return
 
-        print(f"Found polyMesh folder: {polymesh_folder}")
-        print(f"Loading OpenFOAM case asynchronously: {mesh_case_path}")
 
         # Load mesh in background thread
         class MeshLoadThread(QThread):
@@ -498,7 +475,6 @@ class MeshGenerationView:
                     foam_file = self.case_path / "case.foam"
                     if not foam_file.exists():
                         foam_file.write_text("", encoding="utf-8")
-                        print(f"[Thread] Created case.foam: {foam_file}")
 
                     # Create vtkOpenFOAMReader
                     reader = vtk.vtkOpenFOAMReader()
@@ -521,12 +497,8 @@ class MeshGenerationView:
 
                     self.reader = reader
                     self.success = True
-                    print(f"[Thread] OpenFOAM case loaded successfully")
 
-                except Exception as e:
-                    print(f"[Thread] Error loading OpenFOAM case: {e}")
-                    import traceback
-                    traceback.print_exc()
+                except Exception:
                     self.success = False
 
         # Create and start thread
@@ -541,7 +513,6 @@ class MeshGenerationView:
     def _on_openfoam_case_loaded(self, reader):
         """Handle OpenFOAM case loaded in background thread."""
         if not reader or not self.vtk_pre:
-            print("Failed to load OpenFOAM case")
             return
 
         try:
@@ -571,9 +542,6 @@ class MeshGenerationView:
             dz = b[5] - b[4]
             self.diagonal_length = math.sqrt(dx * dx + dy * dy + dz * dz)
 
-            print(f"Surface points: {polydata.GetNumberOfPoints()}")
-            print(f"Bounds: {b}")
-            print(f"Center: {self.center}")
 
             # Create surface actor
             mapper = vtk.vtkPolyDataMapper()
@@ -616,16 +584,13 @@ class MeshGenerationView:
             # Refresh view
             self.vtk_pre.vtk_widget.GetRenderWindow().Render()
 
-            print(f"OpenFOAM mesh loaded (visible: {actor.GetVisibility()})")
 
             # Initialize slice with current settings (only if visible)
             if actor.GetVisibility():
                 self.update_slice()
 
-        except Exception as e:
-            print(f"Error displaying OpenFOAM mesh: {e}")
-            import traceback
-            traceback.print_exc()
+        except Exception:
+            pass
 
     def _clear_slice_clip(self):
         """Clear slice/clip pipeline actors from renderer."""
@@ -864,7 +829,6 @@ class MeshGenerationView:
             snappy_path = case_path / "system" / "snappyHexMeshDict"
 
             if not snappy_path.exists():
-                print(f"snappyHexMeshDict not found: {snappy_path}")
                 return
 
             # Read file
@@ -876,7 +840,6 @@ class MeshGenerationView:
             match = re.search(pattern, content, re.DOTALL)
 
             if not match:
-                print("locationsInMesh not found in snappyHexMeshDict")
                 return
 
             locations_block = match.group(1)
@@ -894,26 +857,30 @@ class MeshGenerationView:
                 # Update case_data with probe position
                 if self.case_data.set_geometry_probe_position(region_name, x, y, z):
                     loaded_count += 1
-                    print(f"Loaded probe position for '{region_name}': ({x:.4f}, {y:.4f}, {z:.4f})")
 
             if loaded_count > 0:
                 self.case_data.save()
-                print(f"Successfully loaded {loaded_count} probe positions from snappyHexMeshDict")
 
-        except Exception as e:
-            print(f"Error loading locations from snappyHexMeshDict: {e}")
-            import traceback
-            traceback.print_exc()
+        except Exception:
+            pass
 
     def load_data(self):
         """Load mesh settings from blockMeshDict."""
-        print("[DEBUG] MeshGenerationView.load_data() called")
 
         # Default values
         default_cells = ["100", "100", "100"]
 
         # Load probe positions from snappyHexMeshDict
         self._load_locations_from_snappyhex()
+
+        # Load castellation settings from snappyHexMeshDict
+        self._load_castellation_settings()
+
+        # Load snap settings from snappyHexMeshDict
+        self._load_snap_settings()
+
+        # Load boundary layer settings from snappyHexMeshDict
+        self._load_boundary_layer_settings()
 
         # Load existing mesh asynchronously
         self.load_mesh_async()
@@ -922,11 +889,8 @@ class MeshGenerationView:
             # Path to blockMeshDict
             case_path = Path(self.case_data.path) / "2.meshing_MheadBL"
             blockmesh_path = case_path / "system" / "blockMeshDict"
-            print(f"[DEBUG] blockMeshDict path: {blockmesh_path}")
-            print(f"[DEBUG] blockMeshDict exists: {blockmesh_path.exists()}")
 
             if not blockmesh_path.exists():
-                print(f"blockMeshDict not found, using default values")
                 self.ui.lineEdit_basegrid_x.setText(default_cells[0])
                 self.ui.lineEdit_basegrid_y.setText(default_cells[1])
                 self.ui.lineEdit_basegrid_z.setText(default_cells[2])
@@ -935,10 +899,8 @@ class MeshGenerationView:
             # Load blockMeshDict
             foam_file = FoamFile(str(blockmesh_path))
             load_result = foam_file.load()
-            print(f"[DEBUG] FoamFile.load() result: {load_result}")
 
             if not load_result:
-                print(f"Failed to load blockMeshDict, using default values")
                 self.ui.lineEdit_basegrid_x.setText(default_cells[0])
                 self.ui.lineEdit_basegrid_y.setText(default_cells[1])
                 self.ui.lineEdit_basegrid_z.setText(default_cells[2])
@@ -946,35 +908,356 @@ class MeshGenerationView:
 
             # Read cells from blocks[0]
             cells = foam_file.get_value('blocks[0]', map_key='cells')
-            print(f"[DEBUG] Read cells from blockMeshDict: {cells}")
-            print(f"[DEBUG] cells type: {type(cells)}")
 
             # cells is a list of lists: [[161, 81, 81]]
             # Extract the first element which contains the actual cells
             if cells and isinstance(cells, list) and len(cells) > 0:
                 actual_cells = cells[0] if isinstance(cells[0], list) else cells
-                print(f"[DEBUG] actual_cells: {actual_cells}")
 
                 if isinstance(actual_cells, list) and len(actual_cells) >= 3:
                     self.ui.lineEdit_basegrid_x.setText(str(actual_cells[0]))
                     self.ui.lineEdit_basegrid_y.setText(str(actual_cells[1]))
                     self.ui.lineEdit_basegrid_z.setText(str(actual_cells[2]))
-                    print(f"Loaded blockMeshDict cells: ({actual_cells[0]}, {actual_cells[1]}, {actual_cells[2]})")
                 else:
-                    print(f"Invalid cells format: {actual_cells}, using default values")
                     self.ui.lineEdit_basegrid_x.setText(default_cells[0])
                     self.ui.lineEdit_basegrid_y.setText(default_cells[1])
                     self.ui.lineEdit_basegrid_z.setText(default_cells[2])
             else:
-                print(f"Invalid cells format: {cells}, using default values")
                 self.ui.lineEdit_basegrid_x.setText(default_cells[0])
                 self.ui.lineEdit_basegrid_y.setText(default_cells[1])
                 self.ui.lineEdit_basegrid_z.setText(default_cells[2])
 
-        except Exception as e:
-            print(f"Error loading blockMeshDict: {e}")
-            import traceback
-            traceback.print_exc()
+        except Exception:
             self.ui.lineEdit_basegrid_x.setText(default_cells[0])
             self.ui.lineEdit_basegrid_y.setText(default_cells[1])
             self.ui.lineEdit_basegrid_z.setText(default_cells[2])
+
+    def _load_castellation_settings(self):
+        """Load castellation settings from snappyHexMeshDict to UI."""
+        try:
+            case_path = Path(self.case_data.path) / "2.meshing_MheadBL"
+            snappy_path = case_path / "system" / "snappyHexMeshDict"
+
+            if not snappy_path.exists():
+                return
+
+            foam_file = FoamFile(str(snappy_path))
+            if not foam_file.load():
+                return
+
+            # Load nCellsBetweenLevels
+            n_cells = foam_file.get_value("castellatedMeshControls.nCellsBetweenLevels")
+            if n_cells is not None:
+                self.ui.edit_castellation_1.setText(str(n_cells))
+
+            # Load resolveFeatureAngle
+            angle = foam_file.get_value("castellatedMeshControls.resolveFeatureAngle")
+            if angle is not None:
+                self.ui.edit_castellation_2.setText(str(angle))
+
+            # Load refinementSurfaces level from first geometry
+            # All geometries should have the same level, so read from first one
+            geometries = self.case_data.list_geometries()
+            if geometries:
+                first_geom = geometries[0]
+                level = foam_file.get_value(
+                    f"castellatedMeshControls.refinementSurfaces.{first_geom}.level"
+                )
+                if level is not None:
+                    # level can be [0, 0] or [[0, 0]] depending on FoamFile parsing
+                    if isinstance(level, list):
+                        actual_level = level[0] if isinstance(level[0], list) else level
+                        if len(actual_level) >= 2:
+                            self.ui.edit_castellation_3.setText(str(actual_level[0]))
+                            self.ui.edit_castellation_4.setText(str(actual_level[1]))
+
+        except Exception:
+            pass
+
+    def _update_castellation_settings(self) -> bool:
+        """
+        Update snappyHexMeshDict with castellation settings from UI.
+
+        Updates:
+        - castellatedMeshControls.nCellsBetweenLevels (edit_castellation_1)
+        - castellatedMeshControls.resolveFeatureAngle (edit_castellation_2)
+        - castellatedMeshControls.refinementSurfaces.{객체}.level (edit_castellation_3, edit_castellation_4)
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            case_path = Path(self.case_data.path) / "2.meshing_MheadBL"
+            snappy_path = case_path / "system" / "snappyHexMeshDict"
+
+            if not snappy_path.exists():
+                return False
+
+            # Get UI values
+            n_cells_between_levels = int(self.ui.edit_castellation_1.text() or "2")
+            resolve_feature_angle = int(self.ui.edit_castellation_2.text() or "60")
+            surface_min_level = int(self.ui.edit_castellation_3.text() or "0")
+            surface_max_level = int(self.ui.edit_castellation_4.text() or "0")
+
+            # Load snappyHexMeshDict
+            foam_file = FoamFile(str(snappy_path))
+            if not foam_file.load():
+                return False
+
+            # Update nCellsBetweenLevels
+            foam_file.set_value(
+                "castellatedMeshControls.nCellsBetweenLevels",
+                n_cells_between_levels
+            )
+
+            # Update resolveFeatureAngle
+            foam_file.set_value(
+                "castellatedMeshControls.resolveFeatureAngle",
+                resolve_feature_angle
+            )
+
+            # Save changes so far
+            foam_file.save()
+
+            # Update refinementSurfaces level using regex
+            # FoamFile API may not handle nested structures well, so use regex
+            self._update_refinement_surfaces_level(snappy_path, surface_min_level, surface_max_level)
+
+            return True
+
+        except Exception:
+            return False
+
+    def _update_refinement_surfaces_level(self, snappy_path: Path, min_level: int, max_level: int):
+        """
+        Update refinementSurfaces level for all geometries using regex.
+
+        This preserves other settings like patchInfo while updating only the level values.
+
+        Args:
+            snappy_path: Path to snappyHexMeshDict
+            min_level: Minimum refinement level (edit_castellation_3)
+            max_level: Maximum refinement level (edit_castellation_4)
+        """
+        try:
+            # Read file content
+            with open(snappy_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+
+            # Replace all level (x y) patterns in refinementSurfaces section
+            # Pattern: level (number number);
+            pattern = r'(level\s*\(\s*)\d+\s+\d+(\s*\);)'
+            replacement = rf'\g<1>{min_level} {max_level}\2'
+
+            new_content = re.sub(pattern, replacement, content)
+
+            # Write back to file
+            with open(snappy_path, 'w', encoding='utf-8') as f:
+                f.write(new_content)
+
+
+        except Exception:
+            pass
+
+    def _load_snap_settings(self):
+        """Load snap settings from snappyHexMeshDict to UI."""
+        try:
+            case_path = Path(self.case_data.path) / "2.meshing_MheadBL"
+            snappy_path = case_path / "system" / "snappyHexMeshDict"
+
+            if not snappy_path.exists():
+                return
+
+            foam_file = FoamFile(str(snappy_path))
+            if not foam_file.load():
+                return
+
+            # Load nSmoothPatch
+            val = foam_file.get_value("snapControls.nSmoothPatch")
+            if val is not None:
+                self.ui.edit_snap_1.setText(str(val))
+
+            # Load tolerance
+            val = foam_file.get_value("snapControls.tolerance")
+            if val is not None:
+                self.ui.edit_snap_2.setText(str(val))
+
+            # Load nSolveIter
+            val = foam_file.get_value("snapControls.nSolveIter")
+            if val is not None:
+                self.ui.edit_snap_3.setText(str(val))
+
+            # Load nFeatureSnapIter
+            val = foam_file.get_value("snapControls.nFeatureSnapIter")
+            if val is not None:
+                self.ui.edit_snap_4.setText(str(val))
+
+        except Exception:
+            pass
+
+    def _update_snap_settings(self) -> bool:
+        """
+        Update snappyHexMeshDict with snap settings from UI.
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            case_path = Path(self.case_data.path) / "2.meshing_MheadBL"
+            snappy_path = case_path / "system" / "snappyHexMeshDict"
+
+            if not snappy_path.exists():
+                return False
+
+            foam_file = FoamFile(str(snappy_path))
+            if not foam_file.load():
+                return False
+
+            # Get UI values and update
+            n_smooth_patch = int(self.ui.edit_snap_1.text() or "3")
+            foam_file.set_value("snapControls.nSmoothPatch", n_smooth_patch)
+
+            tolerance = float(self.ui.edit_snap_2.text() or "2.0")
+            foam_file.set_value("snapControls.tolerance", tolerance)
+
+            n_solve_iter = int(self.ui.edit_snap_3.text() or "30")
+            foam_file.set_value("snapControls.nSolveIter", n_solve_iter)
+
+            n_feature_snap_iter = int(self.ui.edit_snap_4.text() or "5")
+            foam_file.set_value("snapControls.nFeatureSnapIter", n_feature_snap_iter)
+
+            foam_file.save()
+            return True
+
+        except Exception:
+            return False
+
+    def _load_boundary_layer_settings(self):
+        """Load boundary layer (addLayersControls) settings from snappyHexMeshDict to UI."""
+        try:
+            case_path = Path(self.case_data.path) / "2.meshing_MheadBL"
+            snappy_path = case_path / "system" / "snappyHexMeshDict"
+
+            if not snappy_path.exists():
+                return
+
+            foam_file = FoamFile(str(snappy_path))
+            if not foam_file.load():
+                return
+
+            # Load firstLayerThickness
+            val = foam_file.get_value("addLayersControls.firstLayerThickness")
+            if val is not None:
+                self.ui.edit_boundary_layer_2.setText(str(val))
+
+            # Load expansionRatio
+            val = foam_file.get_value("addLayersControls.expansionRatio")
+            if val is not None:
+                self.ui.edit_boundary_layer_3.setText(str(val))
+
+            # Load minThickness
+            val = foam_file.get_value("addLayersControls.minThickness")
+            if val is not None:
+                self.ui.edit_boundary_layer_4.setText(str(val))
+
+            # Load featureAngle
+            val = foam_file.get_value("addLayersControls.featureAngle")
+            if val is not None:
+                self.ui.edit_boundary_layer_5.setText(str(val))
+
+            # Load maxFaceThicknessRatio
+            val = foam_file.get_value("addLayersControls.maxFaceThicknessRatio")
+            if val is not None:
+                self.ui.edit_boundary_layer_6.setText(str(val))
+
+            # Load nSurfaceLayers from layers."fluid_to_.*" using regex
+            self._load_n_surface_layers(snappy_path)
+
+        except Exception:
+            pass
+
+    def _load_n_surface_layers(self, snappy_path: Path):
+        """Load nSurfaceLayers from layers section using regex."""
+        try:
+            with open(snappy_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+
+            # Pattern to match nSurfaceLayers value in layers section
+            pattern = r'layers\s*\{[^}]*"fluid_to_\.\*"\s*\{[^}]*nSurfaceLayers\s+(\d+)'
+            match = re.search(pattern, content, re.DOTALL)
+
+            if match:
+                val = match.group(1)
+                self.ui.edit_boundary_layer_1.setText(val)
+
+        except Exception:
+            pass
+
+    def _update_boundary_layer_settings(self) -> bool:
+        """
+        Update snappyHexMeshDict with boundary layer settings from UI.
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            case_path = Path(self.case_data.path) / "2.meshing_MheadBL"
+            snappy_path = case_path / "system" / "snappyHexMeshDict"
+
+            if not snappy_path.exists():
+                return False
+
+            foam_file = FoamFile(str(snappy_path))
+            if not foam_file.load():
+                return False
+
+            # Update firstLayerThickness
+            val = float(self.ui.edit_boundary_layer_2.text() or "0.3")
+            foam_file.set_value("addLayersControls.firstLayerThickness", val)
+
+            # Update expansionRatio
+            val = float(self.ui.edit_boundary_layer_3.text() or "1.3")
+            foam_file.set_value("addLayersControls.expansionRatio", val)
+
+            # Update minThickness
+            val = float(self.ui.edit_boundary_layer_4.text() or "0.1")
+            foam_file.set_value("addLayersControls.minThickness", val)
+
+            # Update featureAngle
+            val = int(self.ui.edit_boundary_layer_5.text() or "360")
+            foam_file.set_value("addLayersControls.featureAngle", val)
+
+            # Update maxFaceThicknessRatio
+            val = float(self.ui.edit_boundary_layer_6.text() or "0.5")
+            foam_file.set_value("addLayersControls.maxFaceThicknessRatio", val)
+
+            foam_file.save()
+
+            # Update nSurfaceLayers using regex (special pattern key)
+            self._update_n_surface_layers(snappy_path)
+
+            return True
+
+        except Exception:
+            return False
+
+    def _update_n_surface_layers(self, snappy_path: Path):
+        """Update nSurfaceLayers in layers section using regex."""
+        try:
+            n_surface_layers = int(self.ui.edit_boundary_layer_1.text() or "3")
+
+            with open(snappy_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+
+            # Pattern to replace nSurfaceLayers value
+            pattern = r'(layers\s*\{[^}]*"fluid_to_\.\*"\s*\{[^}]*nSurfaceLayers\s+)\d+'
+            replacement = rf'\g<1>{n_surface_layers}'
+
+            new_content = re.sub(pattern, replacement, content, flags=re.DOTALL)
+
+            with open(snappy_path, 'w', encoding='utf-8') as f:
+                f.write(new_content)
+
+
+        except Exception:
+            pass

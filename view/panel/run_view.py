@@ -5,13 +5,17 @@ This view connects to UI widgets defined in center_form_ui.py
 and implements OpenFOAM simulation execution functionality.
 """
 
+import re
 import sys
 import subprocess
 from pathlib import Path
 
+from PySide6.QtCore import QFileSystemWatcher, QTimer
+
+from nextlib.openfoam.PyFoamCase.foamfile import FoamFile
+
 from common.app_data import app_data
 from common.case_data import case_data
-
 
 class RunView:
     """
@@ -35,10 +39,24 @@ class RunView:
         self.exec_widget = self.ctx.get("exec")
         self.vtk_pre = self.ctx.get("vtk_pre")
         self.vtk_post = self.ctx.get("vtk_post")
+        self.residual_graph = self.ctx.get("residual_graph")
 
         # Get data instances
         self.app_data = app_data
         self.case_data = case_data
+
+        # File watcher for log.solver
+        self._log_watcher = QFileSystemWatcher(self.parent)
+        self._log_watcher.fileChanged.connect(self._on_log_file_changed)
+
+        # Timer for periodic log check (fallback for file watcher issues)
+        self._log_timer = QTimer(self.parent)
+        self._log_timer.timeout.connect(self._check_log_file)
+        self._log_check_interval = 2000  # 2 seconds
+
+        # Simulation state
+        self._is_running = False
+        self._log_file_path = None
 
         # Connect signals
         self._init_connect()
@@ -46,7 +64,10 @@ class RunView:
     def _init_connect(self):
         """Initialize signal connections."""
         self.ui.button_edit_hostfile_run.clicked.connect(self._on_edit_hostfile_clicked)
-        # TODO: Add other button connections (Run, Stop, etc.)
+        self.ui.button_run.clicked.connect(self._on_run_clicked)
+
+        # Connect comboBox_7 to enable/disable comboBox_10
+        self.ui.comboBox_7.currentIndexChanged.connect(self._on_combustion_changed)
 
     def _on_edit_hostfile_clicked(self):
         """Handle Edit host file button click - open hosts file in text editor."""
@@ -54,28 +75,1191 @@ class RunView:
         hosts_path = Path(self.case_data.path) / "5.CHTFCase" / "system" / "hosts"
 
         if not hosts_path.exists():
-            print(f"Hosts file not found: {hosts_path}")
             # Create empty hosts file if it doesn't exist
             hosts_path.parent.mkdir(parents=True, exist_ok=True)
             hosts_path.touch()
-            print(f"Created hosts file: {hosts_path}")
 
         # Open with appropriate text editor based on platform
         try:
             if sys.platform == "win32":
-                # Windows - use notepad
                 subprocess.Popen(["notepad", str(hosts_path)])
-                print(f"Opening hosts file with notepad: {hosts_path}")
             else:
-                # Linux - use gedit
                 subprocess.Popen(["gedit", str(hosts_path)])
-                print(f"Opening hosts file with gedit: {hosts_path}")
-        except Exception as e:
-            print(f"Error opening hosts file: {e}")
-            import traceback
-            traceback.print_exc()
+        except Exception:
+            pass
 
+    def _on_combustion_changed(self, index):
+        """Handle combustion comboBox_7 change - enable/disable comboBox_10."""
+        is_on = (index == 0)
+        self.ui.comboBox_10.setEnabled(is_on)
+
+    def _run_simulation(self):
+        """Execute the Allrun script in 5.CHTFCase folder."""
+        try:
+            case_path = Path(self.case_data.path) / "5.CHTFCase"
+            allrun_path = case_path / "Allrun"
+
+            if not allrun_path.exists():
+                return
+
+            # Set log file path
+            self._log_file_path = case_path / "log.solver"
+
+            # Remove old log file if exists
+            if self._log_file_path.exists():
+                self._log_file_path.unlink()
+
+            # Set working directory for exec_widget
+            self.exec_widget.set_working_path(str(case_path))
+
+            # Set callbacks
+            self.exec_widget.set_function_after_finished(self._on_simulation_finished)
+            self.exec_widget.set_function_after_error(self._on_simulation_error)
+            self.exec_widget.set_function_restore_ui(self._restore_ui_after_run)
+
+            # Determine the command based on platform
+            if sys.platform == "win32":
+                # Windows - run via WSL or bash
+                command = f"bash ./Allrun"
+            else:
+                # Linux - run directly
+                command = "./Allrun"
+
+            # Start simulation
+            self._is_running = True
+            self.ui.button_run.setEnabled(False)
+            self.ui.button_run.setText("Running...")
+
+            # Start log monitoring
+            self._start_log_monitoring()
+
+            # Execute
+            self.exec_widget.run([command])
+
+        except Exception:
+            self._restore_ui_after_run()
+
+    def _start_log_monitoring(self):
+        """Start monitoring log.solver file for residuals."""
+        self._log_timer.start(self._log_check_interval)
+
+    def _stop_log_monitoring(self):
+        """Stop monitoring log.solver file."""
+        self._log_timer.stop()
+
+        # Remove file from watcher
+        if self._log_file_path and str(self._log_file_path) in self._log_watcher.files():
+            self._log_watcher.removePath(str(self._log_file_path))
+
+    def _check_log_file(self):
+        """Periodically check if log.solver exists and update graph."""
+        if not self._log_file_path:
+            return
+
+        if self._log_file_path.exists():
+            # Add to file watcher if not already watching
+            log_path_str = str(self._log_file_path)
+            if log_path_str not in self._log_watcher.files():
+                self._log_watcher.addPath(log_path_str)
+
+            # Update residual graph
+            self._update_residual_graph()
+
+    def _on_log_file_changed(self, path: str):
+        """Handle log file changes."""
+        self._update_residual_graph()
+
+    def _update_residual_graph(self):
+        """Update residual graph with latest log data."""
+        if not self._log_file_path or not self._log_file_path.exists():
+            return
+
+        if self.residual_graph:
+            try:
+                self.residual_graph.load_file(str(self._log_file_path))
+            except Exception:
+                pass
+
+    def _on_simulation_finished(self):
+        """Handle simulation completion."""
+        self._is_running = False
+        self._update_residual_graph()
+
+    def _on_simulation_error(self):
+        """Handle simulation error."""
+        self._is_running = False
+
+    def _restore_ui_after_run(self):
+        """Restore UI after simulation ends."""
+        self._is_running = False
+        self.ui.button_run.setEnabled(True)
+        self.ui.button_run.setText("Run")
+
+        self._stop_log_monitoring()
+        self._update_residual_graph()
+
+    def _on_run_clicked(self):
+        """Handle Run button click - update settings and start simulation."""
+        if self._is_running:
+            return
+
+        if not self._update_run_settings():
+            return
+
+        self._run_simulation()
+
+    def _update_run_settings(self) -> bool:
+        """Update all run-related settings to OpenFOAM files."""
+        try:
+            case_path = Path(self.case_data.path) / "5.CHTFCase" / "constant" / "fluid"
+
+            # Update turbulenceProperties
+            self._update_turbulence_properties(case_path)
+
+            # Update surfaceFilmProperties
+            self._update_surface_film_properties(case_path)
+
+            # Update combustionProperties
+            self._update_combustion_properties(case_path)
+
+            # Update thermophysicalProperties (CHEMKINFile)
+            self._update_thermophysical_properties(case_path)
+
+            # Update fluid initial conditions (p, T, U)
+            orig_path = Path(self.case_data.path) / "5.CHTFCase" / "0.orig"
+            self._update_fluid_initial_conditions(orig_path / "fluid")
+
+            # Update solid initial conditions (T files in non-fluid folders)
+            self._update_solid_initial_conditions(orig_path)
+
+            # Update spray cloud properties
+            self._update_spray_mmh_properties(case_path)
+            self._update_spray_nto_properties(case_path)
+
+            # Update numerical schemes (fvSchemes and fvSolution)
+            system_path = Path(self.case_data.path) / "5.CHTFCase" / "system" / "fluid"
+            self._update_fv_schemes(system_path)
+            self._update_fv_solution(system_path)
+
+            # Update controlDict (in system folder, not fluid)
+            system_root = Path(self.case_data.path) / "5.CHTFCase" / "system"
+            self._update_control_dict(system_root)
+
+            return True
+
+        except Exception:
+            pass
+            return False
+
+    def _update_turbulence_properties(self, case_path: Path):
+        """Update turbulenceProperties with RAS.RASModel from comboBox_2."""
+        try:
+            file_path = case_path / "turbulenceProperties"
+            if not file_path.exists():
+                return
+
+            foam_file = FoamFile(str(file_path))
+            if not foam_file.load():
+                return
+
+            # Get selected RAS model from comboBox_2
+            ras_model = self.ui.comboBox_2.currentText().strip()
+            foam_file.set_value("RAS.RASModel", ras_model)
+            foam_file.save()
+
+        except Exception:
+            pass
+    def _update_surface_film_properties(self, case_path: Path):
+        """Update surfaceFilmProperties with surfaceFilmModel and phaseChangeModel."""
+        try:
+            file_path = case_path / "surfaceFilmProperties"
+            if not file_path.exists():
+                return
+
+            foam_file = FoamFile(str(file_path))
+            if not foam_file.load():
+                return
+
+            # comboBox_3: surfaceFilmModel (On=thermoSingleLayer, Off=none)
+            is_film_on = (self.ui.comboBox_3.currentIndex() == 0)
+            film_model = "thermoSingleLayer" if is_film_on else "none"
+            foam_file.set_value("surfaceFilmModel", film_model)
+
+            # comboBox_4: phaseChangeModel (On=standardPhaseChange, Off=none)
+            is_phase_on = (self.ui.comboBox_4.currentIndex() == 0)
+            phase_model = "standardPhaseChange" if is_phase_on else "none"
+            foam_file.set_value("thermoSingleLayerCoeffs.phaseChangeModel", phase_model)
+
+            foam_file.save()
+
+        except Exception:
+            pass
+    def _update_combustion_properties(self, case_path: Path):
+        """Update combustionProperties with combustionModel from comboBox_7."""
+        try:
+            file_path = case_path / "combustionProperties"
+            if not file_path.exists():
+                return
+
+            foam_file = FoamFile(str(file_path))
+            if not foam_file.load():
+                return
+
+            # comboBox_7: combustionModel (On=laminar, Off=none)
+            is_combustion_on = (self.ui.comboBox_7.currentIndex() == 0)
+            combustion_model = "laminar" if is_combustion_on else "none"
+            foam_file.set_value("combustionModel", combustion_model)
+            foam_file.save()
+
+        except Exception:
+            pass
+    def _update_thermophysical_properties(self, case_path: Path):
+        """Update thermophysicalProperties CHEMKINFile from comboBox_10."""
+        try:
+            file_path = case_path / "thermophysicalProperties"
+            if not file_path.exists():
+                return
+
+            # Only update if combustion is on (comboBox_10 is enabled)
+            if not self.ui.comboBox_10.isEnabled():
+                return
+
+            # Map comboBox_10 selection to CHEMKIN file
+            selection = self.ui.comboBox_10.currentText()
+            if selection == "31Reaction":
+                chemkin_file = "chem_ARLRM31N.inp"
+            elif selection == "31Reaction+global":
+                chemkin_file = "chem_ARLRM31NS.inp"
+            elif selection == "51Reaction":
+                chemkin_file = "chem_Global5S.inp"
+            else:
+                return
+
+            # Use regex to update CHEMKINFile path
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+
+            # Pattern to match CHEMKINFile line
+            pattern = r'(CHEMKINFile\s+"\<case\>/chemkin/)[\w\.]+(")'
+            replacement = rf'\g<1>{chemkin_file}\2'
+            new_content = re.sub(pattern, replacement, content)
+
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(new_content)
+
+        except Exception:
+            pass
     def load_data(self):
         """Load run settings and parameters."""
-        print("[DEBUG] RunView.load_data() called")
-        # TODO: Load run settings from controlDict, etc.
+
+        # Load settings from OpenFOAM files
+        self._load_run_settings()
+
+        # Sync comboBox_10 enabled state with comboBox_7
+        is_combustion_on = (self.ui.comboBox_7.currentIndex() == 0)
+        self.ui.comboBox_10.setEnabled(is_combustion_on)
+
+    def _load_run_settings(self):
+        """Load run settings from OpenFOAM files to UI."""
+        try:
+            case_path = Path(self.case_data.path) / "5.CHTFCase" / "constant" / "fluid"
+
+            # Load turbulenceProperties
+            self._load_turbulence_properties(case_path)
+
+            # Load surfaceFilmProperties
+            self._load_surface_film_properties(case_path)
+
+            # Load combustionProperties
+            self._load_combustion_properties(case_path)
+
+            # Load thermophysicalProperties
+            self._load_thermophysical_properties(case_path)
+
+            # Load fluid initial conditions (p, T, U)
+            orig_path = Path(self.case_data.path) / "5.CHTFCase" / "0.orig"
+            self._load_fluid_initial_conditions(orig_path / "fluid")
+
+            # Load solid initial conditions (T files)
+            self._load_solid_initial_conditions(orig_path)
+
+            # Load spray cloud properties
+            self._load_spray_mmh_properties(case_path)
+            self._load_spray_nto_properties(case_path)
+
+            # Load numerical schemes (fvSchemes and fvSolution)
+            system_path = Path(self.case_data.path) / "5.CHTFCase" / "system" / "fluid"
+            self._load_fv_schemes(system_path)
+            self._load_fv_solution(system_path)
+
+            # Load controlDict (in system folder, not fluid)
+            system_root = Path(self.case_data.path) / "5.CHTFCase" / "system"
+            self._load_control_dict(system_root)
+
+        except Exception:
+            pass
+    def _load_turbulence_properties(self, case_path: Path):
+        """Load RAS.RASModel from turbulenceProperties to comboBox_2."""
+        try:
+            file_path = case_path / "turbulenceProperties"
+            if not file_path.exists():
+                return
+
+            foam_file = FoamFile(str(file_path))
+            if not foam_file.load():
+                return
+
+            ras_model = foam_file.get_value("RAS.RASModel")
+            if ras_model:
+                ras_model = str(ras_model).strip()
+                # Find matching item in comboBox_2
+                for i in range(self.ui.comboBox_2.count()):
+                    if self.ui.comboBox_2.itemText(i).strip() == ras_model:
+                        self.ui.comboBox_2.setCurrentIndex(i)
+                        break
+
+        except Exception:
+            pass
+    def _load_surface_film_properties(self, case_path: Path):
+        """Load surfaceFilmModel and phaseChangeModel from surfaceFilmProperties."""
+        try:
+            file_path = case_path / "surfaceFilmProperties"
+            if not file_path.exists():
+                return
+
+            foam_file = FoamFile(str(file_path))
+            if not foam_file.load():
+                return
+
+            # surfaceFilmModel -> comboBox_3
+            film_model = foam_file.get_value("surfaceFilmModel")
+            if film_model:
+                # On (thermoSingleLayer) = index 0, Off (none) = index 1
+                is_on = (str(film_model).strip() == "thermoSingleLayer")
+                self.ui.comboBox_3.setCurrentIndex(0 if is_on else 1)
+
+            # phaseChangeModel -> comboBox_4
+            phase_model = foam_file.get_value("thermoSingleLayerCoeffs.phaseChangeModel")
+            if phase_model:
+                is_on = (str(phase_model).strip() == "standardPhaseChange")
+                self.ui.comboBox_4.setCurrentIndex(0 if is_on else 1)
+
+        except Exception:
+            pass
+    def _load_combustion_properties(self, case_path: Path):
+        """Load combustionModel from combustionProperties to comboBox_7."""
+        try:
+            file_path = case_path / "combustionProperties"
+            if not file_path.exists():
+                return
+
+            foam_file = FoamFile(str(file_path))
+            if not foam_file.load():
+                return
+
+            combustion_model = foam_file.get_value("combustionModel")
+            if combustion_model:
+                # On (laminar) = index 0, Off (none) = index 1
+                is_on = (str(combustion_model).strip() == "laminar")
+                self.ui.comboBox_7.setCurrentIndex(0 if is_on else 1)
+
+        except Exception:
+            pass
+    def _load_thermophysical_properties(self, case_path: Path):
+        """Load CHEMKINFile from thermophysicalProperties to comboBox_10."""
+        try:
+            file_path = case_path / "thermophysicalProperties"
+            if not file_path.exists():
+                return
+
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+
+            # Extract CHEMKIN file name
+            pattern = r'CHEMKINFile\s+"\<case\>/chemkin/([\w\.]+)"'
+            match = re.search(pattern, content)
+
+            if match:
+                chemkin_file = match.group(1)
+                # Map to comboBox_10 index
+                if chemkin_file == "chem_ARLRM31N.inp":
+                    self.ui.comboBox_10.setCurrentIndex(0)  # 31Reaction
+                elif chemkin_file == "chem_ARLRM31NS.inp":
+                    self.ui.comboBox_10.setCurrentIndex(1)  # 31Reaction+global
+                elif chemkin_file == "chem_Global5S.inp":
+                    self.ui.comboBox_10.setCurrentIndex(2)  # 51Reaction
+
+        except Exception:
+            pass
+    def _update_fluid_initial_conditions(self, fluid_path: Path):
+        """Update fluid initial conditions (p, T, U files)."""
+        try:
+            if not fluid_path.exists():
+                return
+
+            # Update p file - pressure
+            p_file = fluid_path / "p"
+            if p_file.exists():
+                pressure = float(self.ui.edit_fluid_1.text() or "1")
+                # If value is 1, multiply by 100000
+                if pressure == 1:
+                    pressure = 100000
+                self._update_internal_field_scalar(p_file, pressure)
+
+            # Update T file - temperature
+            t_file = fluid_path / "T"
+            if t_file.exists():
+                temperature = float(self.ui.edit_fluid_2.text() or "310")
+                self._update_internal_field_scalar(t_file, temperature)
+
+            # Update U file - velocity
+            u_file = fluid_path / "U"
+            if u_file.exists():
+                vx = float(self.ui.edit_fluid_v_x.text() or "0")
+                vy = float(self.ui.edit_fluid_v_y.text() or "0")
+                vz = float(self.ui.edit_fluid_v_z.text() or "0")
+                self._update_internal_field_vector(u_file, vx, vy, vz)
+
+        except Exception:
+            pass
+    def _update_internal_field_scalar(self, file_path: Path, value):
+        """Update internalField uniform scalar value using regex."""
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        # Pattern: internalField uniform NUMBER;
+        pattern = r'(internalField\s+uniform\s+)[\d\.eE\+\-]+(\s*;)'
+        replacement = rf'\g<1>{value}\2'
+        new_content = re.sub(pattern, replacement, content)
+
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write(new_content)
+
+    def _update_internal_field_vector(self, file_path: Path, x, y, z):
+        """Update internalField uniform vector value using regex."""
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        # Pattern: internalField uniform (x y z);
+        pattern = r'(internalField\s+uniform\s+\()[\d\.eE\+\-\s]+(\)\s*;)'
+        replacement = rf'\g<1>{x} {y} {z}\2'
+        new_content = re.sub(pattern, replacement, content)
+
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write(new_content)
+
+    def _update_solid_initial_conditions(self, orig_path: Path):
+        """Update solid initial conditions (T files in all non-fluid folders)."""
+        try:
+            if not orig_path.exists():
+                return
+
+            # Get UI values
+            solid_temp = float(self.ui.edit_solid_1.text() or "300")
+            solid_h = self.ui.edit_solid_2.text() or "1000"
+            solid_type = self.ui.comboBox_9.currentText()
+
+            # Find all solid folders (exclude fluid and filmRegion)
+            excluded_folders = {"fluid", "filmRegion"}
+            solid_folders = [
+                d for d in orig_path.iterdir()
+                if d.is_dir() and d.name not in excluded_folders
+            ]
+
+            for solid_folder in solid_folders:
+                t_file = solid_folder / "T"
+                if t_file.exists():
+                    self._update_solid_t_file(t_file, solid_folder.name, solid_temp, solid_h, solid_type)
+
+        except Exception:
+            pass
+    def _update_solid_t_file(self, file_path: Path, solid_name: str, temp: float, h_value: str, bc_type: str):
+        """Update solid T file with temperature, h value, and boundary type."""
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        # Update internalField uniform temperature
+        pattern = r'(internalField\s+uniform\s+)[\d\.eE\+\-]+(\s*;)'
+        replacement = rf'\g<1>{temp}\2'
+        content = re.sub(pattern, replacement, content)
+
+        # Update boundaryField.solid_name.h uniform value
+        # Pattern: solid_name { ... h uniform VALUE; ... }
+        h_pattern = rf'({solid_name}\s*\{{[^}}]*h\s+uniform\s+)[\d\.eE\+\-]+(\s*;)'
+        h_replacement = rf'\g<1>{h_value}\2'
+        content = re.sub(h_pattern, h_replacement, content, flags=re.DOTALL)
+
+        # Update boundaryField.solid_name.type value
+        type_pattern = rf'({solid_name}\s*\{{\s*type\s+)\w+(\s*;)'
+        type_replacement = rf'\g<1>{bc_type}\2'
+        content = re.sub(type_pattern, type_replacement, content)
+
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+
+    def _load_fluid_initial_conditions(self, fluid_path: Path):
+        """Load fluid initial conditions (p, T, U files) to UI."""
+        try:
+            if not fluid_path.exists():
+                return
+
+            # Load p file - pressure
+            p_file = fluid_path / "p"
+            if p_file.exists():
+                value = self._read_internal_field_scalar(p_file)
+                if value is not None:
+                    # Convert to display value (if >= 100000, show as value/100000 if it equals 1)
+                    display_value = value
+                    if value == 100000:
+                        display_value = 1
+                    self.ui.edit_fluid_1.setText(str(display_value))
+
+            # Load T file - temperature
+            t_file = fluid_path / "T"
+            if t_file.exists():
+                value = self._read_internal_field_scalar(t_file)
+                if value is not None:
+                    self.ui.edit_fluid_2.setText(str(int(value)))
+
+            # Load U file - velocity
+            u_file = fluid_path / "U"
+            if u_file.exists():
+                vx, vy, vz = self._read_internal_field_vector(u_file)
+                if vx is not None:
+                    self.ui.edit_fluid_v_x.setText(str(vx))
+                    self.ui.edit_fluid_v_y.setText(str(vy))
+                    self.ui.edit_fluid_v_z.setText(str(vz))
+
+        except Exception:
+            pass
+    def _read_internal_field_scalar(self, file_path: Path):
+        """Read internalField uniform scalar value."""
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+
+            pattern = r'internalField\s+uniform\s+([\d\.eE\+\-]+)\s*;'
+            match = re.search(pattern, content)
+            if match:
+                return float(match.group(1))
+        except Exception:
+            pass
+        return None
+
+    def _read_internal_field_vector(self, file_path: Path):
+        """Read internalField uniform vector value."""
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+
+            pattern = r'internalField\s+uniform\s+\(\s*([\d\.eE\+\-]+)\s+([\d\.eE\+\-]+)\s+([\d\.eE\+\-]+)\s*\)\s*;'
+            match = re.search(pattern, content)
+            if match:
+                return float(match.group(1)), float(match.group(2)), float(match.group(3))
+        except Exception:
+            pass
+        return None, None, None
+
+    def _load_solid_initial_conditions(self, orig_path: Path):
+        """Load solid initial conditions from first solid folder's T file."""
+        try:
+            if not orig_path.exists():
+                return
+
+            # Find first solid folder (exclude fluid and filmRegion)
+            excluded_folders = {"fluid", "filmRegion"}
+            solid_folders = [
+                d for d in orig_path.iterdir()
+                if d.is_dir() and d.name not in excluded_folders
+            ]
+
+            if not solid_folders:
+                return
+
+            # Use first solid folder as reference
+            first_solid = solid_folders[0]
+            t_file = first_solid / "T"
+
+            if not t_file.exists():
+                return
+
+            with open(t_file, 'r', encoding='utf-8') as f:
+                content = f.read()
+
+            # Load internalField temperature
+            temp_pattern = r'internalField\s+uniform\s+([\d\.eE\+\-]+)\s*;'
+            temp_match = re.search(temp_pattern, content)
+            if temp_match:
+                self.ui.edit_solid_1.setText(str(int(float(temp_match.group(1)))))
+
+            # Load h uniform value from boundaryField.solid_name section
+            solid_name = first_solid.name
+            h_pattern = rf'{solid_name}\s*\{{[^}}]*h\s+uniform\s+([\d\.eE\+\-]+)\s*;'
+            h_match = re.search(h_pattern, content, re.DOTALL)
+            if h_match:
+                self.ui.edit_solid_2.setText(h_match.group(1))
+
+            # Load type from boundaryField.solid_name section
+            type_pattern = rf'{solid_name}\s*\{{\s*type\s+(\w+)\s*;'
+            type_match = re.search(type_pattern, content)
+            if type_match:
+                bc_type = type_match.group(1)
+                # Find matching item in comboBox_9
+                for i in range(self.ui.comboBox_9.count()):
+                    if self.ui.comboBox_9.itemText(i) == bc_type:
+                        self.ui.comboBox_9.setCurrentIndex(i)
+                        break
+
+        except Exception:
+            pass
+    def _update_spray_mmh_properties(self, case_path: Path):
+        """Update sprayMMHCloudProperties with spray settings from UI."""
+        try:
+            file_path = case_path / "sprayMMHCloudProperties"
+            if not file_path.exists():
+                return
+
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+
+            # Get UI values
+            mass_total = self.ui.edit_spray_mmh_1.text() or "1.4170e-4"
+            duration = self.ui.edit_spray_mmh_2.text() or "1.0e-1"
+            umag = self.ui.edit_spray_mmh_3.text() or "34"
+            parcels_per_sec = self.ui.edit_spray_mmh_4.text() or "5000000"
+
+            # Size distribution value: multiply by 1e-6
+            size_value = float(self.ui.edit_spray_mmh_5.text() or "26.5")
+            size_value_converted = f"{size_value}e-6"
+
+            pos_x = self.ui.edit_spray_mmh_6.text() or "0.0001"
+            pos_y = self.ui.edit_spray_mmh_7.text() or "0.0"
+            pos_z = self.ui.edit_spray_mmh_8.text() or "0.0"
+
+            dir_x = self.ui.edit_spray_mmh_9.text() or "1"
+            dir_y = self.ui.edit_spray_mmh_10.text() or "0"
+            dir_z = self.ui.edit_spray_mmh_11.text() or "0"
+
+            outer_dia = self.ui.edit_spray_mmh_12.text() or "5.8e-4"
+            inner_dia = self.ui.edit_spray_mmh_13.text() or "0"
+
+            # Update values using regex
+            content = re.sub(r'(massTotal\s+)[\d\.eE\+\-]+(\s*;)', rf'\g<1>{mass_total}\2', content)
+            content = re.sub(r'(duration\s+)[\d\.eE\+\-]+(\s*;)', rf'\g<1>{duration}\2', content)
+            content = re.sub(r'(UMag\s+)[\d\.eE\+\-]+(\s*;)', rf'\g<1>{umag}\2', content)
+            content = re.sub(r'(parcelsPerSecond\s+)[\d\.eE\+\-]+(\s*;)', rf'\g<1>{parcels_per_sec}\2', content)
+            content = re.sub(r'(fixedValueDistribution\s*\{\s*value\s+)[\d\.eE\+\-]+(\s*;)', rf'\g<1>{size_value_converted}\2', content)
+            content = re.sub(r'(position\s+\()[^\)]+(\)\s*;)', rf'\g<1>{pos_x} {pos_y} {pos_z}\2', content)
+            content = re.sub(r'(direction\s+\()[^\)]+(\)\s*;)', rf'\g<1>{dir_x} {dir_y} {dir_z}\2', content)
+            content = re.sub(r'(outerDiameter\s+)[\d\.eE\+\-]+(\s*;)', rf'\g<1>{outer_dia}\2', content)
+            content = re.sub(r'(innerDiameter\s+)[\d\.eE\+\-]+(\s*;)', rf'\g<1>{inner_dia}\2', content)
+
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+
+        except Exception:
+            pass
+    def _update_spray_nto_properties(self, case_path: Path):
+        """Update sprayNTOCloudProperties with spray settings from UI."""
+        try:
+            file_path = case_path / "sprayNTOCloudProperties"
+            if not file_path.exists():
+                return
+
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+
+            # Get UI values
+            mass_total = self.ui.edit_spray_nto_1.text() or "1.4170e-4"
+            duration = self.ui.edit_spray_nto_2.text() or "1.0e-1"
+            umag = self.ui.edit_spray_nto_3.text() or "34"
+            parcels_per_sec = self.ui.edit_spray_nto_4.text() or "5000000"
+
+            # Size distribution value: multiply by 1e-6
+            size_value = float(self.ui.edit_spray_nto_5.text() or "26.5")
+            size_value_converted = f"{size_value}e-6"
+
+            pos_x = self.ui.edit_spray_nto_6.text() or "0.0001"
+            pos_y = self.ui.edit_spray_nto_7.text() or "0.0"
+            pos_z = self.ui.edit_spray_nto_8.text() or "0.0"
+
+            dir_x = self.ui.edit_spray_nto_9.text() or "1"
+            dir_y = self.ui.edit_spray_nto_10.text() or "0"
+            dir_z = self.ui.edit_spray_nto_11.text() or "0"
+
+            outer_dia = self.ui.edit_spray_nto_12.text() or "5.8e-4"
+            inner_dia = self.ui.edit_spray_nto_13.text() or "0"
+
+            # Update values using regex
+            content = re.sub(r'(massTotal\s+)[\d\.eE\+\-]+(\s*;)', rf'\g<1>{mass_total}\2', content)
+            content = re.sub(r'(duration\s+)[\d\.eE\+\-]+(\s*;)', rf'\g<1>{duration}\2', content)
+            content = re.sub(r'(UMag\s+)[\d\.eE\+\-]+(\s*;)', rf'\g<1>{umag}\2', content)
+            content = re.sub(r'(parcelsPerSecond\s+)[\d\.eE\+\-]+(\s*;)', rf'\g<1>{parcels_per_sec}\2', content)
+            content = re.sub(r'(fixedValueDistribution\s*\{\s*value\s+)[\d\.eE\+\-]+(\s*;)', rf'\g<1>{size_value_converted}\2', content)
+            content = re.sub(r'(position\s+\()[^\)]+(\)\s*;)', rf'\g<1>{pos_x} {pos_y} {pos_z}\2', content)
+            content = re.sub(r'(direction\s+\()[^\)]+(\)\s*;)', rf'\g<1>{dir_x} {dir_y} {dir_z}\2', content)
+            content = re.sub(r'(outerDiameter\s+)[\d\.eE\+\-]+(\s*;)', rf'\g<1>{outer_dia}\2', content)
+            content = re.sub(r'(innerDiameter\s+)[\d\.eE\+\-]+(\s*;)', rf'\g<1>{inner_dia}\2', content)
+
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+
+        except Exception:
+            pass
+    def _load_spray_mmh_properties(self, case_path: Path):
+        """Load sprayMMHCloudProperties settings to UI."""
+        try:
+            file_path = case_path / "sprayMMHCloudProperties"
+            if not file_path.exists():
+                return
+
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+
+            # Load massTotal
+            match = re.search(r'massTotal\s+([\d\.eE\+\-]+)\s*;', content)
+            if match:
+                self.ui.edit_spray_mmh_1.setText(match.group(1))
+
+            # Load duration
+            match = re.search(r'duration\s+([\d\.eE\+\-]+)\s*;', content)
+            if match:
+                self.ui.edit_spray_mmh_2.setText(match.group(1))
+
+            # Load UMag
+            match = re.search(r'UMag\s+([\d\.eE\+\-]+)\s*;', content)
+            if match:
+                self.ui.edit_spray_mmh_3.setText(match.group(1))
+
+            # Load parcelsPerSecond
+            match = re.search(r'parcelsPerSecond\s+([\d\.eE\+\-]+)\s*;', content)
+            if match:
+                self.ui.edit_spray_mmh_4.setText(match.group(1))
+
+            # Load sizeDistribution value (convert from scientific notation)
+            match = re.search(r'fixedValueDistribution\s*\{\s*value\s+([\d\.eE\+\-]+)\s*;', content)
+            if match:
+                value = float(match.group(1))
+                # Convert from e-6 to display value
+                display_value = value * 1e6
+                self.ui.edit_spray_mmh_5.setText(str(display_value))
+
+            # Load position
+            match = re.search(r'position\s+\(\s*([\d\.eE\+\-]+)\s+([\d\.eE\+\-]+)\s+([\d\.eE\+\-]+)\s*\)', content)
+            if match:
+                self.ui.edit_spray_mmh_6.setText(match.group(1))
+                self.ui.edit_spray_mmh_7.setText(match.group(2))
+                self.ui.edit_spray_mmh_8.setText(match.group(3))
+
+            # Load direction
+            match = re.search(r'direction\s+\(\s*([\d\.eE\+\-]+)\s+([\d\.eE\+\-]+)\s+([\d\.eE\+\-]+)\s*\)', content)
+            if match:
+                self.ui.edit_spray_mmh_9.setText(match.group(1))
+                self.ui.edit_spray_mmh_10.setText(match.group(2))
+                self.ui.edit_spray_mmh_11.setText(match.group(3))
+
+            # Load outerDiameter
+            match = re.search(r'outerDiameter\s+([\d\.eE\+\-]+)\s*;', content)
+            if match:
+                self.ui.edit_spray_mmh_12.setText(match.group(1))
+
+            # Load innerDiameter
+            match = re.search(r'innerDiameter\s+([\d\.eE\+\-]+)\s*;', content)
+            if match:
+                self.ui.edit_spray_mmh_13.setText(match.group(1))
+
+        except Exception:
+            pass
+    def _load_spray_nto_properties(self, case_path: Path):
+        """Load sprayNTOCloudProperties settings to UI."""
+        try:
+            file_path = case_path / "sprayNTOCloudProperties"
+            if not file_path.exists():
+                return
+
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+
+            # Load massTotal
+            match = re.search(r'massTotal\s+([\d\.eE\+\-]+)\s*;', content)
+            if match:
+                self.ui.edit_spray_nto_1.setText(match.group(1))
+
+            # Load duration
+            match = re.search(r'duration\s+([\d\.eE\+\-]+)\s*;', content)
+            if match:
+                self.ui.edit_spray_nto_2.setText(match.group(1))
+
+            # Load UMag
+            match = re.search(r'UMag\s+([\d\.eE\+\-]+)\s*;', content)
+            if match:
+                self.ui.edit_spray_nto_3.setText(match.group(1))
+
+            # Load parcelsPerSecond
+            match = re.search(r'parcelsPerSecond\s+([\d\.eE\+\-]+)\s*;', content)
+            if match:
+                self.ui.edit_spray_nto_4.setText(match.group(1))
+
+            # Load sizeDistribution value (convert from scientific notation)
+            match = re.search(r'fixedValueDistribution\s*\{\s*value\s+([\d\.eE\+\-]+)\s*;', content)
+            if match:
+                value = float(match.group(1))
+                # Convert from e-6 to display value
+                display_value = value * 1e6
+                self.ui.edit_spray_nto_5.setText(str(display_value))
+
+            # Load position
+            match = re.search(r'position\s+\(\s*([\d\.eE\+\-]+)\s+([\d\.eE\+\-]+)\s+([\d\.eE\+\-]+)\s*\)', content)
+            if match:
+                self.ui.edit_spray_nto_6.setText(match.group(1))
+                self.ui.edit_spray_nto_7.setText(match.group(2))
+                self.ui.edit_spray_nto_8.setText(match.group(3))
+
+            # Load direction
+            match = re.search(r'direction\s+\(\s*([\d\.eE\+\-]+)\s+([\d\.eE\+\-]+)\s+([\d\.eE\+\-]+)\s*\)', content)
+            if match:
+                self.ui.edit_spray_nto_9.setText(match.group(1))
+                self.ui.edit_spray_nto_10.setText(match.group(2))
+                self.ui.edit_spray_nto_11.setText(match.group(3))
+
+            # Load outerDiameter
+            match = re.search(r'outerDiameter\s+([\d\.eE\+\-]+)\s*;', content)
+            if match:
+                self.ui.edit_spray_nto_12.setText(match.group(1))
+
+            # Load innerDiameter
+            match = re.search(r'innerDiameter\s+([\d\.eE\+\-]+)\s*;', content)
+            if match:
+                self.ui.edit_spray_nto_13.setText(match.group(1))
+
+        except Exception:
+            pass
+    def _update_fv_schemes(self, system_path: Path):
+        """Update fvSchemes with numerical scheme settings from UI."""
+        try:
+            file_path = system_path / "fvSchemes"
+            if not file_path.exists():
+                return
+
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+
+            # combo_numerical_1 → ddtSchemes.default
+            ddt_scheme = self.ui.combo_numerical_1.currentText().strip()
+            content = re.sub(
+                r'(ddtSchemes\s*\{\s*default\s+)\w+(\s*;)',
+                rf'\g<1>{ddt_scheme}\2',
+                content
+            )
+
+            # combo_numerical_2 → defaultAdvSchemeV (for U)
+            adv_scheme_v = self.ui.combo_numerical_2.currentText().strip()
+            content = re.sub(
+                r'(defaultAdvSchemeV\s+)\w+(\s*;)',
+                rf'\g<1>{adv_scheme_v}\2',
+                content
+            )
+
+            # combo_numerical_3 → defaultAdvScheme (for h, K, etc.)
+            adv_scheme = self.ui.combo_numerical_3.currentText().strip()
+            content = re.sub(
+                r'(defaultAdvScheme\s+)\w+(\s*;)',
+                rf'\g<1>{adv_scheme}\2',
+                content
+            )
+
+            # combo_numerical_4 → div(phi,k/omega/epsilon) turbulence schemes
+            turb_scheme = self.ui.combo_numerical_4.currentText().strip()
+            # Update k, omega, epsilon lines
+            content = re.sub(
+                r'(div\(phi,k\)\s+Gauss\s+)\w+(\s*;)',
+                rf'\g<1>{turb_scheme}\2',
+                content
+            )
+            content = re.sub(
+                r'(div\(phi,omega\)\s+Gauss\s+)\w+(\s*;)',
+                rf'\g<1>{turb_scheme}\2',
+                content
+            )
+            content = re.sub(
+                r'(div\(phi,epsilon\)\s+Gauss\s+)\w+(\s*;)',
+                rf'\g<1>{turb_scheme}\2',
+                content
+            )
+
+            # combo_numerical_5 → div(phi_nei/own,Yi) - replace $defaultAdvScheme in Yi lines
+            yi_scheme = self.ui.combo_numerical_5.currentText().strip()
+            content = re.sub(
+                r'(div\(phi_nei,Yi\)\s+Gauss\s+)[\$\w]+(\s*;)',
+                rf'\g<1>{yi_scheme}\2',
+                content
+            )
+            content = re.sub(
+                r'(div\(phi_own,Yi\)\s+Gauss\s+)[\$\w]+(\s*;)',
+                rf'\g<1>{yi_scheme}\2',
+                content
+            )
+
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+
+        except Exception:
+            pass
+    def _load_fv_schemes(self, system_path: Path):
+        """Load fvSchemes settings to UI."""
+        try:
+            file_path = system_path / "fvSchemes"
+            if not file_path.exists():
+                return
+
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+
+            # Load ddtSchemes.default → combo_numerical_1
+            match = re.search(r'ddtSchemes\s*\{\s*default\s+(\w+)\s*;', content)
+            if match:
+                ddt_scheme = match.group(1)
+                self._set_combo_text(self.ui.combo_numerical_1, ddt_scheme)
+
+            # Load defaultAdvSchemeV → combo_numerical_2
+            match = re.search(r'defaultAdvSchemeV\s+(\w+)\s*;', content)
+            if match:
+                adv_scheme_v = match.group(1)
+                self._set_combo_text(self.ui.combo_numerical_2, adv_scheme_v)
+
+            # Load defaultAdvScheme → combo_numerical_3
+            match = re.search(r'defaultAdvScheme\s+(\w+)\s*;', content)
+            if match:
+                adv_scheme = match.group(1)
+                self._set_combo_text(self.ui.combo_numerical_3, adv_scheme)
+
+            # Load turbulence scheme from div(phi,k) → combo_numerical_4
+            match = re.search(r'div\(phi,k\)\s+Gauss\s+(\w+)\s*;', content)
+            if match:
+                turb_scheme = match.group(1)
+                self._set_combo_text(self.ui.combo_numerical_4, turb_scheme)
+
+            # Load Yi scheme from div(phi_nei,Yi) → combo_numerical_5
+            match = re.search(r'div\(phi_nei,Yi\)\s+Gauss\s+([\$\w]+)\s*;', content)
+            if match:
+                yi_scheme = match.group(1)
+                # If it's a variable reference ($defaultAdvScheme), load defaultAdvScheme value
+                if yi_scheme.startswith('$'):
+                    var_match = re.search(rf'{yi_scheme[1:]}\s+(\w+)\s*;', content)
+                    if var_match:
+                        yi_scheme = var_match.group(1)
+                self._set_combo_text(self.ui.combo_numerical_5, yi_scheme)
+
+        except Exception:
+            pass
+    def _update_fv_solution(self, system_path: Path):
+        """Update fvSolution with PIMPLE settings from UI."""
+        try:
+            file_path = system_path / "fvSolution"
+            if not file_path.exists():
+                return
+
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+
+            # edit_numerical_1 → PIMPLE.nCorrectors
+            n_correctors = self.ui.edit_numerical_1.text() or "2"
+            content = re.sub(
+                r'(nCorrectors\s+)[\d]+(\s*;)',
+                rf'\g<1>{n_correctors}\2',
+                content
+            )
+
+            # edit_numerical_2 → PIMPLE.nOuterCorrectors
+            n_outer = self.ui.edit_numerical_2.text() or "1"
+            content = re.sub(
+                r'(nOuterCorrectors\s+)[\d]+(\s*;)',
+                rf'\g<1>{n_outer}\2',
+                content
+            )
+
+            # edit_numerical_3 → PIMPLE.nonOrthogonalityThreshold
+            non_ortho = self.ui.edit_numerical_3.text() or "60"
+            content = re.sub(
+                r'(nonOrthogonalityThreshold\s+)[\d\.]+(\s*;)',
+                rf'\g<1>{non_ortho}\2',
+                content
+            )
+
+            # combo_numerical_6 → PIMPLE.fluxScheme
+            flux_scheme = self.ui.combo_numerical_6.currentText().strip()
+            content = re.sub(
+                r'(fluxScheme\s+)\w+(\s*;)',
+                rf'\g<1>{flux_scheme}\2',
+                content
+            )
+
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+
+        except Exception:
+            pass
+    def _load_fv_solution(self, system_path: Path):
+        """Load fvSolution settings to UI."""
+        try:
+            file_path = system_path / "fvSolution"
+            if not file_path.exists():
+                return
+
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+
+            # Load nCorrectors → edit_numerical_1
+            match = re.search(r'nCorrectors\s+(\d+)\s*;', content)
+            if match:
+                self.ui.edit_numerical_1.setText(match.group(1))
+
+            # Load nOuterCorrectors → edit_numerical_2
+            match = re.search(r'nOuterCorrectors\s+(\d+)\s*;', content)
+            if match:
+                self.ui.edit_numerical_2.setText(match.group(1))
+
+            # Load nonOrthogonalityThreshold → edit_numerical_3
+            match = re.search(r'nonOrthogonalityThreshold\s+([\d\.]+)\s*;', content)
+            if match:
+                self.ui.edit_numerical_3.setText(match.group(1))
+
+            # Load fluxScheme → combo_numerical_6
+            match = re.search(r'fluxScheme\s+(\w+)\s*;', content)
+            if match:
+                flux_scheme = match.group(1)
+                self._set_combo_text(self.ui.combo_numerical_6, flux_scheme)
+
+        except Exception:
+            pass
+    def _set_combo_text(self, combo, text: str):
+        """Set combobox to item matching the given text."""
+        for i in range(combo.count()):
+            if combo.itemText(i).strip() == text:
+                combo.setCurrentIndex(i)
+                return
+        # If not found, try to find partial match
+        for i in range(combo.count()):
+            if text in combo.itemText(i):
+                combo.setCurrentIndex(i)
+                return
+
+    def _update_control_dict(self, system_path: Path):
+        """Update controlDict with run settings from UI."""
+        try:
+            file_path = system_path / "controlDict"
+            if not file_path.exists():
+                return
+
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+
+            # edit_run_1 → startTime
+            start_time = self.ui.edit_run_1.text() or "0"
+            content = re.sub(
+                r'(startTime\s+)[\d\.eE\+\-]+(\s*;)',
+                rf'\g<1>{start_time}\2',
+                content
+            )
+
+            # edit_run_2 → endTime
+            end_time = self.ui.edit_run_2.text() or "0.02"
+            content = re.sub(
+                r'(endTime\s+)[\d\.eE\+\-]+(\s*;)',
+                rf'\g<1>{end_time}\2',
+                content
+            )
+
+            # edit_run_3 → deltaT
+            delta_t = self.ui.edit_run_3.text() or "1e-06"
+            content = re.sub(
+                r'(deltaT\s+)[\d\.eE\+\-]+(\s*;)',
+                rf'\g<1>{delta_t}\2',
+                content
+            )
+
+            # edit_run_4 → writeInterval
+            write_interval = self.ui.edit_run_4.text() or "5e-04"
+            content = re.sub(
+                r'(writeInterval\s+)[\d\.eE\+\-]+(\s*;)',
+                rf'\g<1>{write_interval}\2',
+                content
+            )
+
+            # edit_run_5 → maxCo
+            max_co = self.ui.edit_run_5.text() or "0.4"
+            content = re.sub(
+                r'(maxCo\s+)[\d\.eE\+\-]+(\s*;)',
+                rf'\g<1>{max_co}\2',
+                content
+            )
+
+            # edit_run_6 → purgeWrite
+            purge_write = self.ui.edit_run_6.text() or "20"
+            content = re.sub(
+                r'(purgeWrite\s+)[\d]+(\s*;)',
+                rf'\g<1>{purge_write}\2',
+                content
+            )
+
+            # combo_run_1 → writeFormat
+            write_format = self.ui.combo_run_1.currentText().strip()
+            content = re.sub(
+                r'(writeFormat\s+)\w+(\s*;)',
+                rf'\g<1>{write_format}\2',
+                content
+            )
+
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+
+        except Exception:
+            pass
+    def _load_control_dict(self, system_path: Path):
+        """Load controlDict settings to UI."""
+        try:
+            file_path = system_path / "controlDict"
+            if not file_path.exists():
+                return
+
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+
+            # Load startTime → edit_run_1
+            match = re.search(r'startTime\s+([\d\.eE\+\-]+)\s*;', content)
+            if match:
+                self.ui.edit_run_1.setText(match.group(1))
+
+            # Load endTime → edit_run_2
+            match = re.search(r'endTime\s+([\d\.eE\+\-]+)\s*;', content)
+            if match:
+                self.ui.edit_run_2.setText(match.group(1))
+
+            # Load deltaT → edit_run_3
+            match = re.search(r'deltaT\s+([\d\.eE\+\-]+)\s*;', content)
+            if match:
+                self.ui.edit_run_3.setText(match.group(1))
+
+            # Load writeInterval → edit_run_4
+            match = re.search(r'writeInterval\s+([\d\.eE\+\-]+)\s*;', content)
+            if match:
+                self.ui.edit_run_4.setText(match.group(1))
+
+            # Load maxCo → edit_run_5
+            match = re.search(r'maxCo\s+([\d\.eE\+\-]+)\s*;', content)
+            if match:
+                self.ui.edit_run_5.setText(match.group(1))
+
+            # Load purgeWrite → edit_run_6
+            match = re.search(r'purgeWrite\s+(\d+)\s*;', content)
+            if match:
+                self.ui.edit_run_6.setText(match.group(1))
+
+            # Load writeFormat → combo_run_1
+            match = re.search(r'writeFormat\s+(\w+)\s*;', content)
+            if match:
+                write_format = match.group(1)
+                self._set_combo_text(self.ui.combo_run_1, write_format)
+
+        except Exception:
+            pass

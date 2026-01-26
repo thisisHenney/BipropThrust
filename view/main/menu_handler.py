@@ -62,17 +62,14 @@ class MenuHandler:
 
     def on_new(self) -> None:
         """Handle New action."""
-        print("Menu: New")
         self.main_window.create_new_case(user_select=True)
 
     def on_open(self) -> None:
         """Handle Open action."""
-        print("Menu: Open")
         self.main_window.open_case()
 
     def on_save(self) -> None:
         """Handle Save action."""
-        print("Menu: Save")
         if self.case_data.path:
             self.case_data.save()
             self.main_window.statusBar().showMessage("Case saved", 3000)
@@ -81,26 +78,22 @@ class MenuHandler:
 
     def on_save_as(self) -> None:
         """Handle Save As action."""
-        print("Menu: Save As")
         # TODO: Implement save as functionality
         self.main_window.statusBar().showMessage("Save As - Not implemented yet", 3000)
 
     def on_exit(self) -> None:
         """Handle Exit action."""
-        print("Menu: Exit")
         self.main_window.close()
 
     # ========== Run Menu ==========
 
     def on_run(self) -> None:
         """Handle Run action."""
-        print("Menu: Run")
         # TODO: Implement run simulation
         self.main_window.statusBar().showMessage("Run - Not implemented yet", 3000)
 
     def on_stop(self) -> None:
         """Handle Stop action."""
-        print("Menu: Stop")
         # TODO: Implement stop simulation
         self.main_window.statusBar().showMessage("Stop - Not implemented yet", 3000)
 
@@ -108,25 +101,21 @@ class MenuHandler:
 
     def on_view_mesh(self) -> None:
         """Handle View Mesh action."""
-        print("Menu: View Mesh")
         if self.main_window.dock_manager:
             self.main_window.dock_manager.change_dock_tab(2)
 
     def on_view_post(self) -> None:
         """Handle View Post action."""
-        print("Menu: View Post")
         if self.main_window.dock_manager:
             self.main_window.dock_manager.change_dock_tab(3)
 
     def on_view_residuals(self) -> None:
         """Handle View Residuals action."""
-        print("Menu: View Residuals")
         if self.main_window.dock_manager:
             self.main_window.dock_manager.change_dock_tab(0)
 
     def on_view_log(self) -> None:
         """Handle View Log action."""
-        print("Menu: View Log")
         # Log is in bottom dock, always visible
         self.main_window.statusBar().showMessage("Log panel is at the bottom", 2000)
 
@@ -134,7 +123,6 @@ class MenuHandler:
 
     def on_file_explorer(self) -> None:
         """Handle Open File Explorer action."""
-        print("Menu: File Explorer")
         if self.case_data.path:
             open_file_explorer(self.main_window, self.case_data.path)
         else:
@@ -142,7 +130,6 @@ class MenuHandler:
 
     def on_terminal(self) -> None:
         """Handle Open Terminal action."""
-        print("Menu: Terminal")
         # TODO: Implement terminal opening
         self.main_window.statusBar().showMessage("Terminal - Not implemented yet", 3000)
 
@@ -150,7 +137,6 @@ class MenuHandler:
 
     def on_about(self) -> None:
         """Handle About action."""
-        print("Menu: About")
         QMessageBox.about(
             self.main_window,
             f"About {self.app_data.name}",

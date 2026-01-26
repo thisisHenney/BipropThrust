@@ -187,7 +187,6 @@ class CenterWidget(QWidget):
             mesh_view._hide_slice_clip_actors()
 
         self.vtk_pre.vtk_widget.GetRenderWindow().Render()
-        print(f"Showing {geom_count} geometry objects, hiding {mesh_count} mesh objects")
 
     def _show_mesh_objects(self):
         """Show mesh group objects, hide geometry group objects."""
@@ -212,7 +211,6 @@ class CenterWidget(QWidget):
             mesh_view._show_slice_clip_actors()
 
         self.vtk_pre.vtk_widget.GetRenderWindow().Render()
-        print(f"Hiding {geom_count} geometry objects, showing {mesh_count} mesh objects")
 
     def _show_mesh_objects_only(self):
         """Show mesh objects, hide geometry and slice/clip actors (for Run and other tabs)."""
@@ -237,7 +235,6 @@ class CenterWidget(QWidget):
             mesh_view._hide_slice_clip_actors()
 
         self.vtk_pre.vtk_widget.GetRenderWindow().Render()
-        print(f"Hiding {geom_count} geometry objects, showing {mesh_count} mesh objects (no slice)")
 
     def _show_slice_toolbar(self):
         """Show slice controls widget (Mesh Generation tab)."""

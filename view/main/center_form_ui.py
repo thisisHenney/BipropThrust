@@ -352,7 +352,7 @@ class Ui_Center(object):
         self.scrollArea.setWidgetResizable(True)
         self.scrollAreaWidgetContents = QWidget()
         self.scrollAreaWidgetContents.setObjectName(u"scrollAreaWidgetContents")
-        self.scrollAreaWidgetContents.setGeometry(QRect(0, 0, 403, 728))
+        self.scrollAreaWidgetContents.setGeometry(QRect(0, 0, 407, 736))
         self.verticalLayout_5 = QVBoxLayout(self.scrollAreaWidgetContents)
         self.verticalLayout_5.setObjectName(u"verticalLayout_5")
         self.verticalLayout_5.setContentsMargins(0, 0, 0, 0)
@@ -2270,7 +2270,7 @@ class Ui_Center(object):
         self.label_43.setText(QCoreApplication.translate("Center", u"Velocity [m/s]", None))
         self.groupBox_11.setTitle(QCoreApplication.translate("Center", u"< Solid >", None))
         self.comboBox_9.setItemText(0, QCoreApplication.translate("Center", u"externalWallHeatFluxTemperature", None))
-        self.comboBox_9.setItemText(1, QCoreApplication.translate("Center", u"Convective Heat Transfer", None))
+        self.comboBox_9.setItemText(1, QCoreApplication.translate("Center", u"ConvectiveHeatTransfer", None))
         self.comboBox_9.setItemText(2, QCoreApplication.translate("Center", u"wallHeatTransfer", None))
 
         self.edit_solid_2.setText(QCoreApplication.translate("Center", u"1000", None))

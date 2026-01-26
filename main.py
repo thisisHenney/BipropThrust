@@ -13,29 +13,18 @@ from pathlib import Path
 from datetime import datetime
 
 from PySide6.QtWidgets import QApplication
-from PySide6.QtCore import Qt, QtMsgType
+from PySide6.QtCore import Qt
 
 from common.app_data import app_data
 from view.main.main_window import MainWindow
 
 
-def qt_message_handler(msg_type, _context, message):
+def qt_message_handler(_msg_type, _context, message):
     """Custom Qt message handler to filter out specific warnings."""
     # Filter out the device pixel ratio warning
     if "cached device pixel ratio" in message.lower():
         return
-
-    # Print other messages normally
-    if msg_type == QtMsgType.QtDebugMsg:
-        print(f"Qt Debug: {message}")
-    elif msg_type == QtMsgType.QtInfoMsg:
-        print(f"Qt Info: {message}")
-    elif msg_type == QtMsgType.QtWarningMsg:
-        print(f"Qt Warning: {message}")
-    elif msg_type == QtMsgType.QtCriticalMsg:
-        print(f"Qt Critical: {message}")
-    elif msg_type == QtMsgType.QtFatalMsg:
-        print(f"Qt Fatal: {message}")
+    # Other messages are silently ignored
 
 
 class BipropThrustApp:
@@ -88,15 +77,11 @@ class BipropThrustApp:
             # Validate provided case path
             path = Path(self.case_path)
             if path.exists() and path.is_dir():
-                print(f"Opening case: {self.case_path}")
                 return str(path.resolve())
-            else:
-                print(f"Warning: Invalid case path '{self.case_path}'")
-                print("Creating temporary case instead...")
+            # If path doesn't exist, fall through to create temp case
 
         # Create temporary case
         temp_case_path = self._create_temp_case()
-        print(f"Created temporary case: {temp_case_path}")
         return temp_case_path
 
     def _create_temp_case(self) -> str:
@@ -136,7 +121,6 @@ class BipropThrustApp:
         basecase_path = project_root / "config" / "basecase"
 
         if not basecase_path.exists():
-            print(f"Warning: basecase template not found at {basecase_path}")
             return
 
         try:
@@ -151,12 +135,8 @@ class BipropThrustApp:
                 else:
                     shutil.copy2(src, dst)
 
-            print(f"Copied basecase template to {target_path}")
-
-        except Exception as e:
-            print(f"Error copying basecase template: {e}")
-            import traceback
-            traceback.print_exc()
+        except Exception:
+            pass
 
     def start(self) -> None:
         """
@@ -175,10 +155,7 @@ class BipropThrustApp:
             self.main_window.initialize()
             self.main_window.show()
 
-            print(f"{app_data.title} started successfully")
-
         except Exception as e:
-            print(f"Error starting application: {e}")
             import traceback
             traceback.print_exc()
             sys.exit(1)
@@ -220,35 +197,25 @@ class BipropThrustApp:
                     import shutil
                     shutil.rmtree(temp_dir, ignore_errors=True)
                     deleted_count += 1
-                    print(f"Deleted old temp case: {temp_dir.name} (age: {age_days} days)")
 
-            if deleted_count > 0:
-                print(f"Cleaned up {deleted_count} old temporary case(s)")
-
-        except Exception as e:
-            print(f"Error cleaning up temp cases: {e}")
+        except Exception:
+            pass
 
 
 def main():
-    """Main entry point."""
-    # Parse command line arguments
     case_path = ""
     if len(sys.argv) > 1:
         case_path = sys.argv[1]
 
-    # Create and start application
     app = BipropThrustApp(case_path)
 
     # Clean up old temp cases (optional, runs in background)
     app.cleanup_old_temp_cases(days=7)
 
-    # Start UI
     app.start()
 
-    # Run event loop
     exit_code = app.run()
 
-    # Exit
     sys.exit(exit_code)
 
 
