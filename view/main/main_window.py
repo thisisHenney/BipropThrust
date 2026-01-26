@@ -189,9 +189,9 @@ class MainWindow(QMainWindow):
         # Get geometry panel from center widget
         geom_panel = self.center_widget.panel_views.get("geometry")
         if geom_panel:
-            geom_panel.ui.edit_input_position_x.setText(f"{x:.6g}")
-            geom_panel.ui.edit_input_position_y.setText(f"{y:.6g}")
-            geom_panel.ui.edit_input_position_z.setText(f"{z:.6g}")
+            geom_panel.ui.edit_input_position_x.setText(f"{x:.4f}")
+            geom_panel.ui.edit_input_position_y.setText(f"{y:.4f}")
+            geom_panel.ui.edit_input_position_z.setText(f"{z:.4f}")
 
     def _on_probe_visibility_changed(self, visible: bool) -> None:
         """Handle probe visibility change - restore saved position when shown."""

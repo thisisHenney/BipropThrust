@@ -13,6 +13,7 @@ from common.app_context import AppContext
 from view.main.center_form_ui import Ui_Center
 from view.panel.geometry_view import GeometryView
 from view.panel.mesh_generation_view import MeshGenerationView
+from view.panel.run_view import RunView
 
 
 class CenterWidget(QWidget):
@@ -67,6 +68,12 @@ class CenterWidget(QWidget):
         # Mesh Generation View
         self.panel_views["mesh"] = MeshGenerationView(self)
 
+        # Run View
+        self.panel_views["run"] = RunView(self)
+
+        # Slice controls are already added to VTK toolbar in mesh view
+        # They will be shown/hidden based on active tab
+
         # TODO: Add other views
         # self.panel_views["initial_conditions"] = InitialConditionsView(self)
         # self.panel_views["models"] = ModelsView(self)
@@ -74,7 +81,6 @@ class CenterWidget(QWidget):
         # self.panel_views["materials"] = MaterialsView(self)
         # self.panel_views["spray_mmh"] = SprayMMHView(self)
         # self.panel_views["spray_nto"] = SprayNTOView(self)
-        # self.panel_views["run"] = RunView(self)
 
     def _connect_signals(self) -> None:
         """Connect tree selection signals."""
@@ -139,6 +145,111 @@ class CenterWidget(QWidget):
 
         if page:
             self.ui.stackedWidget.setCurrentWidget(page)
+
+            # Toggle visibility based on active tab
+            if self.vtk_pre:
+                if item_text == "Geometry":
+                    # Show geometry STL, hide mesh
+                    self._show_geometry_objects()
+                    # Hide slice toolbar
+                    self._hide_slice_toolbar()
+                elif item_text == "Mesh Generation":
+                    # Hide geometry STL, show mesh
+                    self._show_mesh_objects()
+                    # Show slice toolbar
+                    self._show_slice_toolbar()
+                else:
+                    # Other tabs (Run, etc.) - show mesh, hide STL and slice controls
+                    self._show_mesh_objects_only()
+                    # Hide slice toolbar
+                    self._hide_slice_toolbar()
+
+    def _show_geometry_objects(self):
+        """Show geometry group objects, hide mesh group objects."""
+        all_objs = self.vtk_pre.obj_manager.get_all()
+
+        geom_count = 0
+        mesh_count = 0
+
+        for obj in all_objs:
+            # Check if object has group attribute
+            if hasattr(obj, 'group'):
+                if obj.group == "geometry":
+                    obj.actor.SetVisibility(True)
+                    geom_count += 1
+                elif obj.group == "mesh":
+                    obj.actor.SetVisibility(False)
+                    mesh_count += 1
+
+        # Hide slice/clip actors when switching to Geometry tab
+        mesh_view = self.panel_views.get("mesh")
+        if mesh_view:
+            mesh_view._hide_slice_clip_actors()
+
+        self.vtk_pre.vtk_widget.GetRenderWindow().Render()
+        print(f"Showing {geom_count} geometry objects, hiding {mesh_count} mesh objects")
+
+    def _show_mesh_objects(self):
+        """Show mesh group objects, hide geometry group objects."""
+        all_objs = self.vtk_pre.obj_manager.get_all()
+
+        geom_count = 0
+        mesh_count = 0
+
+        for obj in all_objs:
+            # Check if object has group attribute
+            if hasattr(obj, 'group'):
+                if obj.group == "geometry":
+                    obj.actor.SetVisibility(False)
+                    geom_count += 1
+                elif obj.group == "mesh":
+                    obj.actor.SetVisibility(True)
+                    mesh_count += 1
+
+        # Show slice/clip actors when switching to Mesh Generation tab
+        mesh_view = self.panel_views.get("mesh")
+        if mesh_view:
+            mesh_view._show_slice_clip_actors()
+
+        self.vtk_pre.vtk_widget.GetRenderWindow().Render()
+        print(f"Hiding {geom_count} geometry objects, showing {mesh_count} mesh objects")
+
+    def _show_mesh_objects_only(self):
+        """Show mesh objects, hide geometry and slice/clip actors (for Run and other tabs)."""
+        all_objs = self.vtk_pre.obj_manager.get_all()
+
+        geom_count = 0
+        mesh_count = 0
+
+        for obj in all_objs:
+            # Check if object has group attribute
+            if hasattr(obj, 'group'):
+                if obj.group == "geometry":
+                    obj.actor.SetVisibility(False)
+                    geom_count += 1
+                elif obj.group == "mesh":
+                    obj.actor.SetVisibility(True)
+                    mesh_count += 1
+
+        # Hide slice/clip actors (no slicing on Run and other tabs)
+        mesh_view = self.panel_views.get("mesh")
+        if mesh_view:
+            mesh_view._hide_slice_clip_actors()
+
+        self.vtk_pre.vtk_widget.GetRenderWindow().Render()
+        print(f"Hiding {geom_count} geometry objects, showing {mesh_count} mesh objects (no slice)")
+
+    def _show_slice_toolbar(self):
+        """Show slice controls widget (Mesh Generation tab)."""
+        mesh_view = self.panel_views.get("mesh")
+        if mesh_view and hasattr(mesh_view, "slice_widget"):
+            mesh_view.slice_widget.show()
+
+    def _hide_slice_toolbar(self):
+        """Hide slice controls widget (other tabs)."""
+        mesh_view = self.panel_views.get("mesh")
+        if mesh_view and hasattr(mesh_view, "slice_widget"):
+            mesh_view.slice_widget.hide()
 
     def get_panel(self, panel_id: str):
         """

@@ -63,11 +63,17 @@ class GeometryView:
         # Button clicks
         self.ui.button_geometry_add.clicked.connect(self._on_add_clicked)
         self.ui.button_geometry_remove.clicked.connect(self._on_remove_clicked)
+        self.ui.button_geometry_reset.clicked.connect(self._on_reset_clicked)
         self.ui.button_geometry_apply.clicked.connect(self._on_set_apply_clicked)
+        self.ui.button_geometry_cancel.clicked.connect(self._on_cancel_clicked)
 
-        # Change button text to "Set" and keep enabled
-        self.ui.button_geometry_apply.setText("Set")
+        # Change button text to "Position Picking Mode" and keep enabled
+        self.ui.button_geometry_apply.setText("Position Picking Mode")
         self.ui.button_geometry_apply.setEnabled(True)
+
+        # Hide Cancel and Reset buttons by default
+        self.ui.button_geometry_cancel.hide()
+        self.ui.button_geometry_reset.hide()
 
         # Tree selection
         self.tree.widget.header().setVisible(False)
@@ -149,6 +155,15 @@ class GeometryView:
         """Handle single file loaded from async loading."""
         if self.vtk_pre and actor:
             self.vtk_pre.obj_manager.add(actor, name=name, group="geometry")
+
+            # Set default probe_position to object center
+            bounds = actor.GetBounds()
+            center_x = (bounds[0] + bounds[1]) / 2
+            center_y = (bounds[2] + bounds[3]) / 2
+            center_z = (bounds[4] + bounds[5]) / 2
+
+            self.case_data.set_geometry_probe_position(name, center_x, center_y, center_z)
+            print(f"Set default probe position for '{name}' to center: ({center_x:.4f}, {center_y:.4f}, {center_z:.4f})")
 
     def _on_loading_progress(self, current: int, total: int):
         """Handle loading progress update."""
@@ -258,17 +273,102 @@ class GeometryView:
         """Handle Set/Apply button click - toggle probe and save position."""
         current_text = self.ui.button_geometry_apply.text()
 
-        if current_text == "Set":
+        if current_text == "Position Picking Mode":
             # Activate point_probe and change button to "Apply"
             if self.vtk_pre:
                 probe_tool = self.vtk_pre._optional_tools.get("point_probe")
                 if probe_tool:
-                    probe_tool.show()
-                    self.ui.button_geometry_apply.setText("Apply")
-                    print("Point probe activated, button changed to Apply")
+                    # Get current selection
+                    pos = self.tree.get_current_pos()
+                    if pos is not None:
+                        obj_name = self.tree.get_text(pos)
+
+                        # Get selected object bounds
+                        obj = self.vtk_pre.obj_manager.find_by_name(obj_name)
+                        if obj:
+                            bounds = obj.actor.GetBounds()
+                            obj_size = (
+                                bounds[1] - bounds[0],
+                                bounds[3] - bounds[2],
+                                bounds[5] - bounds[4]
+                            )
+                            print(f"Selected object '{obj_name}' size: {obj_size}")
+
+                            # Calculate probe box size as 140% of object bounds
+                            scale = 1.4
+                            probe_box_size = tuple(s * scale for s in obj_size)
+                            print(f"Target probe box size (140%): {probe_box_size}")
+
+                        # Get saved probe position, or use object center if none
+                        probe_pos = self.case_data.get_geometry_probe_position(obj_name)
+                        if not probe_pos or probe_pos == (0.0, 0.0, 0.0):
+                            # No saved position - use object center
+                            probe_pos = (
+                                (bounds[0] + bounds[1]) / 2,
+                                (bounds[2] + bounds[3]) / 2,
+                                (bounds[4] + bounds[5]) / 2
+                            )
+                            print(f"No saved position - using object center: ({probe_pos[0]:.4f}, {probe_pos[1]:.4f}, {probe_pos[2]:.4f})")
+                        else:
+                            print(f"Using saved position: ({probe_pos[0]:.4f}, {probe_pos[1]:.4f}, {probe_pos[2]:.4f})")
+
+                        # Ensure probe is hidden first
+                        if probe_tool.is_visible:
+                            probe_tool.hide()
+
+                        # Calculate new bounds centered at probe_pos with 140% size
+                        half_size_x = probe_box_size[0] / 2
+                        half_size_y = probe_box_size[1] / 2
+                        half_size_z = probe_box_size[2] / 2
+
+                        new_bounds = [
+                            probe_pos[0] - half_size_x,
+                            probe_pos[0] + half_size_x,
+                            probe_pos[1] - half_size_y,
+                            probe_pos[1] + half_size_y,
+                            probe_pos[2] - half_size_z,
+                            probe_pos[2] + half_size_z
+                        ]
+
+                        print(f"Setting probe box size to 140% of object: {probe_box_size}")
+                        print(f"Setting bounds: {new_bounds}")
+
+                        # Set position while widget is Off
+                        if hasattr(probe_tool, '_rep'):
+                            probe_tool._rep.PlaceWidget(new_bounds)
+
+                        # CRITICAL: Set saved state to match what we just set
+                        # This makes show() restore exactly our desired position/size
+                        from vtkmodules.vtkCommonTransforms import vtkTransform
+                        probe_tool._saved_bounds = new_bounds
+                        probe_tool._saved_transform = vtkTransform()  # Identity (no rotation)
+                        probe_tool._saved_selection_ids = self.vtk_pre.obj_manager.selected_ids.copy()
+                        print("Set saved state to match desired position (no rotation)")
+
+                        # Now show() will restore our saved state with correct position
+                        probe_tool.show()
+
+                        # Verify final size
+                        if hasattr(probe_tool, '_rep'):
+                            verify_bounds = probe_tool._rep.GetBounds()
+                            verify_size = (
+                                verify_bounds[1] - verify_bounds[0],
+                                verify_bounds[3] - verify_bounds[2],
+                                verify_bounds[5] - verify_bounds[4]
+                            )
+                            print(f"Verified probe box size: {verify_size}")
+
+                        # Force render to show changes
+                        self.vtk_pre.vtk_widget.GetRenderWindow().Render()
+
+            # Update button state (must be OUTSIDE all if blocks to always show buttons)
+            self.ui.button_geometry_apply.setText("Apply")
+            self.ui.button_geometry_cancel.show()
+            self.ui.button_geometry_reset.show()
+            print("Button changed to Apply, Cancel and Reset buttons shown")
 
         elif current_text == "Apply":
-            # Save probe position and change button back to "Set"
+            # Save probe position and change button back to "Position Picking Mode"
             if self.vtk_pre:
                 probe_tool = self.vtk_pre._optional_tools.get("point_probe")
                 if probe_tool:
@@ -281,10 +381,82 @@ class GeometryView:
                             print(f"Saved probe position {probe_center} to {obj_name}")
                         self.case_data.save()
 
-                    # Deactivate probe and change button to "Set"
+                    # Deactivate probe and change button to "Position Picking Mode"
                     probe_tool.hide()
-                    self.ui.button_geometry_apply.setText("Set")
-                    print("Probe position saved, probe deactivated, button changed to Set")
+                    self.ui.button_geometry_apply.setText("Position Picking Mode")
+                    self.ui.button_geometry_cancel.hide()
+                    self.ui.button_geometry_reset.hide()
+                    print("Probe position saved, probe deactivated, button changed to Set, Cancel and Reset buttons hidden")
+
+    def _on_cancel_clicked(self):
+        """Handle Cancel button click - cancel position picking without saving."""
+        if self.vtk_pre:
+            probe_tool = self.vtk_pre._optional_tools.get("point_probe")
+            if probe_tool:
+                # Restore line editors to saved position (or object center if never saved)
+                pos = self.tree.get_current_pos()
+                if pos is not None:
+                    obj_name = self.tree.get_text(pos)
+                    probe_pos = self.case_data.get_geometry_probe_position(obj_name)
+
+                    # If saved position exists and is not (0,0,0), use it
+                    # Otherwise use object center
+                    if probe_pos and probe_pos != (0.0, 0.0, 0.0):
+                        x, y, z = probe_pos
+                        print(f"Restored line editors to saved position ({x:.4f}, {y:.4f}, {z:.4f})")
+                    else:
+                        # No saved position - use object center
+                        obj = self.vtk_pre.obj_manager.find_by_name(obj_name)
+                        if obj:
+                            bounds = obj.actor.GetBounds()
+                            x = (bounds[0] + bounds[1]) / 2
+                            y = (bounds[2] + bounds[3]) / 2
+                            z = (bounds[4] + bounds[5]) / 2
+                            print(f"Restored line editors to object center ({x:.4f}, {y:.4f}, {z:.4f})")
+
+                    # Update line editors
+                    self.ui.edit_input_position_x.setText(f"{x:.4f}")
+                    self.ui.edit_input_position_y.setText(f"{y:.4f}")
+                    self.ui.edit_input_position_z.setText(f"{z:.4f}")
+
+                # Deactivate probe
+                probe_tool.hide()
+                self.ui.button_geometry_apply.setText("Position Picking Mode")
+                self.ui.button_geometry_cancel.hide()
+                self.ui.button_geometry_reset.hide()
+                print("Position picking cancelled - changes NOT saved to case_data")
+
+    def _on_reset_clicked(self):
+        """Handle Reset button click - reset position to object center."""
+        # Get selected object
+        pos = self.tree.get_current_pos()
+        if pos is None:
+            print("No object selected")
+            return
+
+        obj_name = self.tree.get_text(pos)
+
+        # Get object center from VTK
+        if self.vtk_pre:
+            obj = self.vtk_pre.obj_manager.find_by_name(obj_name)
+            if obj:
+                bounds = obj.actor.GetBounds()
+                center_x = (bounds[0] + bounds[1]) / 2
+                center_y = (bounds[2] + bounds[3]) / 2
+                center_z = (bounds[4] + bounds[5]) / 2
+
+                # Update line editors with center coordinates (4 decimal places)
+                self.ui.edit_input_position_x.setText(f"{center_x:.4f}")
+                self.ui.edit_input_position_y.setText(f"{center_y:.4f}")
+                self.ui.edit_input_position_z.setText(f"{center_z:.4f}")
+
+                # If probe tool is active, move it to center as well
+                probe_tool = self.vtk_pre._optional_tools.get("point_probe")
+                if probe_tool and probe_tool.is_visible:
+                    probe_tool.set_center(center_x, center_y, center_z)
+                    print(f"Reset position and probe to object center: ({center_x:.4f}, {center_y:.4f}, {center_z:.4f})")
+                else:
+                    print(f"Reset position to object center: ({center_x:.4f}, {center_y:.4f}, {center_z:.4f})")
 
     def _on_tree_selection_changed(self):
         """Handle tree selection changed - sync VTK and update position fields."""
@@ -310,6 +482,18 @@ class GeometryView:
             self.ui.button_geometry_apply.setEnabled(True)
             self._highlight_object(selected_names[0])
 
+            # Print selected object size
+            if self.vtk_pre:
+                obj = self.vtk_pre.obj_manager.find_by_name(selected_names[0])
+                if obj:
+                    bounds = obj.actor.GetBounds()
+                    obj_size = (
+                        bounds[1] - bounds[0],
+                        bounds[3] - bounds[2],
+                        bounds[5] - bounds[4]
+                    )
+                    print(f"Selected object '{selected_names[0]}' size: {obj_size}")
+
             # Check if point_probe is visible
             probe_tool = None
             if self.vtk_pre:
@@ -322,22 +506,25 @@ class GeometryView:
             if probe_pos is not None:
                 # Display saved probe position in line editors
                 x, y, z = probe_pos
-                self.ui.edit_input_position_x.setText(f"{x:.6g}")
-                self.ui.edit_input_position_y.setText(f"{y:.6g}")
-                self.ui.edit_input_position_z.setText(f"{z:.6g}")
+                self.ui.edit_input_position_x.setText(f"{x:.4f}")
+                self.ui.edit_input_position_y.setText(f"{y:.4f}")
+                self.ui.edit_input_position_z.setText(f"{z:.4f}")
 
-                # If probe is visible, also move it to saved position
+                # Only update probe position if visible AND not in Position Picking Mode
+                # (to avoid size reset during manual positioning)
                 if probe_tool and probe_tool.is_visible:
-                    probe_tool.set_center(*probe_pos)
-                    print(f"Restored probe position {probe_pos} for {selected_names[0]}")
+                    # Check if we're in Position Picking Mode (Apply button is showing)
+                    if self.ui.button_geometry_apply.text() != "Apply":
+                        probe_tool.set_center(*probe_pos)
+                        print(f"Restored probe position ({x:.4f}, {y:.4f}, {z:.4f}) for {selected_names[0]}")
             else:
                 # No saved probe position - show geometry position
                 position = self.case_data.get_geometry_position(selected_names[0])
                 if position:
                     x, y, z = position
-                    self.ui.edit_input_position_x.setText(f"{x:.6g}")
-                    self.ui.edit_input_position_y.setText(f"{y:.6g}")
-                    self.ui.edit_input_position_z.setText(f"{z:.6g}")
+                    self.ui.edit_input_position_x.setText(f"{x:.4f}")
+                    self.ui.edit_input_position_y.setText(f"{y:.4f}")
+                    self.ui.edit_input_position_z.setText(f"{z:.4f}")
                 else:
                     # Fallback to object center if no saved position
                     if self.vtk_pre:
@@ -475,6 +662,18 @@ class GeometryView:
             self.ui.button_geometry_apply.setEnabled(True)
             self._highlight_object(selected_names[0])
 
+            # Print selected object size
+            if self.vtk_pre:
+                obj = self.vtk_pre.obj_manager.find_by_name(selected_names[0])
+                if obj:
+                    bounds = obj.actor.GetBounds()
+                    obj_size = (
+                        bounds[1] - bounds[0],
+                        bounds[3] - bounds[2],
+                        bounds[5] - bounds[4]
+                    )
+                    print(f"Selected object '{selected_names[0]}' size: {obj_size}")
+
             # Check if point_probe is visible
             probe_tool = None
             if self.vtk_pre:
@@ -487,22 +686,25 @@ class GeometryView:
             if probe_pos is not None:
                 # Display saved probe position in line editors
                 x, y, z = probe_pos
-                self.ui.edit_input_position_x.setText(f"{x:.6g}")
-                self.ui.edit_input_position_y.setText(f"{y:.6g}")
-                self.ui.edit_input_position_z.setText(f"{z:.6g}")
+                self.ui.edit_input_position_x.setText(f"{x:.4f}")
+                self.ui.edit_input_position_y.setText(f"{y:.4f}")
+                self.ui.edit_input_position_z.setText(f"{z:.4f}")
 
-                # If probe is visible, also move it to saved position
+                # Only update probe position if visible AND not in Position Picking Mode
+                # (to avoid size reset during manual positioning)
                 if probe_tool and probe_tool.is_visible:
-                    probe_tool.set_center(*probe_pos)
-                    print(f"Restored probe position {probe_pos} for {selected_names[0]}")
+                    # Check if we're in Position Picking Mode (Apply button is showing)
+                    if self.ui.button_geometry_apply.text() != "Apply":
+                        probe_tool.set_center(*probe_pos)
+                        print(f"Restored probe position ({x:.4f}, {y:.4f}, {z:.4f}) for {selected_names[0]}")
             else:
                 # No saved probe position - show geometry position
                 position = self.case_data.get_geometry_position(selected_names[0])
                 if position:
                     x, y, z = position
-                    self.ui.edit_input_position_x.setText(f"{x:.6g}")
-                    self.ui.edit_input_position_y.setText(f"{y:.6g}")
-                    self.ui.edit_input_position_z.setText(f"{z:.6g}")
+                    self.ui.edit_input_position_x.setText(f"{x:.4f}")
+                    self.ui.edit_input_position_y.setText(f"{y:.4f}")
+                    self.ui.edit_input_position_z.setText(f"{z:.4f}")
                 else:
                     # Fallback to object center if no saved position
                     if self.vtk_pre:

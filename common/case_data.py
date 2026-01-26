@@ -25,6 +25,7 @@ class GeometryData:
         is_visible: Whether geometry is visible in viewport
         position: Position offset (x, y, z) in meters
         rotation: Rotation angles (rx, ry, rz) in degrees
+        probe_position: Point probe position for locationsInMesh (x, y, z) in meters
     """
 
     name: str = ""
@@ -32,6 +33,7 @@ class GeometryData:
     is_visible: bool = True
     position: tuple[float, float, float] = field(default_factory=lambda: (0.0, 0.0, 0.0))
     rotation: tuple[float, float, float] = field(default_factory=lambda: (0.0, 0.0, 0.0))
+    probe_position: tuple[float, float, float] = field(default_factory=lambda: (0.0, 0.0, 0.0))
 
     def __post_init__(self):
         """Validate geometry data after creation."""
