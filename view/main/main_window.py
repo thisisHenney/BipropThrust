@@ -157,8 +157,12 @@ class MainWindow(QMainWindow):
         # Customize vtk_pre toolbar
         self._setup_vtk_pre_toolbar()
 
+        # Customize vtk_post toolbar
+        self._setup_vtk_post_toolbar()
+
         # Residual plot widget
         self.residual_graph = ResidualPlotWidget(self)
+        self.residual_graph.refresh_requested.connect(self._on_residual_refresh)
         self.context.register("residual_graph", self.residual_graph)
 
     def _setup_vtk_pre_toolbar(self) -> None:
@@ -183,6 +187,32 @@ class MainWindow(QMainWindow):
         if probe_tool:
             probe_tool.center_moved.connect(self._on_probe_position_changed)
             probe_tool.visibility_changed.connect(self._on_probe_visibility_changed)
+
+    def _setup_vtk_post_toolbar(self) -> None:
+        """Customize vtk_post toolbar - add refresh button."""
+        # Hide "Load OpenFOAM" action (use automatic loading instead)
+        for action in self.vtk_post.toolbar.actions():
+            if action.text() == "Load OpenFOAM":
+                action.setVisible(False)
+                break
+
+        # Add separator and refresh action
+        self.vtk_post.toolbar.addSeparator()
+
+        self.action_post_refresh = QAction("Refresh", self)
+        self.action_post_refresh.setToolTip("Reload simulation results")
+        self.action_post_refresh.triggered.connect(self._on_post_refresh)
+        self.vtk_post.toolbar.addAction(self.action_post_refresh)
+
+    def _on_post_refresh(self) -> None:
+        """Handle post-processing refresh button click."""
+        post_view = self.center_widget.panel_views.get("post")
+        if post_view:
+            post_view.reload_results()
+
+    def _on_residual_refresh(self) -> None:
+        """Handle residual graph refresh button click."""
+        self.center_widget._load_residual_log()
 
     def _on_probe_position_changed(self, x: float, y: float, z: float) -> None:
         """Handle probe position change - sync to geometry panel."""

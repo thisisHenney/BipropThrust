@@ -6,14 +6,18 @@ and stacked panels for different settings.
 Uses Qt Designer generated UI file (center_form_ui.py).
 """
 
+from pathlib import Path
+
 from PySide6.QtWidgets import QWidget
 from PySide6.QtCore import Qt
 
 from common.app_context import AppContext
+from common.case_data import case_data
 from view.main.center_form_ui import Ui_Center
 from view.panel.geometry_view import GeometryView
 from view.panel.mesh_generation_view import MeshGenerationView
 from view.panel.run_view import RunView
+from view.panel.post_view import PostView
 
 
 class CenterWidget(QWidget):
@@ -51,6 +55,7 @@ class CenterWidget(QWidget):
         self.exec_widget = context.get("exec") if context else None
         self.vtk_pre = context.get("vtk_pre") if context else None
         self.vtk_post = context.get("vtk_post") if context else None
+        self.residual_graph = context.get("residual_graph") if context else None
         self.dock_manager = context.get("dock") if context else None
 
         # Panel views (will be initialized)
@@ -70,6 +75,9 @@ class CenterWidget(QWidget):
 
         # Run View
         self.panel_views["run"] = RunView(self)
+
+        # Post View
+        self.panel_views["post"] = PostView(self)
 
         # Slice controls are already added to VTK toolbar in mesh view
         # They will be shown/hidden based on active tab
@@ -130,14 +138,19 @@ class CenterWidget(QWidget):
             elif parent_text == "Solution":
                 page = solution_pages.get(item_text)
             elif parent_text == "Results":
-                # Results submenu - handle later (Residual, Post)
-                # Switch dock tabs instead of pages
+                # Results submenu - switch to corresponding dock tabs
                 if item_text == "Residual":
                     if self.dock_manager:
-                        self.dock_manager.change_dock_tab(0)
+                        self.dock_manager.change_dock_tab(4)
+                    # Load residual log file
+                    self._load_residual_log()
                 elif item_text == "Post":
                     if self.dock_manager:
                         self.dock_manager.change_dock_tab(3)
+                    # Load post-processing results
+                    post_view = self.panel_views.get("post")
+                    if post_view:
+                        post_view.load_results()
                 return
         else:
             # Top-level item
@@ -247,6 +260,21 @@ class CenterWidget(QWidget):
         mesh_view = self.panel_views.get("mesh")
         if mesh_view and hasattr(mesh_view, "slice_widget"):
             mesh_view.slice_widget.hide()
+
+    def _load_residual_log(self):
+        """Load residual log file from 5.CHTFCase folder."""
+        if not self.residual_graph:
+            return
+
+        if not case_data.path:
+            return
+
+        # Look for log.solver in 5.CHTFCase folder
+        chtf_case = Path(case_data.path) / "5.CHTFCase"
+        log_file = chtf_case / "log.solver"
+
+        if log_file.exists():
+            self.residual_graph.load_file(str(log_file))
 
     def get_panel(self, panel_id: str):
         """
