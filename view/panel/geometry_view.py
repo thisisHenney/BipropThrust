@@ -89,7 +89,7 @@ class GeometryView:
                 probe_tool.visibility_changed.connect(self._on_probe_visibility_changed)
 
     def _on_add_clicked(self):
-        """Handle Add button click - open file dialog and copy STL files to triSurface."""
+        """Handle Add button click - open file dialog and copy STL files to model directory."""
         add_files = FileDialogBox.open_files(
             self.parent, "Select STL files",
             "STL Files (*.stl);;All Files (*)",
@@ -99,17 +99,17 @@ class GeometryView:
         if not add_files:
             return
 
-        # Get triSurface directory
-        tri_surface_path = Path(self.case_data.path) / "2.meshing_MheadBL" / "constant" / "triSurface"
-        tri_surface_path.mkdir(parents=True, exist_ok=True)
+        # Get model directory
+        model_path = Path(self.case_data.path) / "1.model_Mhead" / "scale0"
+        model_path.mkdir(parents=True, exist_ok=True)
 
-        # Copy files to triSurface and add to tree
+        # Copy files to model directory and add to tree
         copied_files = []
         for f in add_files:
             src_file = Path(f)
-            dst_file = tri_surface_path / src_file.name
+            dst_file = model_path / src_file.name
 
-            # Copy file to triSurface
+            # Copy file to model directory
             import shutil
             try:
                 shutil.copy2(src_file, dst_file)
@@ -189,8 +189,21 @@ class GeometryView:
         if self.vtk_pre:
             self._apply_saved_transforms()
 
+            # Set geometry visibility based on current tab
+            # Check if we're on Geometry tab
+            current_page = self.parent.ui.stackedWidget.currentWidget()
+            is_geometry_tab = (current_page == self.parent.ui.page_geometry)
+
+            # Set visibility for geometry objects
+            all_objs = self.vtk_pre.obj_manager.get_all()
+            for obj in all_objs:
+                if hasattr(obj, 'group') and obj.group == "geometry":
+                    obj.actor.SetVisibility(is_geometry_tab)
+
             # Update VTK view after all files loaded
-            self.vtk_pre.camera.fit()
+            # Only fit camera if we're on Geometry tab
+            if is_geometry_tab:
+                self.vtk_pre.camera.fit()
             self.vtk_pre.vtk_widget.GetRenderWindow().Render()
 
         self.case_data.save()
@@ -235,7 +248,7 @@ class GeometryView:
         self.mesh_loader.error.disconnect(self._on_loading_error)
 
     def _on_remove_clicked(self):
-        """Handle Remove button click - remove selected geometry from tree, VTK, and triSurface."""
+        """Handle Remove button click - remove selected geometry from tree, VTK, and model directory."""
         pos = self.tree.get_current_pos()
         if pos is None:
             return
@@ -251,9 +264,9 @@ class GeometryView:
             # Refresh view
             self.vtk_pre.vtk_widget.GetRenderWindow().Render()
 
-        # Remove STL file from triSurface directory
-        tri_surface_path = Path(self.case_data.path) / "2.meshing_MheadBL" / "constant" / "triSurface"
-        stl_file = tri_surface_path / f"{obj_name}.stl"
+        # Remove STL file from model directory
+        model_path = Path(self.case_data.path) / "1.model_Mhead" / "scale0"
+        stl_file = model_path / f"{obj_name}.stl"
 
         if stl_file.exists():
             try:
@@ -714,18 +727,18 @@ class GeometryView:
             # Set/Apply button remains enabled (controlled by selection logic)
 
     def load_data(self):
-        """Load geometry data from triSurface folder."""
+        """Load geometry data from model folder."""
         self.tree.clear_all()
 
-        # Get triSurface directory path
-        tri_surface_path = Path(self.case_data.path) / "2.meshing_MheadBL" / "constant" / "triSurface"
+        # Get model directory path
+        model_path = Path(self.case_data.path) / "1.model_Mhead" / "scale0"
 
-        if not tri_surface_path.exists():
+        if not model_path.exists():
             return
 
-        # Find all STL files in triSurface (excluding mesh.stl)
+        # Find all STL files in model directory (excluding mesh.stl)
         stl_files = []
-        for stl_file in tri_surface_path.glob("*.stl"):
+        for stl_file in model_path.glob("*.stl"):
             if stl_file.name.lower() != "mesh.stl":
                 stl_files.append(stl_file)
 

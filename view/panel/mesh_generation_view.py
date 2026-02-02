@@ -12,7 +12,7 @@ import re
 from pathlib import Path
 
 import vtk
-from PySide6.QtCore import QThread, Qt
+from PySide6.QtCore import QThread, Qt, Signal
 from PySide6.QtWidgets import (
     QWidget,
     QHBoxLayout,
@@ -27,6 +27,53 @@ from nextlib.openfoam.PyFoamCase.foamfile import FoamFile
 
 from common.app_data import app_data
 from common.case_data import case_data
+
+
+class PrepareMeshThread(QThread):
+    """Background thread for mesh preparation (file updates)."""
+    finished_success = Signal()
+    finished_error = Signal(str)
+
+    def __init__(self, view, cells_x, cells_y, cells_z):
+        super().__init__()
+        self.view = view
+        self.cells_x = cells_x
+        self.cells_y = cells_y
+        self.cells_z = cells_z
+
+    def run(self):
+        """Run all file update operations in background thread."""
+        try:
+            # Update blockMeshDict
+            if not self.view._update_blockmesh_dict(self.cells_x, self.cells_y, self.cells_z):
+                self.finished_error.emit("Failed to update blockMeshDict")
+                return
+
+            # Update snappyHexMeshDict with locationsInMesh
+            if not self.view._update_snappyhex_dict():
+                self.finished_error.emit("Failed to update snappyHexMeshDict locations")
+                return
+
+            # Update castellation settings
+            if not self.view._update_castellation_settings():
+                self.finished_error.emit("Failed to update castellation settings")
+                return
+
+            # Update snap settings
+            if not self.view._update_snap_settings():
+                self.finished_error.emit("Failed to update snap settings")
+                return
+
+            # Update boundary layer settings
+            if not self.view._update_boundary_layer_settings():
+                self.finished_error.emit("Failed to update boundary layer settings")
+                return
+
+            # All updates successful
+            self.finished_success.emit()
+
+        except Exception as e:
+            self.finished_error.emit(f"Unexpected error: {str(e)}")
 
 
 class MeshGenerationView:
@@ -201,81 +248,64 @@ class MeshGenerationView:
             pass
 
     def _on_generate_clicked(self):
-        """Handle Generate button click - update blockMeshDict and load existing mesh."""
+        """Handle Generate button click - prepare files in background then run mesh generation."""
         # Disable button during execution
         self.ui.button_mesh_generate.setEnabled(False)
+        self.ui.button_mesh_generate.setText("Preparing...")
 
         # Get base grid values
         x = self.ui.lineEdit_basegrid_x.text() or "100"
         y = self.ui.lineEdit_basegrid_y.text() or "100"
         z = self.ui.lineEdit_basegrid_z.text() or "100"
 
+        # Start background thread for file preparation
+        self.prepare_thread = PrepareMeshThread(self, x, y, z)
+        self.prepare_thread.finished_success.connect(self._on_preparation_finished)
+        self.prepare_thread.finished_error.connect(self._on_preparation_error)
+        self.prepare_thread.start()
 
-        # Update blockMeshDict with geometry bounding box and base grid
-        if not self._update_blockmesh_dict(x, y, z):
+    def _on_preparation_finished(self):
+        """Handle successful preparation - start mesh generation."""
+        if not self.exec_widget:
             self.ui.button_mesh_generate.setEnabled(True)
+            self.ui.button_mesh_generate.setText("Generate")
             return
 
-        # Update snappyHexMeshDict with locationsInMesh from geometry probe positions
-        if not self._update_snappyhex_dict():
-            self.ui.button_mesh_generate.setEnabled(True)
-            return
+        # Set working directory to meshing folder
+        meshing_path = Path(self.case_data.path) / "2.meshing_MheadBL"
+        self.exec_widget.set_working_path(str(meshing_path))
 
-        # Update snappyHexMeshDict with castellation settings from UI
-        if not self._update_castellation_settings():
-            self.ui.button_mesh_generate.setEnabled(True)
-            return
+        # Register callbacks
+        self.exec_widget.set_function_after_finished(self._on_mesh_generated)
+        self.exec_widget.set_function_restore_ui(self._restore_ui)
 
-        # Update snappyHexMeshDict with snap settings from UI
-        if not self._update_snap_settings():
-            self.ui.button_mesh_generate.setEnabled(True)
-            return
+        # Create temporary run script to avoid quote escaping issues
+        script_content = """#!/bin/bash
+source /usr/lib/openfoam/openfoam2212/etc/bashrc
+./Allrun
+"""
+        script_path = meshing_path / "run_mesh.sh"
+        script_path.write_text(script_content, encoding='utf-8')
+        script_path.chmod(0o755)
 
-        # Update snappyHexMeshDict with boundary layer settings from UI
-        if not self._update_boundary_layer_settings():
-            self.ui.button_mesh_generate.setEnabled(True)
-            return
+        # Run the temporary script
+        commands = ["./run_mesh.sh"]
 
-        # Load existing mesh directly (skip Allrun execution for now)
-        self._on_mesh_generated()
-        self._restore_ui()
+        # Update button text to show generating
+        self.ui.button_mesh_generate.setText("Generating...")
 
-        # # TODO: Uncomment below to run actual mesh generation
-        # # Set working directory to case path
-        # if self.exec_widget:
-        #     self.exec_widget.set_working_path(str(self.case_data.path))
-        #
-        #     # Register callbacks
-        #     self.exec_widget.set_function_after_finished(self._on_mesh_generated)
-        #     self.exec_widget.set_function_restore_ui(self._restore_ui)
-        #
-        #     # Define mesh generation commands - run Allrun script
-        #     if sys.platform == "win32":
-        #         # Windows - use bash to run Allrun
-        #         commands = [
-        #             "cd 2.meshing_MheadBL",
-        #             "bash Allrun",
-        #             "foamToVTK",
-        #             "cd .."
-        #         ]
-        #     else:
-        #         # Linux - run Allrun directly
-        #         commands = [
-        #             "cd 2.meshing_MheadBL",
-        #             "./Allrun",
-        #             "foamToVTK",
-        #             "cd .."
-        #         ]
-        #
-        #     # Run mesh generation commands
-        #     self.exec_widget.run(commands)
-        # else:
-        #     print("ExecWidget not available")
-        #     self.ui.button_mesh_generate.setEnabled(True)
+        # Run mesh generation commands
+        self.exec_widget.run(commands)
+
+    def _on_preparation_error(self, error_msg: str):
+        """Handle preparation error."""
+        self.ui.button_mesh_generate.setEnabled(True)
+        self.ui.button_mesh_generate.setText("Generate")
 
     def _restore_ui(self):
         """Restore UI state after command execution (success, error, or cancel)."""
         self.ui.button_mesh_generate.setEnabled(True)
+        self.ui.button_mesh_generate.setText("Generate")
 
     def _update_blockmesh_dict(self, cells_x: str, cells_y: str, cells_z: str) -> bool:
         """
@@ -315,6 +345,22 @@ class MeshGenerationView:
 
         xmin, xmax, ymin, ymax, zmin, zmax = bounds
 
+        # Add margin to bounding box (10% of size or minimum 5mm)
+        x_size = xmax - xmin
+        y_size = ymax - ymin
+        z_size = zmax - zmin
+
+        x_margin = max(x_size * 0.1, 0.005)  # 10% or 5mm
+        y_margin = max(y_size * 0.1, 0.005)
+        z_margin = max(z_size * 0.1, 0.005)
+
+        xmin -= x_margin
+        xmax += x_margin
+        ymin -= y_margin
+        ymax += y_margin
+        zmin -= z_margin
+        zmax += z_margin
+
         # Update blockMeshDict
         try:
             # Path to blockMeshDict (always in 2.meshing_MheadBL subfolder)
@@ -329,7 +375,7 @@ class MeshGenerationView:
             if not foam_file.load():
                 return False
 
-            # Create vertices list (8 corners of bounding box)
+            # Create vertices list (8 corners of bounding box with margin)
             # Round to 2 decimal places
             vertices = [
                 [round(xmin, 2), round(ymin, 2), round(zmin, 2)],  # 0
@@ -347,6 +393,9 @@ class MeshGenerationView:
                 return False
 
             foam_file.set_value("vertices", vertices, show_type="list")
+
+            # Set scale to 1.0 since vertices are already in meters
+            foam_file.set_value("scale", 1.0)
 
             # Update blocks section with base grid cells
             # Use map_key='cells' to access the cells parameter in blocks[0]

@@ -12,6 +12,9 @@ import sys
 from pathlib import Path
 from datetime import datetime
 
+# Add nextlib to path
+sys.path.insert(0, '/home/test/lib')
+
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import Qt
 

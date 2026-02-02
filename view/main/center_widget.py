@@ -94,6 +94,14 @@ class CenterWidget(QWidget):
         """Connect tree selection signals."""
         self.ui.treeWidget.itemSelectionChanged.connect(self._on_tree_selection_changed)
 
+    def select_default_tab(self) -> None:
+        """Select the default tab (Geometry) on startup."""
+        # Select the first top-level item (Geometry)
+        geometry_item = self.ui.treeWidget.topLevelItem(0)
+        if geometry_item:
+            self.ui.treeWidget.setCurrentItem(geometry_item)
+            # This will trigger _on_tree_selection_changed which handles visibility
+
     def _on_tree_selection_changed(self) -> None:
         """Handle tree item selection change."""
         selected_items = self.ui.treeWidget.selectedItems()
@@ -151,6 +159,9 @@ class CenterWidget(QWidget):
                     post_view = self.panel_views.get("post")
                     if post_view:
                         post_view.load_results()
+                # Update visibility for Results tabs (show mesh, hide geometry)
+                if self.vtk_pre:
+                    self._show_mesh_objects_only()
                 return
         else:
             # Top-level item
@@ -161,7 +172,13 @@ class CenterWidget(QWidget):
 
             # Toggle visibility based on active tab
             if self.vtk_pre:
-                if item_text == "Geometry":
+                # Check if this is a top-level item or submenu item
+                # For submenu items, always show mesh and hide geometry
+                if parent_text:
+                    # Submenu item (Setup, Solution) - show mesh, hide geometry
+                    self._show_mesh_objects_only()
+                    self._hide_slice_toolbar()
+                elif item_text == "Geometry":
                     # Show geometry STL, hide mesh
                     self._show_geometry_objects()
                     # Hide slice toolbar
@@ -172,7 +189,7 @@ class CenterWidget(QWidget):
                     # Show slice toolbar
                     self._show_slice_toolbar()
                 else:
-                    # Other tabs (Run, etc.) - show mesh, hide STL and slice controls
+                    # Other top-level tabs (Run, etc.) - show mesh, hide STL and slice controls
                     self._show_mesh_objects_only()
                     # Hide slice toolbar
                     self._hide_slice_toolbar()

@@ -67,3 +67,7 @@ Copyright (c) 2025 KARI
 ## 개발 상태
 
 🚧 현재 개발 중
+
+## bashrc 참고사항
+// export PATH="${PATH}:/home/test/lib/nextlib/bin"
+// export PYTHONPATH="/home/test/lib:${PYTHONPATH}"
