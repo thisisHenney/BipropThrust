@@ -46,6 +46,7 @@ class BipropThrustApp:
             case_path: Path to case directory. If empty, creates temp case.
         """
         self.app = None
+        
         self.main_window = None
         self.case_path = case_path
         self._setup_application()

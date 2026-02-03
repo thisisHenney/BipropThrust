@@ -320,8 +320,8 @@ class MainWindow(QMainWindow):
         if mesh_panel:
             mesh_panel.load_data()
 
-        # Start with Geometry tab visible - hide mesh, show geometry
-        self.center_widget._show_geometry_objects()
+        # Select default tab (Geometry) - this triggers visibility logic
+        self.center_widget.select_default_tab()
 
         # Update status
         self.statusBar().showMessage("Ready", 3000)

@@ -464,11 +464,11 @@ class GeometryView:
             self.ui.edit_input_position_y.setText("0")
             self.ui.edit_input_position_z.setText("0")
             # Enable Input Position group and Set button
-            self.ui.AdvancedGroupBox_2.setEnabled(True)
+            self.ui.AdvancedGroupBox.setEnabled(True)
             self.ui.button_geometry_apply.setEnabled(True)
         elif selected_count == 1:
             # Enable Input Position group and Set button for single selection
-            self.ui.AdvancedGroupBox_2.setEnabled(True)
+            self.ui.AdvancedGroupBox.setEnabled(True)
             self.ui.button_geometry_apply.setEnabled(True)
             self._highlight_object(selected_names[0])
 
@@ -531,7 +531,7 @@ class GeometryView:
             self.ui.edit_input_position_x.setText("")
             self.ui.edit_input_position_y.setText("")
             self.ui.edit_input_position_z.setText("")
-            self.ui.AdvancedGroupBox_2.setEnabled(False)
+            self.ui.AdvancedGroupBox.setEnabled(False)
             self.ui.button_geometry_apply.setEnabled(False)
 
     def _highlight_object(self, obj_name: str):
@@ -641,11 +641,11 @@ class GeometryView:
             self.ui.edit_input_position_y.setText("0")
             self.ui.edit_input_position_z.setText("0")
             # Enable Input Position group and Set button
-            self.ui.AdvancedGroupBox_2.setEnabled(True)
+            self.ui.AdvancedGroupBox.setEnabled(True)
             self.ui.button_geometry_apply.setEnabled(True)
         elif selected_count == 1:
             # Enable Input Position group and Set button for single selection
-            self.ui.AdvancedGroupBox_2.setEnabled(True)
+            self.ui.AdvancedGroupBox.setEnabled(True)
             self.ui.button_geometry_apply.setEnabled(True)
             self._highlight_object(selected_names[0])
 
@@ -708,7 +708,7 @@ class GeometryView:
             self.ui.edit_input_position_x.setText("")
             self.ui.edit_input_position_y.setText("")
             self.ui.edit_input_position_z.setText("")
-            self.ui.AdvancedGroupBox_2.setEnabled(False)
+            self.ui.AdvancedGroupBox.setEnabled(False)
             self.ui.button_geometry_apply.setEnabled(False)
 
     def _on_probe_visibility_changed(self, is_visible: bool):

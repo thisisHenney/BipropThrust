@@ -117,13 +117,19 @@ class RunView:
             self.exec_widget.set_function_after_error(self._on_simulation_error)
             self.exec_widget.set_function_restore_ui(self._restore_ui_after_run)
 
-            # Determine the command based on platform
-            if sys.platform == "win32":
-                # Windows - run via WSL or bash
-                command = f"bash ./Allrun"
-            else:
-                # Linux - run directly
-                command = "./Allrun"
+            # Create temporary run script to avoid quote escaping issues
+            # Run Allclean first, then Allrun
+            script_content = """#!/bin/bash
+source /usr/lib/openfoam/openfoam2212/etc/bashrc
+./Allclean
+./Allrun
+"""
+            script_path = case_path / "run_simulation.sh"
+            script_path.write_text(script_content, encoding='utf-8')
+            script_path.chmod(0o755)
+
+            # Run the temporary script
+            command = "./run_simulation.sh"
 
             # Start simulation
             self._is_running = True

@@ -132,6 +132,12 @@ class MeshGenerationView:
         self.ui.button_mesh_generate.clicked.connect(self._on_generate_clicked)
         self.ui.button_edit_hostfile_mesh.clicked.connect(self._on_edit_hostfile_clicked)
 
+        # Set default numberOfSubdomains to (CPU count / 2)
+        import os
+        cpu_count = os.cpu_count() or 4
+        default_subdomains = max(1, cpu_count // 2)
+        self.ui.edit_number_of_subdomains.setText(str(default_subdomains))
+
         # Slice toolbar signals
         self.combo_dir.currentIndexChanged.connect(self.update_slice)
         self.slider_pos.valueChanged.connect(self._on_slider_changed)
@@ -339,7 +345,7 @@ class MeshGenerationView:
         """Handle successful preparation - start mesh generation."""
         if not self.exec_widget:
             self.ui.button_mesh_generate.setEnabled(True)
-            self.ui.button_mesh_generate.setText("Generate")
+            self.ui.button_mesh_generate.setText("Mesh generate")
             return
 
         # Set working directory to meshing folder
@@ -350,33 +356,88 @@ class MeshGenerationView:
         self.exec_widget.set_function_after_finished(self._on_mesh_generated)
         self.exec_widget.set_function_restore_ui(self._restore_ui)
 
-        # Create temporary run script to avoid quote escaping issues
-        script_content = """#!/bin/bash
-source /usr/lib/openfoam/openfoam2212/etc/bashrc
-./Allrun
-"""
-        script_path = meshing_path / "run_mesh.sh"
-        script_path.write_text(script_content, encoding='utf-8')
-        script_path.chmod(0o755)
-
-        # Run the temporary script
-        commands = ["./run_mesh.sh"]
-
         # Update button text to show generating
         self.ui.button_mesh_generate.setText("Generating...")
 
-        # Run mesh generation commands
+        # Get number of processors from UI and update decomposeParDict
+        n_procs = 4  # default
+        try:
+            n_procs = int(self.ui.edit_number_of_subdomains.text())
+        except (ValueError, AttributeError):
+            pass
+
+        # Update decomposeParDict with the UI value
+        decompose_dict = meshing_path / "system" / "decomposeParDict"
+        if decompose_dict.exists():
+            try:
+                content = decompose_dict.read_text()
+                # Replace numberOfSubdomains value
+                new_content = re.sub(
+                    r'(numberOfSubdomains\s+)\d+',
+                    rf'\g<1>{n_procs}',
+                    content
+                )
+                decompose_dict.write_text(new_content)
+            except Exception:
+                pass
+
+        # Copy STL files from case_data to triSurface folder
+        import shutil
+        tri_surface_path = meshing_path / "constant" / "triSurface"
+        tri_surface_path.mkdir(parents=True, exist_ok=True)
+
+        # Get geometry file paths from case_data and copy them
+        for geom_name in self.case_data.list_geometries():
+            geom_data = self.case_data.get_geometry(geom_name)
+            if geom_data and geom_data.path:
+                src_path = Path(geom_data.path)
+                if src_path.exists():
+                    dst_path = tri_surface_path / src_path.name
+                    shutil.copy2(src_path, dst_path)
+
+        # Create shell wrapper for glob expansion
+        shell_wrapper = meshing_path / "shell_cmd.sh"
+        shell_wrapper.write_text('#!/bin/bash\neval "$@"\n', encoding='utf-8')
+        shell_wrapper.chmod(0o755)
+
+        # Create OpenFOAM wrapper that sources environment and RunFunctions before running command
+        of_wrapper = meshing_path / "of_cmd.sh"
+        of_wrapper.write_text(
+            '#!/bin/bash\n'
+            'source /usr/lib/openfoam/openfoam2212/etc/bashrc\n'
+            '. ${WM_PROJECT_DIR}/bin/tools/RunFunctions\n'
+            '"$@"\n',
+            encoding='utf-8'
+        )
+        of_wrapper.chmod(0o755)
+
+        # Build list of mesh generation commands
+        # OpenFOAM commands use of_cmd.sh wrapper to source environment
+        # Commands with glob patterns use shell_cmd.sh wrapper
+        commands = [
+            "./shell_cmd.sh rm -rf constant/polyMesh 'constant/*/polyMesh' 'log.*' 'processor*' VTK constant/extendedFeatureEdgeMesh constant/cellToRegion 0",
+            "./of_cmd.sh blockMesh",
+            "./of_cmd.sh surfaceFeatureExtract",
+            "./of_cmd.sh decomposePar",
+            f"./of_cmd.sh mpirun -np {n_procs} snappyHexMesh -overwrite -parallel",
+            "./of_cmd.sh reconstructParMesh -mergeTol 1e-12 -constant",
+            "./shell_cmd.sh rm -rf 'processor*'",
+            "./of_cmd.sh restore0Dir",
+            "./of_cmd.sh splitMeshRegions -cellZones -overwrite",
+        ]
+
+        # Run mesh generation commands with progress bar
         self.exec_widget.run(commands)
 
     def _on_preparation_error(self, error_msg: str):
         """Handle preparation error."""
         self.ui.button_mesh_generate.setEnabled(True)
-        self.ui.button_mesh_generate.setText("Generate")
+        self.ui.button_mesh_generate.setText("Mesh generate")
 
     def _restore_ui(self):
         """Restore UI state after command execution (success, error, or cancel)."""
         self.ui.button_mesh_generate.setEnabled(True)
-        self.ui.button_mesh_generate.setText("Generate")
+        self.ui.button_mesh_generate.setText("Mesh generate")
 
     def _update_blockmesh_dict(self, cells_x: str, cells_y: str, cells_z: str) -> bool:
         """
