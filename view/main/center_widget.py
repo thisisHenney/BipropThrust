@@ -170,6 +170,10 @@ class CenterWidget(QWidget):
         if page:
             self.ui.stackedWidget.setCurrentWidget(page)
 
+            # Process pending events to ensure page switch is visible immediately
+            from PySide6.QtWidgets import QApplication
+            QApplication.processEvents()
+
             # Toggle visibility based on active tab
             if self.vtk_pre:
                 # Check if this is a top-level item or submenu item

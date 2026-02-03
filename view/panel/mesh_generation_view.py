@@ -54,6 +54,11 @@ class PrepareMeshThread(QThread):
                 self.finished_error.emit("Failed to update snappyHexMeshDict locations")
                 return
 
+            # Update surfaceFeatureExtractDict
+            if not self.view._update_surface_feature_extract_dict():
+                self.finished_error.emit("Failed to update surfaceFeatureExtractDict")
+                return
+
             # Update castellation settings
             if not self.view._update_castellation_settings():
                 self.finished_error.emit("Failed to update castellation settings")
@@ -253,6 +258,12 @@ class MeshGenerationView:
         self.ui.button_mesh_generate.setEnabled(False)
         self.ui.button_mesh_generate.setText("Preparing...")
 
+        # Clear existing mesh from VTK widget
+        self._clear_existing_mesh()
+
+        # Clear existing mesh files
+        self._clear_mesh_files()
+
         # Get base grid values
         x = self.ui.lineEdit_basegrid_x.text() or "100"
         y = self.ui.lineEdit_basegrid_y.text() or "100"
@@ -263,6 +274,66 @@ class MeshGenerationView:
         self.prepare_thread.finished_success.connect(self._on_preparation_finished)
         self.prepare_thread.finished_error.connect(self._on_preparation_error)
         self.prepare_thread.start()
+
+    def _clear_existing_mesh(self):
+        """Clear existing mesh from VTK widget."""
+        if not self.vtk_pre:
+            return
+
+        # Remove mesh actor from obj_manager
+        existing_mesh = self.vtk_pre.obj_manager.find_by_name("mesh")
+        if existing_mesh:
+            self.vtk_pre.obj_manager.remove(existing_mesh.id)
+
+        # Clear slice/clip actors
+        self._clear_slice_clip()
+
+        # Reset mesh-related state
+        self.foam_reader = None
+        self.geom_output = None
+        self.bounds = None
+        self.center = None
+        self.diagonal_length = None
+        self.surface_actor = None
+
+        # Render to update view
+        self.vtk_pre.vtk_widget.GetRenderWindow().Render()
+
+    def _clear_mesh_files(self):
+        """Clear existing mesh files from case folder."""
+        import shutil
+
+        meshing_path = Path(self.case_data.path) / "2.meshing_MheadBL"
+
+        # Remove polyMesh folder
+        polymesh_path = meshing_path / "constant" / "polyMesh"
+        if polymesh_path.exists():
+            shutil.rmtree(polymesh_path, ignore_errors=True)
+
+        # Remove region folders (created by splitMeshRegions)
+        constant_path = meshing_path / "constant"
+        if constant_path.exists():
+            for item in constant_path.iterdir():
+                if item.is_dir() and item.name not in ["triSurface", "extendedFeatureEdgeMesh"]:
+                    shutil.rmtree(item, ignore_errors=True)
+
+        # Remove log files
+        for log_file in meshing_path.glob("log.*"):
+            log_file.unlink(missing_ok=True)
+
+        # Remove processor folders
+        for proc_folder in meshing_path.glob("processor*"):
+            if proc_folder.is_dir():
+                shutil.rmtree(proc_folder, ignore_errors=True)
+
+        # Remove time folders (0, 1, 2, ... except 0.orig if exists)
+        for item in meshing_path.iterdir():
+            if item.is_dir():
+                try:
+                    float(item.name)  # Check if folder name is a number
+                    shutil.rmtree(item, ignore_errors=True)
+                except ValueError:
+                    pass
 
     def _on_preparation_finished(self):
         """Handle successful preparation - start mesh generation."""
@@ -414,8 +485,14 @@ source /usr/lib/openfoam/openfoam2212/etc/bashrc
 
     def _update_snappyhex_dict(self) -> bool:
         """
-        Update snappyHexMeshDict with locationsInMesh from geometry probe positions.
-        Uses direct text manipulation with regex since FoamFile doesn't parse this correctly.
+        Update snappyHexMeshDict with geometry entries from geometry view.
+        Uses regex for all sections since FoamFile API doesn't handle nested structures well.
+
+        Updates:
+        - geometry: STL file definitions
+        - features: eMesh file definitions
+        - refinementSurfaces: refinement levels (outlet gets patchInfo)
+        - locationsInMesh: probe positions for each geometry
 
         Returns:
             True if successful, False otherwise
@@ -434,7 +511,82 @@ source /usr/lib/openfoam/openfoam2212/etc/bashrc
             if not geometries:
                 return False
 
-            # Create locationsInMesh entries from ALL geometry objects
+            # Read the entire file
+            with open(snappy_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+
+            # ============================================================
+            # 1) Update geometry section
+            # ============================================================
+            geometry_entries = []
+            for geom_name in geometries:
+                entry = f'''    {geom_name}.stl
+    {{
+        type triSurfaceMesh;
+        name {geom_name};
+    }}'''
+                geometry_entries.append(entry)
+
+            new_geometry_block = "geometry\n{\n"
+            new_geometry_block += "\n\n".join(geometry_entries)
+            new_geometry_block += "\n}"
+
+            # Pattern matches: geometry { ... } (handles nested braces)
+            geometry_pattern = r'geometry\s*\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}'
+            if re.search(geometry_pattern, content, re.DOTALL):
+                content = re.sub(geometry_pattern, new_geometry_block, content, flags=re.DOTALL)
+
+            # ============================================================
+            # 2) Update features section (inside castellatedMeshControls)
+            # ============================================================
+            feature_lines = []
+            for geom_name in geometries:
+                feature_line = f'        {{ file "{geom_name}.eMesh"; level 0; }}'
+                feature_lines.append(feature_line)
+
+            new_features_block = "features\n    (\n"
+            new_features_block += "\n".join(feature_lines)
+            new_features_block += "\n    );"
+
+            # Pattern: features at start of line (with possible whitespace), followed by ( ... );
+            # This avoids matching "features" in comments like "castellatedMeshControls::features"
+            features_pattern = r'^(\s*)features\s*\(\s*(?:.*?)\s*\);'
+            if re.search(features_pattern, content, re.DOTALL | re.MULTILINE):
+                content = re.sub(features_pattern, r'\1' + new_features_block, content, flags=re.DOTALL | re.MULTILINE)
+
+            # ============================================================
+            # 3) Update refinementSurfaces section
+            # ============================================================
+            refinement_entries = []
+            for geom_name in geometries:
+                if geom_name == "outlet":
+                    entry = f'''        {geom_name}
+        {{
+            level (0 0);
+            patchInfo
+            {{
+                type patch;
+            }}
+        }}'''
+                else:
+                    entry = f'''        {geom_name}
+        {{
+            level (0 0);
+        }}'''
+                refinement_entries.append(entry)
+
+            new_refinement_block = "refinementSurfaces\n    {\n"
+            new_refinement_block += "\n\n".join(refinement_entries)
+            new_refinement_block += "\n    }"
+
+            # Pattern matches: refinementSurfaces { ... } (handles nested braces)
+            refinement_pattern = r'refinementSurfaces\s*\{[^{}]*(?:\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}[^{}]*)*\}'
+            if re.search(refinement_pattern, content, re.DOTALL):
+                content = re.sub(refinement_pattern, new_refinement_block, content, flags=re.DOTALL)
+
+            # ============================================================
+            # 4) Update locationsInMesh section
+            # ============================================================
             location_lines = []
             for geom_name in geometries:
                 probe_pos = self.case_data.get_geometry_probe_position(geom_name)
@@ -443,36 +595,81 @@ source /usr/lib/openfoam/openfoam2212/etc/bashrc
                 if probe_pos is None:
                     probe_pos = (0.0, 0.0, 0.0)
 
-                # Format: (( x  y  z) region_name)
                 x, y, z = probe_pos
                 location_line = f"        (( {x:<9.4f} {y:<9.4f} {z:<9.4f}) {geom_name})"
                 location_lines.append(location_line)
 
-            if not location_lines:
-                return False
-
-            # Read the entire file
-            with open(snappy_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-
-            # Build the new locationsInMesh block
-            new_locations_block = "    locationsInMesh\n    (\n"
+            new_locations_block = "locationsInMesh\n    (\n"
             new_locations_block += "\n".join(location_lines)
             new_locations_block += "\n    );"
 
-            # Find and replace the locationsInMesh block using regex
-            # Pattern matches: locationsInMesh\n    (\n        ...content...\n    );
-            pattern = r'locationsInMesh\s*\(\s*(?:.*?)\s*\);'
-
-            if not re.search(pattern, content, re.DOTALL):
-                return False
-
-            # Replace the block
-            new_content = re.sub(pattern, new_locations_block, content, flags=re.DOTALL)
+            locations_pattern = r'locationsInMesh\s*\(\s*(?:.*?)\s*\);'
+            if re.search(locations_pattern, content, re.DOTALL):
+                content = re.sub(locations_pattern, new_locations_block, content, flags=re.DOTALL)
 
             # Write back to file
             with open(snappy_path, 'w', encoding='utf-8') as f:
-                f.write(new_content)
+                f.write(content)
+
+            return True
+
+        except Exception:
+            return False
+
+    def _update_surface_feature_extract_dict(self) -> bool:
+        """
+        Update surfaceFeatureExtractDict with geometry entries.
+        Only registered STL files will be included.
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            case_path = Path(self.case_data.path) / "2.meshing_MheadBL"
+            dict_path = case_path / "system" / "surfaceFeatureExtractDict"
+
+            if not dict_path.exists():
+                return False
+
+            geometries = self.case_data.list_geometries()
+
+            if not geometries:
+                return False
+
+            # Build new file content
+            header = '''/*--------------------------------*- C++ -*----------------------------------*\\
+| =========                 |                                                 |
+| \\\\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\\\    /   O peration     | Version:  v2112                                 |
+|   \\\\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\\\/     M anipulation  |                                                 |
+\\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      surfaceFeatureExtractDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+'''
+            entries = []
+            for geom_name in geometries:
+                entry = f'''{geom_name}.stl
+{{
+    extractionMethod    extractFromSurface;
+    includedAngle       150;
+    writeFeatureEdgeMesh    yes;
+    writeObj                yes;
+}}
+'''
+                entries.append(entry)
+
+            content = header + "\n".join(entries) + "\n// ************************************************************************* //\n"
+
+            with open(dict_path, 'w', encoding='utf-8') as f:
+                f.write(content)
 
             return True
 
