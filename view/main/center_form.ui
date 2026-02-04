@@ -101,7 +101,7 @@ QTreeWidget::item:selected:!active {
          </attribute>
          <column>
           <property name="text">
-           <string>Control Menu</string>
+           <string>Settings</string>
           </property>
           <property name="font">
            <font>
@@ -115,7 +115,8 @@ QTreeWidget::item:selected:!active {
           </property>
           <property name="font">
            <font>
-            <pointsize>11</pointsize>
+            <pointsize>10</pointsize>
+            <bold>true</bold>
            </font>
           </property>
          </item>
@@ -126,8 +127,8 @@ QTreeWidget::item:selected:!active {
           <property name="font">
            <font>
             <family>Ubuntu</family>
-            <pointsize>11</pointsize>
-            <bold>false</bold>
+            <pointsize>10</pointsize>
+            <bold>true</bold>
             <kerning>true</kerning>
            </font>
           </property>
@@ -139,7 +140,7 @@ QTreeWidget::item:selected:!active {
           <property name="font">
            <font>
             <family>Ubuntu</family>
-            <pointsize>11</pointsize>
+            <pointsize>10</pointsize>
             <bold>false</bold>
            </font>
           </property>
@@ -149,7 +150,8 @@ QTreeWidget::item:selected:!active {
            </property>
            <property name="font">
             <font>
-             <pointsize>11</pointsize>
+             <pointsize>10</pointsize>
+             <bold>true</bold>
             </font>
            </property>
            <property name="background">
@@ -168,7 +170,8 @@ QTreeWidget::item:selected:!active {
            </property>
            <property name="font">
             <font>
-             <pointsize>11</pointsize>
+             <pointsize>10</pointsize>
+             <bold>true</bold>
             </font>
            </property>
            <property name="background">
@@ -187,7 +190,8 @@ QTreeWidget::item:selected:!active {
            </property>
            <property name="font">
             <font>
-             <pointsize>11</pointsize>
+             <pointsize>10</pointsize>
+             <bold>true</bold>
             </font>
            </property>
            <property name="background">
@@ -206,7 +210,8 @@ QTreeWidget::item:selected:!active {
            </property>
            <property name="font">
             <font>
-             <pointsize>11</pointsize>
+             <pointsize>10</pointsize>
+             <bold>true</bold>
             </font>
            </property>
            <property name="background">
@@ -227,7 +232,7 @@ QTreeWidget::item:selected:!active {
           <property name="font">
            <font>
             <family>Ubuntu</family>
-            <pointsize>11</pointsize>
+            <pointsize>10</pointsize>
             <bold>false</bold>
            </font>
           </property>
@@ -237,7 +242,8 @@ QTreeWidget::item:selected:!active {
            </property>
            <property name="font">
             <font>
-             <pointsize>11</pointsize>
+             <pointsize>10</pointsize>
+             <bold>true</bold>
             </font>
            </property>
            <property name="background">
@@ -256,7 +262,8 @@ QTreeWidget::item:selected:!active {
            </property>
            <property name="font">
             <font>
-             <pointsize>11</pointsize>
+             <pointsize>10</pointsize>
+             <bold>true</bold>
             </font>
            </property>
            <property name="background">
@@ -277,8 +284,8 @@ QTreeWidget::item:selected:!active {
           <property name="font">
            <font>
             <family>Ubuntu</family>
-            <pointsize>11</pointsize>
-            <bold>false</bold>
+            <pointsize>10</pointsize>
+            <bold>true</bold>
            </font>
           </property>
          </item>
@@ -289,7 +296,7 @@ QTreeWidget::item:selected:!active {
           <property name="font">
            <font>
             <family>Ubuntu</family>
-            <pointsize>11</pointsize>
+            <pointsize>10</pointsize>
             <bold>false</bold>
            </font>
           </property>
@@ -299,7 +306,8 @@ QTreeWidget::item:selected:!active {
            </property>
            <property name="font">
             <font>
-             <pointsize>11</pointsize>
+             <pointsize>10</pointsize>
+             <bold>true</bold>
             </font>
            </property>
            <property name="background">
@@ -318,7 +326,8 @@ QTreeWidget::item:selected:!active {
            </property>
            <property name="font">
             <font>
-             <pointsize>11</pointsize>
+             <pointsize>10</pointsize>
+             <bold>true</bold>
             </font>
            </property>
            <property name="background">
@@ -759,8 +768,8 @@ QGroupBox::title {
                <rect>
                 <x>0</x>
                 <y>0</y>
-                <width>420</width>
-                <height>716</height>
+                <width>378</width>
+                <height>714</height>
                </rect>
               </property>
               <layout class="QVBoxLayout" name="verticalLayout_5">
@@ -2028,7 +2037,7 @@ QGroupBox::title {
                 </item>
                 <item>
                  <property name="text">
-                  <string>51Reaction</string>
+                  <string>5Reaction</string>
                  </property>
                 </item>
                </widget>
@@ -2406,7 +2415,7 @@ QGroupBox::title {
                 </item>
                 <item>
                  <property name="text">
-                  <string>ConvectiveHeatTransfer</string>
+                  <string>convectiveHeatTransfer</string>
                  </property>
                 </item>
                 <item>
@@ -3780,12 +3789,12 @@ QGroupBox::title {
                 </property>
                 <item>
                  <property name="text">
-                  <string>Binary</string>
+                  <string>ascii</string>
                  </property>
                 </item>
                 <item>
                  <property name="text">
-                  <string>Ascii</string>
+                  <string>binary</string>
                  </property>
                 </item>
                </widget>
@@ -3916,7 +3925,7 @@ QGroupBox::title {
                  </font>
                 </property>
                 <property name="text">
-                 <string>Number of Iterations</string>
+                 <string>max Co</string>
                 </property>
                </widget>
               </item>
@@ -4240,7 +4249,7 @@ QGroupBox::title {
               </font>
              </property>
              <property name="text">
-              <string>Run</string>
+              <string>Run State</string>
              </property>
             </widget>
            </item>
@@ -4366,7 +4375,7 @@ QGroupBox::title {
                  </font>
                 </property>
                 <property name="text">
-                 <string>0</string>
+                 <string>2</string>
                 </property>
                 <property name="alignment">
                  <set>Qt::AlignmentFlag::AlignCenter</set>
@@ -4406,8 +4415,43 @@ QGroupBox::title {
               <property name="topMargin">
                <number>9</number>
               </property>
-              <item row="1" column="1">
-               <widget class="QLabel" name="edit_run_9">
+              <item row="3" column="1">
+               <widget class="QLabel" name="edit_run_status">
+                <property name="font">
+                 <font>
+                  <pointsize>10</pointsize>
+                  <bold>false</bold>
+                 </font>
+                </property>
+                <property name="frameShape">
+                 <enum>QFrame::Shape::NoFrame</enum>
+                </property>
+                <property name="frameShadow">
+                 <enum>QFrame::Shadow::Sunken</enum>
+                </property>
+                <property name="text">
+                 <string>Ready</string>
+                </property>
+                <property name="alignment">
+                 <set>Qt::AlignmentFlag::AlignCenter</set>
+                </property>
+               </widget>
+              </item>
+              <item row="3" column="0">
+               <widget class="QLabel" name="label_4">
+                <property name="font">
+                 <font>
+                  <pointsize>10</pointsize>
+                  <bold>false</bold>
+                 </font>
+                </property>
+                <property name="text">
+                 <string>Status</string>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="1">
+               <widget class="QLabel" name="edit_ru_started">
                 <property name="font">
                  <font>
                   <pointsize>10</pointsize>
@@ -4428,7 +4472,39 @@ QGroupBox::title {
                 </property>
                </widget>
               </item>
-              <item row="0" column="1">
+              <item row="1" column="0">
+               <widget class="QLabel" name="label_2">
+                <property name="font">
+                 <font>
+                  <pointsize>10</pointsize>
+                  <bold>false</bold>
+                 </font>
+                </property>
+                <property name="text">
+                 <string>ID</string>
+                </property>
+                <property name="scaledContents">
+                 <bool>false</bool>
+                </property>
+                <property name="alignment">
+                 <set>Qt::AlignmentFlag::AlignLeading|Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignVCenter</set>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="0">
+               <widget class="QLabel" name="label_3">
+                <property name="font">
+                 <font>
+                  <pointsize>10</pointsize>
+                  <bold>false</bold>
+                 </font>
+                </property>
+                <property name="text">
+                 <string>Started </string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="1">
                <widget class="QLabel" name="edit_run_id">
                 <property name="font">
                  <font>
@@ -4451,7 +4527,7 @@ QGroupBox::title {
                </widget>
               </item>
               <item row="0" column="0">
-               <widget class="QLabel" name="label_2">
+               <widget class="QLabel" name="label_17">
                 <property name="font">
                  <font>
                   <pointsize>10</pointsize>
@@ -4459,31 +4535,12 @@ QGroupBox::title {
                  </font>
                 </property>
                 <property name="text">
-                 <string>ID</string>
-                </property>
-                <property name="scaledContents">
-                 <bool>false</bool>
-                </property>
-                <property name="alignment">
-                 <set>Qt::AlignmentFlag::AlignLeading|Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignVCenter</set>
+                 <string>Name</string>
                 </property>
                </widget>
               </item>
-              <item row="2" column="0">
-               <widget class="QLabel" name="label_4">
-                <property name="font">
-                 <font>
-                  <pointsize>10</pointsize>
-                  <bold>false</bold>
-                 </font>
-                </property>
-                <property name="text">
-                 <string>Status</string>
-                </property>
-               </widget>
-              </item>
-              <item row="2" column="1">
-               <widget class="QLabel" name="edit_run_10">
+              <item row="0" column="1">
+               <widget class="QLabel" name="edit_run_name">
                 <property name="font">
                  <font>
                   <pointsize>10</pointsize>
@@ -4497,23 +4554,10 @@ QGroupBox::title {
                  <enum>QFrame::Shadow::Sunken</enum>
                 </property>
                 <property name="text">
-                 <string>Ready</string>
+                 <string>-</string>
                 </property>
                 <property name="alignment">
                  <set>Qt::AlignmentFlag::AlignCenter</set>
-                </property>
-               </widget>
-              </item>
-              <item row="1" column="0">
-               <widget class="QLabel" name="label_3">
-                <property name="font">
-                 <font>
-                  <pointsize>10</pointsize>
-                  <bold>false</bold>
-                 </font>
-                </property>
-                <property name="text">
-                 <string>Started </string>
                 </property>
                </widget>
               </item>

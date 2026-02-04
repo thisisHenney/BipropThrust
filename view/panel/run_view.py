@@ -8,9 +8,11 @@ and implements OpenFOAM simulation execution functionality.
 import re
 import sys
 import subprocess
+from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import QFileSystemWatcher, QTimer
+from PySide6.QtWidgets import QMessageBox
 
 from nextlib.openfoam.PyFoamCase.foamfile import FoamFile
 
@@ -65,9 +67,65 @@ class RunView:
         """Initialize signal connections."""
         self.ui.button_edit_hostfile_run.clicked.connect(self._on_edit_hostfile_clicked)
         self.ui.button_run.clicked.connect(self._on_run_clicked)
+        self.ui.button_stop.clicked.connect(self._on_stop_clicked)
+        self.ui.button_pause.clicked.connect(self._on_pause_clicked)
+
+        # Disable Stop/Pause buttons initially (enable when running)
+        self.ui.button_stop.setEnabled(False)
+        self.ui.button_pause.setEnabled(False)
 
         # Connect comboBox_7 to enable/disable comboBox_10
         self.ui.comboBox_7.currentIndexChanged.connect(self._on_combustion_changed)
+
+        # Connect exec_widget signals for process status
+        if self.exec_widget:
+            self.exec_widget.sig_proc_status.connect(self._on_proc_status_changed)
+
+    def _load_number_of_subdomains(self):
+        """Load numberOfSubdomains from 5.CHTFCase/system/decomposeParDict."""
+        import os
+
+        # Default value: CPU count / 2
+        cpu_count = os.cpu_count() or 4
+        default_value = max(1, cpu_count // 2)
+
+        decompose_dict_path = Path(self.case_data.path) / "5.CHTFCase" / "system" / "decomposeParDict"
+
+        if decompose_dict_path.exists():
+            try:
+                content = decompose_dict_path.read_text()
+                match = re.search(r'numberOfSubdomains\s+(\d+)', content)
+                if match:
+                    self.ui.edit_number_of_subdomains_2.setText(match.group(1))
+                    return
+            except Exception:
+                pass
+
+        # Set default value if file doesn't exist or couldn't read
+        self.ui.edit_number_of_subdomains_2.setText(str(default_value))
+
+    def _update_decompose_par_dict(self, case_path: Path):
+        """Update numberOfSubdomains in decomposeParDict with UI value."""
+        try:
+            n_procs = int(self.ui.edit_number_of_subdomains_2.text())
+        except (ValueError, AttributeError):
+            return
+
+        decompose_dict_path = case_path / "system" / "decomposeParDict"
+        if not decompose_dict_path.exists():
+            return
+
+        try:
+            content = decompose_dict_path.read_text()
+            # Replace numberOfSubdomains value
+            new_content = re.sub(
+                r'(numberOfSubdomains\s+)\d+',
+                rf'\g<1>{n_procs}',
+                content
+            )
+            decompose_dict_path.write_text(new_content)
+        except Exception:
+            pass
 
     def _on_edit_hostfile_clicked(self):
         """Handle Edit host file button click - open hosts file in text editor."""
@@ -93,6 +151,42 @@ class RunView:
         is_on = (index == 0)
         self.ui.comboBox_10.setEnabled(is_on)
 
+    def _on_stop_clicked(self):
+        """Handle Stop button click - stop the running simulation."""
+        if self.exec_widget:
+            self.exec_widget.stop_process()
+
+        self._is_running = False
+        self.ui.button_run.setEnabled(True)
+        self.ui.button_run.setText("Run")
+        self.ui.button_stop.setEnabled(False)
+        self.ui.button_pause.setEnabled(False)
+        self.ui.button_mesh_generate.setEnabled(True)  # Re-enable Mesh Generate
+        self.ui.edit_run_name.setText("-")  # Reset task name
+        self.ui.edit_run_status.setText("Stopped")
+        self._stop_log_monitoring()
+
+    def _on_pause_clicked(self):
+        """Handle Pause button click - pause/resume the running simulation."""
+        if self.exec_widget:
+            self.exec_widget.pause_process()
+
+    def _on_proc_status_changed(self, proc_idx: int, cpu_id: int, pid: int, status: str):
+        """Handle process status change from exec_widget.
+
+        Args:
+            proc_idx: Process index
+            cpu_id: CPU ID assigned to process
+            pid: Process ID
+            status: Status string (e.g., 'Starting', 'Running', 'Waiting')
+        """
+        # Update process ID display
+        if pid > 0:
+            self.ui.edit_run_id.setText(str(pid))
+
+        # Update status display
+        self.ui.edit_run_status.setText(status)
+
     def _run_simulation(self):
         """Execute the Allrun script in 5.CHTFCase folder."""
         try:
@@ -101,6 +195,9 @@ class RunView:
 
             if not allrun_path.exists():
                 return
+
+            # Update decomposeParDict with UI value
+            self._update_decompose_par_dict(case_path)
 
             # Set log file path
             self._log_file_path = case_path / "log.solver"
@@ -131,19 +228,37 @@ source /usr/lib/openfoam/openfoam2212/etc/bashrc
             # Run the temporary script
             command = "./run_simulation.sh"
 
+            # Set working directory for exec_widget
+            self.exec_widget.set_working_path(str(case_path))
+
+            # Register callbacks
+            self.exec_widget.set_function_after_finished(self._on_simulation_finished)
+            self.exec_widget.set_function_restore_ui(self._restore_ui_after_run)
+
             # Start simulation
             self._is_running = True
             self.ui.button_run.setEnabled(False)
             self.ui.button_run.setText("Running...")
+            self.ui.button_stop.setEnabled(True)
+            self.ui.button_pause.setEnabled(True)
+            self.ui.button_mesh_generate.setEnabled(False)  # Disable Mesh Generate during simulation
+
+            # Update process info display
+            self.ui.edit_run_name.setText("Solver")  # Show task name
+            self.ui.edit_run_id.setText("-")
+            self.ui.edit_ru_started.setText(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+            self.ui.edit_run_status.setText("Running...")
 
             # Start log monitoring
             self._start_log_monitoring()
 
-            # Execute
+            # Execute solver
             self.exec_widget.run([command])
 
         except Exception:
             self._restore_ui_after_run()
+            self.ui.edit_run_name.setText("-")
+            self.ui.edit_run_status.setText("Error")
 
     def _start_log_monitoring(self):
         """Start monitoring log.solver file for residuals."""
@@ -189,25 +304,65 @@ source /usr/lib/openfoam/openfoam2212/etc/bashrc
     def _on_simulation_finished(self):
         """Handle simulation completion."""
         self._is_running = False
+        self._stop_log_monitoring()
         self._update_residual_graph()
+        self.ui.button_run.setEnabled(True)
+        self.ui.button_run.setText("Run")
+        self.ui.button_stop.setEnabled(False)
+        self.ui.button_pause.setEnabled(False)
+        self.ui.button_mesh_generate.setEnabled(True)  # Re-enable Mesh Generate
+        self.ui.edit_run_name.setText("-")  # Reset task name
+        self.ui.edit_run_status.setText("Finished")
 
     def _on_simulation_error(self):
         """Handle simulation error."""
         self._is_running = False
+        self._stop_log_monitoring()
+        self.ui.button_run.setEnabled(True)
+        self.ui.button_run.setText("Run")
+        self.ui.button_stop.setEnabled(False)
+        self.ui.button_pause.setEnabled(False)
+        self.ui.button_mesh_generate.setEnabled(True)  # Re-enable Mesh Generate
+        self.ui.edit_run_name.setText("-")  # Reset task name
+        self.ui.edit_run_status.setText("Error")
 
     def _restore_ui_after_run(self):
         """Restore UI after simulation ends."""
         self._is_running = False
         self.ui.button_run.setEnabled(True)
         self.ui.button_run.setText("Run")
+        self.ui.button_stop.setEnabled(False)
+        self.ui.button_pause.setEnabled(False)
+        self.ui.button_mesh_generate.setEnabled(True)  # Re-enable Mesh Generate
+        self.ui.edit_run_name.setText("-")  # Reset task name
+
+        # Update status to show completion
+        self.ui.edit_run_status.setText("Ready")
 
         self._stop_log_monitoring()
         self._update_residual_graph()
 
     def _on_run_clicked(self):
         """Handle Run button click - update settings and start simulation."""
+        import os
+
         if self._is_running:
             return
+
+        # Validate CPU count
+        try:
+            n_procs = int(self.ui.edit_number_of_subdomains_2.text())
+            cpu_count = os.cpu_count() or 1
+            if n_procs > cpu_count:
+                QMessageBox.critical(
+                    self.parent,
+                    "Error",
+                    f"Number of Subdomains ({n_procs}) exceeds available CPU count ({cpu_count}).\n\n"
+                    f"Please reduce the value to {cpu_count} or less."
+                )
+                return
+        except (ValueError, AttributeError):
+            pass
 
         if not self._update_run_settings():
             return
@@ -320,43 +475,61 @@ source /usr/lib/openfoam/openfoam2212/etc/bashrc
         except Exception:
             pass
     def _update_thermophysical_properties(self, case_path: Path):
-        """Update thermophysicalProperties CHEMKINFile from comboBox_10."""
+        """Update thermophysicalProperties CHEMKINFile and thermo type."""
         try:
             file_path = case_path / "thermophysicalProperties"
             if not file_path.exists():
                 return
 
-            # Only update if combustion is on (comboBox_10 is enabled)
-            if not self.ui.comboBox_10.isEnabled():
-                return
-
-            # Map comboBox_10 selection to CHEMKIN file
-            selection = self.ui.comboBox_10.currentText()
-            if selection == "31Reaction":
-                chemkin_file = "chem_ARLRM31N.inp"
-            elif selection == "31Reaction+global":
-                chemkin_file = "chem_ARLRM31NS.inp"
-            elif selection == "51Reaction":
-                chemkin_file = "chem_Global5S.inp"
-            else:
-                return
-
-            # Use regex to update CHEMKINFile path
             with open(file_path, 'r', encoding='utf-8') as f:
                 content = f.read()
 
-            # Pattern to match CHEMKINFile line
-            pattern = r'(CHEMKINFile\s+"\<case\>/chemkin/)[\w\.]+(")'
-            replacement = rf'\g<1>{chemkin_file}\2'
-            new_content = re.sub(pattern, replacement, content)
+            # Update CHEMKINFile only if combustion is on (comboBox_10 is enabled)
+            if self.ui.comboBox_10.isEnabled():
+                # Map comboBox_10 selection to CHEMKIN file
+                selection = self.ui.comboBox_10.currentText()
+                if selection == "31Reaction":
+                    chemkin_file = "chem_ARLRM31N.inp"
+                elif selection == "31Reaction+global":
+                    chemkin_file = "chem_ARLRM31NS.inp"
+                elif selection == "51Reaction":
+                    chemkin_file = "chem_Global5S.inp"
+                else:
+                    chemkin_file = None
+
+                if chemkin_file:
+                    # Pattern to match CHEMKINFile line
+                    pattern = r'(CHEMKINFile\s+"\<case\>/chemkin/)[\w\.]+(")'
+                    replacement = rf'\g<1>{chemkin_file}\2'
+                    content = re.sub(pattern, replacement, content)
+
+            # Update thermoType.thermo from comboBox_6
+            thermo_text = self.ui.comboBox_6.currentText().strip()
+            if thermo_text == "NASA polynomial":
+                thermo_value = "janaf"
+            elif thermo_text:
+                thermo_value = thermo_text
+            else:
+                thermo_value = None
+
+            if thermo_value:
+                # Pattern to match thermo value in thermoType block
+                content = re.sub(
+                    r'(thermo\s+)\w+(\s*;)',
+                    rf'\g<1>{thermo_value}\2',
+                    content
+                )
 
             with open(file_path, 'w', encoding='utf-8') as f:
-                f.write(new_content)
+                f.write(content)
 
         except Exception:
             pass
     def load_data(self):
         """Load run settings and parameters."""
+
+        # Load numberOfSubdomains from decomposeParDict
+        self._load_number_of_subdomains()
 
         # Load settings from OpenFOAM files
         self._load_run_settings()
@@ -472,7 +645,7 @@ source /usr/lib/openfoam/openfoam2212/etc/bashrc
         except Exception:
             pass
     def _load_thermophysical_properties(self, case_path: Path):
-        """Load CHEMKINFile from thermophysicalProperties to comboBox_10."""
+        """Load CHEMKINFile and thermo type from thermophysicalProperties."""
         try:
             file_path = case_path / "thermophysicalProperties"
             if not file_path.exists():
@@ -494,6 +667,24 @@ source /usr/lib/openfoam/openfoam2212/etc/bashrc
                     self.ui.comboBox_10.setCurrentIndex(1)  # 31Reaction+global
                 elif chemkin_file == "chem_Global5S.inp":
                     self.ui.comboBox_10.setCurrentIndex(2)  # 51Reaction
+
+            # Extract thermoType.thermo value
+            thermo_match = re.search(r'thermo\s+(\w+)\s*;', content)
+            if thermo_match:
+                thermo_value = thermo_match.group(1)
+                # Map file value to UI text
+                if thermo_value == "janaf":
+                    self._set_combo_text(self.ui.comboBox_6, "NASA polynomial")
+                else:
+                    # If not janaf, clear the combobox or try to find match
+                    found = False
+                    for i in range(self.ui.comboBox_6.count()):
+                        if self.ui.comboBox_6.itemText(i).strip() == thermo_value:
+                            self.ui.comboBox_6.setCurrentIndex(i)
+                            found = True
+                            break
+                    if not found:
+                        self.ui.comboBox_6.setCurrentIndex(-1)  # Clear/empty
 
         except Exception:
             pass
@@ -952,6 +1143,9 @@ source /usr/lib/openfoam/openfoam2212/etc/bashrc
 
             # combo_numerical_1 → ddtSchemes.default
             ddt_scheme = self.ui.combo_numerical_1.currentText().strip()
+            # Map UI text to file value
+            if ddt_scheme == "Steady":
+                ddt_scheme = "steadyState"
             content = re.sub(
                 r'(ddtSchemes\s*\{\s*default\s+)\w+(\s*;)',
                 rf'\g<1>{ddt_scheme}\2',
@@ -1025,6 +1219,9 @@ source /usr/lib/openfoam/openfoam2212/etc/bashrc
             match = re.search(r'ddtSchemes\s*\{\s*default\s+(\w+)\s*;', content)
             if match:
                 ddt_scheme = match.group(1)
+                # Map file value to UI text
+                if ddt_scheme == "steadyState":
+                    ddt_scheme = "Steady"
                 self._set_combo_text(self.ui.combo_numerical_1, ddt_scheme)
 
             # Load defaultAdvSchemeV → combo_numerical_2
@@ -1200,8 +1397,11 @@ source /usr/lib/openfoam/openfoam2212/etc/bashrc
                 content
             )
 
-            # edit_run_6 → purgeWrite
-            purge_write = self.ui.edit_run_6.text() or "20"
+            # edit_run_6 → purgeWrite (0 if groupBox_13 unchecked, else value)
+            if self.ui.groupBox_13.isChecked():
+                purge_write = self.ui.edit_run_6.text() or "20"
+            else:
+                purge_write = "0"
             content = re.sub(
                 r'(purgeWrite\s+)[\d]+(\s*;)',
                 rf'\g<1>{purge_write}\2',
@@ -1216,11 +1416,28 @@ source /usr/lib/openfoam/openfoam2212/etc/bashrc
                 content
             )
 
+            # edit_run_7 → writePrecision
+            write_precision = self.ui.edit_run_7.text() or "12"
+            content = re.sub(
+                r'(writePrecision\s+)[\d]+(\s*;)',
+                rf'\g<1>{write_precision}\2',
+                content
+            )
+
+            # edit_run_8 → timePrecision
+            time_precision = self.ui.edit_run_8.text() or "12"
+            content = re.sub(
+                r'(timePrecision\s+)[\d]+(\s*;)',
+                rf'\g<1>{time_precision}\2',
+                content
+            )
+
             with open(file_path, 'w', encoding='utf-8') as f:
                 f.write(content)
 
         except Exception:
             pass
+
     def _load_control_dict(self, system_path: Path):
         """Load controlDict settings to UI."""
         try:
@@ -1256,16 +1473,32 @@ source /usr/lib/openfoam/openfoam2212/etc/bashrc
             if match:
                 self.ui.edit_run_5.setText(match.group(1))
 
-            # Load purgeWrite → edit_run_6
+            # Load purgeWrite → edit_run_6 and groupBox_13 checkbox
             match = re.search(r'purgeWrite\s+(\d+)\s*;', content)
             if match:
-                self.ui.edit_run_6.setText(match.group(1))
+                purge_value = int(match.group(1))
+                if purge_value > 0:
+                    self.ui.groupBox_13.setChecked(True)
+                    self.ui.edit_run_6.setText(match.group(1))
+                else:
+                    self.ui.groupBox_13.setChecked(False)
+                    self.ui.edit_run_6.setText("20")  # Default value when disabled
 
             # Load writeFormat → combo_run_1
             match = re.search(r'writeFormat\s+(\w+)\s*;', content)
             if match:
                 write_format = match.group(1)
                 self._set_combo_text(self.ui.combo_run_1, write_format)
+
+            # Load writePrecision → edit_run_7
+            match = re.search(r'writePrecision\s+(\d+)\s*;', content)
+            if match:
+                self.ui.edit_run_7.setText(match.group(1))
+
+            # Load timePrecision → edit_run_8
+            match = re.search(r'timePrecision\s+(\d+)\s*;', content)
+            if match:
+                self.ui.edit_run_8.setText(match.group(1))
 
         except Exception:
             pass

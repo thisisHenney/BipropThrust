@@ -1,0 +1,170 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2112                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      surfaceFeatureExtractDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+//mesh.stl
+//{
+//    extractionMethod    extractFromSurface;
+//
+//    // Mark edges whose adjacent surface normals are at an angle less
+//    // than includedAngle as features
+//    // - 0  : selects no edges
+//    // - 180: selects all edges
+//    includedAngle       150;
+//
+//    // Write options
+//    writeFeatureEdgeMesh    yes;
+//
+//    // Write features to obj format for postprocessing
+//    writeObj                yes;
+//}
+
+header.stl
+{
+    extractionMethod    extractFromSurface;
+
+    // Mark edges whose adjacent surface normals are at an angle less
+    // than includedAngle as features
+    // - 0  : selects no edges
+    // - 180: selects all edges
+    includedAngle       150;
+
+    // Write options
+    writeFeatureEdgeMesh    yes;
+
+    // Write features to obj format for postprocessing
+    writeObj                yes;
+}
+
+//ccNimonic.stl
+//{
+//    extractionMethod    extractFromSurface;
+//
+//    // Mark edges whose adjacent surface normals are at an angle less
+//    // than includedAngle as features
+//    // - 0  : selects no edges
+//    // - 180: selects all edges
+//    includedAngle       150;
+//
+//    // Write options
+//    writeFeatureEdgeMesh    yes;
+//
+//    // Write features to obj format for postprocessing
+//    writeObj                yes;
+//}
+
+copperRing.stl
+{
+    extractionMethod    extractFromSurface;
+
+    // Mark edges whose adjacent surface normals are at an angle less
+    // than includedAngle as features
+    // - 0  : selects no edges
+    // - 180: selects all edges
+    includedAngle       150;
+
+    // Write options
+    writeFeatureEdgeMesh    yes;
+
+    // Write features to obj format for postprocessing
+    writeObj                yes;
+}
+
+//ccPtRh.stl
+//{
+//    extractionMethod    extractFromSurface;
+//
+//    // Mark edges whose adjacent surface normals are at an angle less
+//    // than includedAngle as features
+//    // - 0  : selects no edges
+//    // - 180: selects all edges
+//    includedAngle       150;
+//
+//    // Write options
+//    writeFeatureEdgeMesh    yes;
+//
+//    // Write features to obj format for postprocessing
+//    writeObj                yes;
+//}
+
+//throatPtRh.stl
+//{
+//    extractionMethod    extractFromSurface;
+//
+//    // Mark edges whose adjacent surface normals are at an angle less
+//    // than includedAngle as features
+//    // - 0  : selects no edges
+//    // - 180: selects all edges
+//    includedAngle       150;
+//
+//    // Write options
+//    writeFeatureEdgeMesh    yes;
+//
+//    // Write features to obj format for postprocessing
+//    writeObj                yes;
+//}
+
+thruster.stl
+{
+    extractionMethod    extractFromSurface;
+
+    // Mark edges whose adjacent surface normals are at an angle less
+    // than includedAngle as features
+    // - 0  : selects no edges
+    // - 180: selects all edges
+    includedAngle       150;
+
+    // Write options
+    writeFeatureEdgeMesh    yes;
+
+    // Write features to obj format for postprocessing
+    writeObj                yes;
+}
+
+//inlet.stl
+//{
+//    extractionMethod    extractFromSurface;
+//
+//    // Mark edges whose adjacent surface normals are at an angle less
+//    // than includedAngle as features
+//    // - 0  : selects no edges
+//    // - 180: selects all edges
+//    includedAngle       150;
+//
+//    // Write options
+//    writeFeatureEdgeMesh    yes;
+//
+//    // Write features to obj format for postprocessing
+//    writeObj                yes;
+//}
+
+outlet.stl
+{
+    extractionMethod    extractFromSurface;
+
+    // Mark edges whose adjacent surface normals are at an angle less
+    // than includedAngle as features
+    // - 0  : selects no edges
+    // - 180: selects all edges
+    includedAngle       150;
+
+    // Write options
+    writeFeatureEdgeMesh    yes;
+
+    // Write features to obj format for postprocessing
+    writeObj                yes;
+}
+
+// ************************************************************************* //

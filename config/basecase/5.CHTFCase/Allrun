@@ -1,0 +1,48 @@
+#!/bin/sh
+cd "${0%/*}" || exit                                # Run from this directory
+. ${WM_PROJECT_DIR:?}/bin/tools/RunFunctions        # Tutorial run functions
+#------------------------------------------------------------------------------
+
+cp -r ../2.meshing_MheadBL/constant/cellToRegion ./constant/
+cp -r ../2.meshing_MheadBL/constant/regionProperties ./constant/
+#cp -r ../2.meshing_MheadBL/constant/ccNimonic/polyMesh ./constant/ccNimonic/
+#cp -r ../2.meshing_MheadBL/constant/copperRing/polyMesh ./constant/copperRing/
+cp -r ../2.meshing_MheadBL/constant/fluid/polyMesh ./constant/fluid/
+cp -r ../2.meshing_MheadBL/constant/header/polyMesh ./constant/header/
+cp -r ../2.meshing_MheadBL/constant/thruster/polyMesh ./constant/thruster/
+
+# Restore initial fields
+restore0Dir
+
+# make filmRegion mesh
+runApplication topoSet -region fluid
+runApplication extrudeToRegionMesh -region fluid -overwrite
+
+# change boundary patch names 
+sed 's/fluid_to_filmRegion_filmFaces/fluid_to_thruster/g' constant/fluid/polyMesh/boundary -i
+sed 's/fluid_to_filmRegion_filmFaces/wallFilm_to_fluid/g' constant/filmRegion/polyMesh/boundary -i
+
+# change samplePatch in the boundary to coupled patch betwee fluid and solid region
+runApplication -s fluid changeDictionary -region fluid -constant
+runApplication -s filmRegion changeDictionary -region filmRegion -constant
+sed -i '35,37d' constant/filmRegion/polyMesh/boundary
+#\sed -i '36,38d' constant/filmRegion/polyMesh/boundary
+
+#paraFoam -touch
+#paraFoam -region fluid -touch
+#paraFoam -region header -touch
+#paraFoam -region copperRing -touch
+#paraFoam -region ccNimonic -touch
+#paraFoam -region throatPtRh -touch
+
+runApplication decomposePar -allRegions
+runApplication -s filmRegion decomposePar -region filmRegion
+
+runApplication mpirun -np `getNumberOfProcessors` --hostfile system/hosts `getApplication` -parallel    
+#runApplication mpirun -np `getNumberOfProcessors` `getApplication` -parallel    
+
+runApplication reconstructPar -allRegions -newTimes
+
+rm -rf processor* > /dev/null 2>&1
+
+# ----------------------------------------------------------------- end-of-file

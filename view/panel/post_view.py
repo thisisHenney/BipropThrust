@@ -48,24 +48,16 @@ class PostView:
         Returns:
             True if results loaded successfully, False otherwise
         """
-        print(f"[PostView] load_results called")
-
         if not self.vtk_post:
-            print(f"[PostView] vtk_post is None")
             return False
 
         if not self.case_data.path:
-            print(f"[PostView] case_data.path is None")
             return False
-
-        print(f"[PostView] case_data.path = {self.case_data.path}")
 
         # Check if 5.CHTFCase folder exists
         chtf_case = Path(self.case_data.path) / "5.CHTFCase"
-        print(f"[PostView] Looking for: {chtf_case}")
 
         if not chtf_case.exists():
-            print(f"[PostView] 5.CHTFCase folder does not exist")
             return False
 
         # Check for result time folders (numeric folders like 0.001, 0.002, etc.)
@@ -80,19 +72,13 @@ class PostView:
                 except ValueError:
                     continue
 
-        print(f"[PostView] Time folders found: {time_folders}")
-
         if not has_results:
-            print(f"[PostView] No result time folders found")
             return False
 
         # Create .foam file if not exists
         foam_file = chtf_case / "case.foam"
         if not foam_file.exists():
             foam_file.touch()
-            print(f"[PostView] Created foam file: {foam_file}")
-
-        print(f"[PostView] Loading foam file: {foam_file}")
 
         # Load OpenFOAM case into vtk_post
         self.vtk_post.load_foam(str(foam_file))
@@ -108,7 +94,6 @@ class PostView:
         self._show_scalar_bar()
 
         self._results_loaded = True
-        print(f"[PostView] Results loaded successfully")
         return True
 
     def _configure_slice(self) -> None:
@@ -167,6 +152,5 @@ class PostView:
         Returns:
             True if results reloaded successfully
         """
-        print(f"[PostView] reload_results called (Refresh button)")
         self._results_loaded = False
         return self.load_results()

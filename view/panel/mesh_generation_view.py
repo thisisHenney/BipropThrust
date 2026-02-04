@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QSlider,
     QCheckBox,
     QDoubleSpinBox,
+    QMessageBox,
 )
 
 from nextlib.openfoam.PyFoamCase.foamfile import FoamFile
@@ -131,12 +132,6 @@ class MeshGenerationView:
         """Initialize signal connections."""
         self.ui.button_mesh_generate.clicked.connect(self._on_generate_clicked)
         self.ui.button_edit_hostfile_mesh.clicked.connect(self._on_edit_hostfile_clicked)
-
-        # Set default numberOfSubdomains to (CPU count / 2)
-        import os
-        cpu_count = os.cpu_count() or 4
-        default_subdomains = max(1, cpu_count // 2)
-        self.ui.edit_number_of_subdomains.setText(str(default_subdomains))
 
         # Slice toolbar signals
         self.combo_dir.currentIndexChanged.connect(self.update_slice)
@@ -260,9 +255,30 @@ class MeshGenerationView:
 
     def _on_generate_clicked(self):
         """Handle Generate button click - prepare files in background then run mesh generation."""
-        # Disable button during execution
+        import os
+
+        # Validate number of subdomains vs CPU count
+        try:
+            n_procs = int(self.ui.edit_number_of_subdomains.text())
+            cpu_count = os.cpu_count() or 1
+
+            if n_procs > cpu_count:
+                QMessageBox.critical(
+                    self.parent,
+                    "Error",
+                    f"Number of Subdomains ({n_procs}) exceeds available CPU count ({cpu_count}).\n\n"
+                    f"Please reduce the value to {cpu_count} or less."
+                )
+                return
+        except (ValueError, AttributeError):
+            pass
+
+        # Disable buttons during execution
         self.ui.button_mesh_generate.setEnabled(False)
         self.ui.button_mesh_generate.setText("Preparing...")
+        self.ui.button_run.setEnabled(False)  # Disable Run button during mesh generation
+        self.ui.edit_run_name.setText("Mesh Generation")  # Show task name
+        self.ui.edit_run_status.setText("Preparing...")  # Show status
 
         # Clear existing mesh from VTK widget
         self._clear_existing_mesh()
@@ -346,6 +362,9 @@ class MeshGenerationView:
         if not self.exec_widget:
             self.ui.button_mesh_generate.setEnabled(True)
             self.ui.button_mesh_generate.setText("Mesh generate")
+            self.ui.button_run.setEnabled(True)  # Re-enable Run button
+            self.ui.edit_run_name.setText("-")  # Reset task name
+            self.ui.edit_run_status.setText("Ready")  # Reset status
             return
 
         # Set working directory to meshing folder
@@ -356,8 +375,9 @@ class MeshGenerationView:
         self.exec_widget.set_function_after_finished(self._on_mesh_generated)
         self.exec_widget.set_function_restore_ui(self._restore_ui)
 
-        # Update button text to show generating
+        # Update button text and status to show generating
         self.ui.button_mesh_generate.setText("Generating...")
+        self.ui.edit_run_status.setText("Running...")
 
         # Get number of processors from UI and update decomposeParDict
         n_procs = 4  # default
@@ -433,11 +453,17 @@ class MeshGenerationView:
         """Handle preparation error."""
         self.ui.button_mesh_generate.setEnabled(True)
         self.ui.button_mesh_generate.setText("Mesh generate")
+        self.ui.button_run.setEnabled(True)  # Re-enable Run button
+        self.ui.edit_run_name.setText("-")  # Reset task name
+        self.ui.edit_run_status.setText("Error")  # Show error status
 
     def _restore_ui(self):
         """Restore UI state after command execution (success, error, or cancel)."""
         self.ui.button_mesh_generate.setEnabled(True)
         self.ui.button_mesh_generate.setText("Mesh generate")
+        self.ui.button_run.setEnabled(True)  # Re-enable Run button
+        self.ui.edit_run_name.setText("-")  # Reset task name
+        self.ui.edit_run_status.setText("Complete")  # Show completion status
 
     def _update_blockmesh_dict(self, cells_x: str, cells_y: str, cells_z: str) -> bool:
         """
@@ -743,6 +769,9 @@ FoamFile
         if not self.vtk_pre:
             return
 
+        # Switch to Mesh Generation tab to show the generated mesh
+        self._switch_to_mesh_tab()
+
         # Hide geometry STL objects
         all_objs = self.vtk_pre.obj_manager.get_all()
         geom_count = 0
@@ -751,8 +780,35 @@ FoamFile
                 obj.actor.SetVisibility(False)
                 geom_count += 1
 
+        # Hide geometry clip actors (if clip was active)
+        self.vtk_pre.hide_clip_actors_for_group("geometry")
+
         # Load mesh using OpenFOAM reader
         self.load_mesh_async()
+
+    def _switch_to_mesh_tab(self):
+        """Switch to Mesh Generation tab in the navigation."""
+        # Switch stacked widget to mesh generation page
+        self.ui.stackedWidget.setCurrentWidget(self.ui.page_mesh_generation)
+
+        # Select corresponding item in navigation tree
+        tree = self.ui.treeWidget
+        tree.blockSignals(True)
+        for i in range(tree.topLevelItemCount()):
+            item = tree.topLevelItem(i)
+            if item and item.text(0) == "Mesh Generation":
+                tree.setCurrentItem(item)
+                break
+        tree.blockSignals(False)
+
+        # Show mesh slice_widget and hide geometry slice_widget
+        if self.slice_widget:
+            self.slice_widget.show()
+        # Hide geometry slice_widget if available
+        if hasattr(self.parent, 'geometry_view') and self.parent.geometry_view:
+            geom_view = self.parent.geometry_view
+            if geom_view.slice_widget:
+                geom_view.slice_widget.hide()
 
     def load_mesh_async(self):
         """Load existing mesh asynchronously from OpenFOAM case folder."""
@@ -1015,6 +1071,12 @@ FoamFile
         if origin is None or normal is None:
             return
 
+        # Ensure geometry objects remain hidden (clip reveals inside of mesh)
+        all_objs = self.vtk_pre.obj_manager.get_all()
+        for obj in all_objs:
+            if hasattr(obj, 'group') and obj.group == "geometry":
+                obj.actor.SetVisibility(False)
+
         # Get renderer
         renderer = self.vtk_pre.vtk_widget.GetRenderWindow().GetRenderers().GetFirstRenderer()
 
@@ -1124,6 +1186,16 @@ FoamFile
             if self.surface_actor is not None:
                 self.surface_actor.SetVisibility(True)
 
+        # Ensure geometry objects remain hidden before rendering
+        # Also remove from renderer to prevent any visibility issues
+        all_objs = self.vtk_pre.obj_manager.get_all()
+        for obj in all_objs:
+            if hasattr(obj, 'group') and obj.group == "geometry":
+                obj.actor.SetVisibility(False)
+                # Remove from renderer if clip is active (prevents rendering artifacts)
+                if self.chk_clip.isChecked():
+                    renderer.RemoveActor(obj.actor)
+
         # Render
         self.vtk_pre.vtk_widget.GetRenderWindow().Render()
 
@@ -1176,6 +1248,9 @@ FoamFile
 
         # Default values
         default_cells = ["100", "100", "100"]
+
+        # Load numberOfSubdomains from decomposeParDict
+        self._load_number_of_subdomains()
 
         # Load probe positions from snappyHexMeshDict
         self._load_locations_from_snappyhex()
@@ -1238,6 +1313,29 @@ FoamFile
             self.ui.lineEdit_basegrid_x.setText(default_cells[0])
             self.ui.lineEdit_basegrid_y.setText(default_cells[1])
             self.ui.lineEdit_basegrid_z.setText(default_cells[2])
+
+    def _load_number_of_subdomains(self):
+        """Load numberOfSubdomains from 2.meshing_MheadBL/system/decomposeParDict."""
+        import os
+
+        # Default value: CPU count / 2
+        cpu_count = os.cpu_count() or 4
+        default_value = max(1, cpu_count // 2)
+
+        decompose_dict_path = Path(self.case_data.path) / "2.meshing_MheadBL" / "system" / "decomposeParDict"
+
+        if decompose_dict_path.exists():
+            try:
+                content = decompose_dict_path.read_text()
+                match = re.search(r'numberOfSubdomains\s+(\d+)', content)
+                if match:
+                    self.ui.edit_number_of_subdomains.setText(match.group(1))
+                    return
+            except Exception:
+                pass
+
+        # Set default value if file doesn't exist or couldn't read
+        self.ui.edit_number_of_subdomains.setText(str(default_value))
 
     def _load_castellation_settings(self):
         """Load castellation settings from snappyHexMeshDict to UI."""

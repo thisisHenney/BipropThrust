@@ -6,7 +6,9 @@ and implements geometry file management functionality.
 """
 
 from pathlib import Path
-from PySide6.QtWidgets import QProgressDialog, QApplication
+from PySide6.QtWidgets import (
+    QProgressDialog, QApplication, QHBoxLayout, QLabel, QComboBox, QSlider, QWidget, QCheckBox, QPushButton
+)
 from PySide6.QtCore import Qt
 
 from nextlib.dialogbox.dialogbox import FileDialogBox
@@ -55,11 +57,93 @@ class GeometryView:
         if self.vtk_pre:
             self.vtk_pre.obj_manager.show_individual_outlines = False
 
+        # Create slice controls widget (will be shown/hidden by center_widget)
+        self.slice_widget = self._create_slice_widget()
+
         # Connect signals
         self._init_connect()
 
+    def _create_slice_widget(self):
+        """
+        Create clip controls as a separate widget to be added below VTK viewer.
+
+        Returns:
+            QWidget containing clip controls
+        """
+        if not self.vtk_pre:
+            return None
+
+        # Create container widget
+        slice_widget = QWidget()
+        layout = QHBoxLayout(slice_widget)
+        layout.setContentsMargins(6, 3, 6, 3)
+        layout.setSpacing(6)
+
+        # Clip mode selection
+        lbl_clip = QLabel("Clip:")
+        layout.addWidget(lbl_clip)
+
+        self._clip_combo = QComboBox()
+        self._clip_combo.addItems(["Off", "X", "Y", "Z"])
+        self._clip_combo.setCurrentText("Off")
+        self._clip_combo.setFixedWidth(60)
+        layout.addWidget(self._clip_combo)
+
+        # Position slider
+        lbl_pos = QLabel("Pos:")
+        layout.addWidget(lbl_pos)
+
+        self._clip_slider = QSlider(Qt.Horizontal)
+        self._clip_slider.setMinimum(0)
+        self._clip_slider.setMaximum(100)
+        self._clip_slider.setValue(50)
+        self._clip_slider.setMinimumWidth(200)
+        self._clip_slider.setEnabled(False)
+        layout.addWidget(self._clip_slider)
+
+        self._lbl_pos_value = QLabel("50%")
+        self._lbl_pos_value.setMinimumWidth(40)
+        layout.addWidget(self._lbl_pos_value)
+
+        # Preview checkbox (shows outline instead of real-time clip)
+        self._clip_preview_check = QCheckBox("Preview")
+        self._clip_preview_check.setChecked(True)  # Default to preview mode
+        self._clip_preview_check.setEnabled(False)
+        layout.addWidget(self._clip_preview_check)
+
+        # Apply button (applies the clip when in preview mode)
+        self._clip_apply_btn = QPushButton("Apply")
+        self._clip_apply_btn.setFixedWidth(60)
+        self._clip_apply_btn.setEnabled(False)
+        layout.addWidget(self._clip_apply_btn)
+
+        # Reset button (restores original state)
+        self._clip_reset_btn = QPushButton("Reset")
+        self._clip_reset_btn.setFixedWidth(60)
+        self._clip_reset_btn.setEnabled(False)
+        layout.addWidget(self._clip_reset_btn)
+
+        # Add spacer to push controls to the left
+        layout.addStretch()
+
+        # Hide widget initially
+        slice_widget.hide()
+
+        # Add to VTK widget layout (below vtk_widget)
+        vtk_layout = self.vtk_pre.layout()
+        vtk_layout.addWidget(slice_widget)
+
+        return slice_widget
+
     def _init_connect(self):
         """Initialize signal connections."""
+        # Clip controls
+        self._clip_combo.currentTextChanged.connect(self._on_clip_mode_changed)
+        self._clip_slider.valueChanged.connect(self._on_clip_slider_changed)
+        self._clip_preview_check.toggled.connect(self._on_clip_preview_toggled)
+        self._clip_apply_btn.clicked.connect(self._on_clip_apply_clicked)
+        self._clip_reset_btn.clicked.connect(self._on_clip_reset_clicked)
+
         # Button clicks
         self.ui.button_geometry_add.clicked.connect(self._on_add_clicked)
         self.ui.button_geometry_remove.clicked.connect(self._on_remove_clicked)
@@ -200,6 +284,12 @@ class GeometryView:
                 if hasattr(obj, 'group') and obj.group == "geometry":
                     obj.actor.SetVisibility(is_geometry_tab)
 
+            # Also update clip actor visibility for geometry group
+            if is_geometry_tab:
+                self.vtk_pre.show_clip_actors_for_group("geometry")
+            else:
+                self.vtk_pre.hide_clip_actors_for_group("geometry")
+
             # Update VTK view after all files loaded
             # Only fit camera if we're on Geometry tab
             if is_geometry_tab:
@@ -254,6 +344,11 @@ class GeometryView:
             return
 
         obj_name = self.tree.get_text(pos)
+
+        # Prevent removing "fluid" (fixed item)
+        if obj_name == "fluid":
+            return
+
         self.tree.remove_item(pos)
 
         # Remove from VTK
@@ -443,10 +538,35 @@ class GeometryView:
                 self.ui.edit_input_position_y.setText(f"{center_y:.4f}")
                 self.ui.edit_input_position_z.setText(f"{center_z:.4f}")
 
-                # If probe tool is active, move it to center as well
+                # If probe tool is active, reset to object center with correct size
                 probe_tool = self.vtk_pre._optional_tools.get("point_probe")
                 if probe_tool and probe_tool.is_visible:
-                    probe_tool.set_center(center_x, center_y, center_z)
+                    # Calculate probe box size as 140% of object bounds (same as initial setup)
+                    obj_size = (
+                        bounds[1] - bounds[0],
+                        bounds[3] - bounds[2],
+                        bounds[5] - bounds[4]
+                    )
+                    scale = 1.4
+                    half_size_x = (obj_size[0] * scale) / 2
+                    half_size_y = (obj_size[1] * scale) / 2
+                    half_size_z = (obj_size[2] * scale) / 2
+
+                    # Calculate new bounds centered at object center
+                    new_bounds = [
+                        center_x - half_size_x,
+                        center_x + half_size_x,
+                        center_y - half_size_y,
+                        center_y + half_size_y,
+                        center_z - half_size_z,
+                        center_z + half_size_z
+                    ]
+
+                    # Set bounds directly to preserve size
+                    if hasattr(probe_tool, '_rep'):
+                        probe_tool._rep.PlaceWidget(new_bounds)
+                        probe_tool._saved_bounds = new_bounds
+                        self.vtk_pre.vtk_widget.GetRenderWindow().Render()
 
     def _on_tree_selection_changed(self):
         """Handle tree selection changed - sync VTK and update position fields."""
@@ -456,6 +576,12 @@ class GeometryView:
 
         # Sync VTK selection
         self._sync_vtk_selection(selected_names)
+
+        # Disable Remove button if "fluid" is selected (fluid is fixed)
+        if "fluid" in selected_names:
+            self.ui.button_geometry_remove.setEnabled(False)
+        else:
+            self.ui.button_geometry_remove.setEnabled(True)
 
         # Update opacity based on selection
         if selected_count == 0:
@@ -535,55 +661,20 @@ class GeometryView:
             self.ui.button_geometry_apply.setEnabled(False)
 
     def _highlight_object(self, obj_name: str):
-        """Highlight selected object by making others semi-transparent."""
-        if not self.vtk_pre:
-            return
-
-        # Get all objects and set opacity
-        all_objs = self.vtk_pre.obj_manager.get_all()
-
-        for obj in all_objs:
-            if obj.name == obj_name:
-                # Selected object - full opacity
-                obj.actor.GetProperty().SetOpacity(1.0)
-            else:
-                # Other objects - semi-transparent
-                obj.actor.GetProperty().SetOpacity(0.3)
-
-        # Force render update
-        self.vtk_pre.vtk_widget.GetRenderWindow().Render()
+        """Highlight selected object - handled by ObjectManager."""
+        # Selection visual is now handled by ObjectManager._update_selection_visual()
+        # which also fades edge colors for wireframe/surface with edge modes
+        pass
 
     def _highlight_multiple_objects(self, obj_names: list):
-        """Highlight multiple selected objects by making others semi-transparent."""
-        if not self.vtk_pre:
-            return
-
-        # Get all objects and set opacity
-        all_objs = self.vtk_pre.obj_manager.get_all()
-
-        for obj in all_objs:
-            if obj.name in obj_names:
-                # Selected objects - full opacity
-                obj.actor.GetProperty().SetOpacity(1.0)
-            else:
-                # Other objects - semi-transparent
-                obj.actor.GetProperty().SetOpacity(0.3)
-
-        # Force render update
-        self.vtk_pre.vtk_widget.GetRenderWindow().Render()
+        """Highlight multiple selected objects - handled by ObjectManager."""
+        # Selection visual is now handled by ObjectManager._update_selection_visual()
+        pass
 
     def _restore_all_opacity(self):
-        """Restore all objects to full opacity."""
-        if not self.vtk_pre:
-            return
-
-        # Restore all objects to full opacity
-        all_objs = self.vtk_pre.obj_manager.get_all()
-        for obj in all_objs:
-            obj.actor.GetProperty().SetOpacity(1.0)
-
-        # Force render update
-        self.vtk_pre.vtk_widget.GetRenderWindow().Render()
+        """Restore all objects to full opacity - handled by ObjectManager."""
+        # Selection visual is now handled by ObjectManager._update_selection_visual()
+        pass
 
     def _sync_vtk_selection(self, selected_names: list):
         """Sync VTK object selection with tree selection."""
@@ -604,7 +695,11 @@ class GeometryView:
 
         # Update VTK selection
         if not selected_ids:
-            obj_manager.clear_selection()
+            # 트리에서 선택이 있지만 VTK 객체가 없으면 모든 객체 반투명하게
+            if selected_names:
+                obj_manager.fade_all()
+            else:
+                obj_manager.clear_selection()
         else:
             obj_manager.select_multiple(selected_ids)
 
@@ -726,9 +821,76 @@ class GeometryView:
             self.ui.button_geometry_remove.setEnabled(True)
             # Set/Apply button remains enabled (controlled by selection logic)
 
+    def _on_clip_mode_changed(self, mode: str):
+        """Handle clip mode combo box change."""
+        mode_lower = mode.lower()
+        is_clipping = (mode_lower != "off")
+
+        # Enable/disable controls based on mode
+        self._clip_slider.setEnabled(is_clipping)
+        self._clip_preview_check.setEnabled(is_clipping)
+        self._clip_apply_btn.setEnabled(is_clipping and self._clip_preview_check.isChecked())
+        self._clip_reset_btn.setEnabled(is_clipping)
+
+        # Reset slider to center when mode changes
+        if is_clipping:
+            self._clip_slider.blockSignals(True)
+            self._clip_slider.setValue(50)
+            self._clip_slider.blockSignals(False)
+            # Update position label manually since signals are blocked
+            if hasattr(self, '_lbl_pos_value'):
+                self._lbl_pos_value.setText("50%")
+
+        # Apply clip to VTK widget (preview or real-time based on checkbox)
+        if self.vtk_pre:
+            is_preview = self._clip_preview_check.isChecked() if is_clipping else False
+            self.vtk_pre.set_clip_mode(mode_lower, preview=is_preview)
+
+    def _on_clip_preview_toggled(self, checked: bool):
+        """Handle preview checkbox toggle."""
+        # Enable/disable apply button based on preview mode
+        mode_lower = self._clip_combo.currentText().lower()
+        is_clipping = (mode_lower != "off")
+        self._clip_apply_btn.setEnabled(is_clipping and checked)
+
+        # Update VTK clip mode with new preview state
+        if self.vtk_pre and is_clipping:
+            self.vtk_pre.set_clip_mode(mode_lower, preview=checked)
+            # Also update position to refresh the view
+            self.vtk_pre.set_clip_position(self._clip_slider.value(), preview=checked)
+
+    def _on_clip_apply_clicked(self):
+        """Handle Apply button click - apply the clip."""
+        if self.vtk_pre:
+            self.vtk_pre.apply_clip()
+
+    def _on_clip_reset_clicked(self):
+        """Handle Reset button click - reset clip to original state (keep preview plane)."""
+        if self.vtk_pre:
+            self.vtk_pre.reset_clip()
+            # Ensure preview checkbox is checked
+            self._clip_preview_check.blockSignals(True)
+            self._clip_preview_check.setChecked(True)
+            self._clip_preview_check.blockSignals(False)
+            # Enable apply button since we're back in preview mode
+            self._clip_apply_btn.setEnabled(True)
+
+    def _on_clip_slider_changed(self, value: int):
+        """Handle clip slider value change."""
+        # Update position label
+        if hasattr(self, '_lbl_pos_value'):
+            self._lbl_pos_value.setText(f"{value}%")
+
+        if self.vtk_pre:
+            is_preview = self._clip_preview_check.isChecked()
+            self.vtk_pre.set_clip_position(value, preview=is_preview)
+
     def load_data(self):
         """Load geometry data from model folder."""
         self.tree.clear_all()
+
+        # Add "fluid" as fixed first item (cannot be removed)
+        self.tree.insert([], "fluid")
 
         # Get model directory path
         model_path = Path(self.case_data.path) / "1.model_Mhead" / "scale0"
@@ -748,7 +910,8 @@ class GeometryView:
         # Add files to tree and case_data
         for stl_file in stl_files:
             name = stl_file.stem
-            self.tree.insert([], name)
+            if name != "fluid":  # Skip if fluid (already added)
+                self.tree.insert([], name)
             # Add to case_data if not already there
             if not self.case_data.get_geometry(name):
                 self.case_data.add_geometry(stl_file)

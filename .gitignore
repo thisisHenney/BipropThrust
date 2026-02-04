@@ -53,7 +53,7 @@ processor*/
 postProcessing/
 dynamicCode/
 0/
-[1-9]*/
+# [1-9]*/
 log.*
 *.log
 

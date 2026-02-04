@@ -1,0 +1,296 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2112                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      sprayCloudProperties;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+solution
+{
+    active          true;
+    coupled         true;
+    transient       yes;
+    cellValueSourceCorrection on;
+    maxCo           0.3;
+
+    sourceTerms
+    {
+        schemes
+        {
+            rho             explicit 1;
+            U               explicit 1;
+            Yi              explicit 1;
+            h               explicit 1;
+            radiation       explicit 1;
+        }
+    }
+
+    interpolationSchemes
+    {
+        rho             cell;
+        U               cellPoint;
+        thermo:mu       cell;
+        T               cell;
+        Cp              cell;
+        kappa           cell;
+        p               cell;
+    }
+
+    integrationSchemes
+    {
+        U               Euler;
+        T               analytical;
+    }
+}
+
+
+constantProperties
+{
+    T0              300;     //400;     //330;
+
+    // place holders for rho0 and Cp0
+    // - reset from liquid properties using T0
+    rho0            868.91;  //760.61;  //838.80;
+    Cp0             2929.76; //3040.44; //2963.23;
+
+    constantVolume  false;
+}
+
+
+subModels
+{
+    particleForces
+    {
+        sphereDrag;
+    }
+
+    injectionModels
+    {
+        model1
+        {
+            type            coneNozzleInjection;
+            SOI             0;
+            massTotal       1.4170e-4;            
+            parcelBasisType mass;
+            injectionMethod disc;
+            flowType        constantVelocity;
+            UMag            34; 
+            outerDiameter   5.8e-4;
+            innerDiameter   0;
+            duration        1.0e-1;
+            position        (0.0001 0.0 0.0); //0.0002
+            direction       (1 0 0);
+            parcelsPerSecond 5000000;
+            flowRateProfile constant 1;
+
+            Cd              constant 0.9;
+
+            thetaInner      constant 38.0;
+            thetaOuter      constant 42.0;
+
+            sizeDistribution
+            {
+                type        fixedValue;
+                fixedValueDistribution
+                {
+                    value   26.5e-6;
+                }
+
+                //type        RosinRammler;
+                //RosinRammlerDistribution
+                //{
+                //    minValue        30.0e-6;
+                //    maxValue        41.0e-6;
+                //    lambda          35.0e-6;
+                //    n               1.7;
+                //}     
+            }
+        }
+    }
+
+    dispersionModel none;
+
+    patchInteractionModel localInteraction; //standardWallInteraction;
+
+    heatTransferModel Rowe; //Rowe; //RanzMarshall;
+
+    compositionModel singlePhaseMixture;
+
+    phaseChangeModel myLiquidEvaporationBoil;
+
+    surfaceFilmModel none; //thermoSurfaceFilm;
+
+    atomizationModel none;
+
+    breakupModel    ETAB; //ReitzDiwakar; // ReitzKHRT;
+
+    stochasticCollisionModel none;
+
+    radiation       off;
+
+    standardWallInteractionCoeffs
+    {
+        type            rebound; // stick, escape
+        e               0.3;     // optional - elasticity coeff
+        mu              0.7;     // optional - restitution coeff
+    }
+
+    localInteractionCoeffs
+    {
+        patches
+        (
+            "(fluid_to_.*|region0_to_.*)"
+            {
+                type rebound;
+                e    0.2;  //0.02;
+                mu   0.6; //0.98;
+            }
+            outlet
+            {
+                type escape;
+            }
+        );
+    }
+
+    RoweCoeffs
+    {
+        vo              0.1;
+        BirdCorrection  true;
+    }
+    
+    RanzMarshallCoeffs
+    {
+    //Aissa et al 2015, Proposed a new Nusselt No correlation
+        a    7.48;
+        b    0.25;
+        m    1.32;
+        n   -1.10;
+        i   -0.015;  //Y^i; Y=rho_inf*mu_inf/(rho_wall*mu_wall)
+//    //RanzMarshall orig. coeffi.  
+//        a    2.0;
+//        b    0.6;
+//        m    0.5;
+//        n    0.66666;
+        BirdCorrection  true;
+    }
+
+    singlePhaseMixtureCoeffs
+    {
+        phases
+        (
+            liquid
+            {
+                CH3NHNH2               1;
+            }
+        );
+    }
+
+    myLiquidEvaporationBoilCoeffs
+    {
+        enthalpyTransfer enthalpyDifference;
+
+        activeLiquids    ( CH3NHNH2 );
+    }
+
+    thermoSurfaceFilmCoeffs
+    {
+        interactionType splashBai; //absorb, bounce, splashBai
+        deltaWet        60e-6; // by Bai
+        Adry            2630; // 2630; // 1322 (12 mu) ~ 5264 (0.05 mu) by Bai
+        Awet            1320; // 1320 very rough dry wall by Bai
+        Cf              0.6;  // 0.6 ~ 0.8 by Bai
+    }
+
+    PilchErdmanCoeffs
+    {
+        B1              0.375;
+        B2              0.2274;
+    }
+    
+    ReitzDiwakarCoeffs
+    {
+        solveOscillationEq yes;
+        Cbag            6.0;
+        Cb              0.785;
+        Cstrip          0.5;
+        Cs              10.0;
+    }
+
+
+    ReitzKHRTCoeffs
+    {
+        solveOscillationEq yes;
+        B0              0.61;  // 2nd radius
+        B1              1.73;  //40.0;  //1~60 2nd start time
+        Ctau            0.5;
+        CRT             0.1;
+        msLimit         0.03;
+        WeberLimit      5.7;
+    }
+
+    TABCoeffs
+    {
+		SMDCalculationMethod    method2;
+        y0              0;
+        yDot0           0;
+        Cmu             10;
+        Comega          8;
+        WeCrit          12;
+    }
+
+    ETABCoeffs
+    {
+        k1              0.222;
+        k2              0.222;
+        WeTransition    80; //100;
+    }    
+}
+
+
+cloudFunctions
+{
+    WeberNumber1
+    {
+        type    WeberNumber;
+    }
+
+    ReynoldsNumber1
+    {
+        type    ReynoldsNumber;
+    }
+
+    NusseltNumber1
+    {
+        type    NusseltNumber;
+    }
+
+    HeatTransferCoeff1
+    {
+        type    HeatTransferCoeff;
+    }
+
+    FilmTemperature1
+    {
+        type    FilmTemperature;
+    }
+
+    particleTracks1
+    {
+        type    particleTracks;
+        trackInterval   1; 
+        maxSamples      10000000;
+        resetOnWrite    yes;
+    }   
+}
+
+
+// ************************************************************************* //

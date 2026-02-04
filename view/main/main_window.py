@@ -83,6 +83,7 @@ class MainWindow(QMainWindow):
 
         self.action_save = QAction("&Save", self)
         self.action_save.setShortcut("Ctrl+S")
+        self.action_save.triggered.connect(self._on_save_clicked)
         file_menu.addAction(self.action_save)
 
         self.action_save_as = QAction("Save &As...", self)
@@ -210,6 +211,19 @@ class MainWindow(QMainWindow):
         if post_view:
             post_view.reload_results()
 
+    def _on_save_clicked(self) -> None:
+        """Handle Save menu action - save all settings to files."""
+        # Save run settings
+        run_panel = self.center_widget.panel_views.get("run")
+        if run_panel:
+            run_panel._update_run_settings()
+
+        # Save case data
+        self.case_data.save()
+
+        # Show status message
+        self.statusBar().showMessage("Saved", 2000)
+
     def _on_residual_refresh(self) -> None:
         """Handle residual graph refresh button click."""
         self.center_widget._load_residual_log()
@@ -319,6 +333,11 @@ class MainWindow(QMainWindow):
         mesh_panel = self.center_widget.panel_views.get("mesh")
         if mesh_panel:
             mesh_panel.load_data()
+
+        # Load run settings after case is loaded
+        run_panel = self.center_widget.panel_views.get("run")
+        if run_panel:
+            run_panel.load_data()
 
         # Select default tab (Geometry) - this triggers visibility logic
         self.center_widget.select_default_tab()

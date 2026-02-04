@@ -44,15 +44,16 @@ class Ui_Center(object):
         __qtreewidgetitem.setFont(0, font);
         self.treeWidget.setHeaderItem(__qtreewidgetitem)
         font1 = QFont()
-        font1.setPointSize(11)
+        font1.setPointSize(10)
+        font1.setBold(True)
         font2 = QFont()
         font2.setFamilies([u"Ubuntu"])
-        font2.setPointSize(11)
-        font2.setBold(False)
+        font2.setPointSize(10)
+        font2.setBold(True)
         font2.setKerning(True)
         font3 = QFont()
         font3.setFamilies([u"Ubuntu"])
-        font3.setPointSize(11)
+        font3.setPointSize(10)
         font3.setBold(False)
         brush = QBrush(QColor(36, 31, 49, 255))
         brush.setStyle(Qt.BrushStyle.NoBrush)
@@ -66,6 +67,10 @@ class Ui_Center(object):
         brush4.setStyle(Qt.BrushStyle.NoBrush)
         brush5 = QBrush(QColor(36, 31, 49, 255))
         brush5.setStyle(Qt.BrushStyle.NoBrush)
+        font4 = QFont()
+        font4.setFamilies([u"Ubuntu"])
+        font4.setPointSize(10)
+        font4.setBold(True)
         brush6 = QBrush(QColor(36, 31, 49, 255))
         brush6.setStyle(Qt.BrushStyle.NoBrush)
         brush7 = QBrush(QColor(36, 31, 49, 255))
@@ -97,7 +102,7 @@ class Ui_Center(object):
         __qtreewidgetitem10.setFont(0, font1);
         __qtreewidgetitem10.setBackground(0, brush5);
         __qtreewidgetitem11 = QTreeWidgetItem(self.treeWidget)
-        __qtreewidgetitem11.setFont(0, font3);
+        __qtreewidgetitem11.setFont(0, font4);
         __qtreewidgetitem12 = QTreeWidgetItem(self.treeWidget)
         __qtreewidgetitem12.setFont(0, font3);
         __qtreewidgetitem13 = QTreeWidgetItem(__qtreewidgetitem12)
@@ -113,10 +118,10 @@ class Ui_Center(object):
         sizePolicy.setHeightForWidth(self.treeWidget.sizePolicy().hasHeightForWidth())
         self.treeWidget.setSizePolicy(sizePolicy)
         self.treeWidget.setMaximumSize(QSize(180, 16777215))
-        font4 = QFont()
-        font4.setPointSize(10)
-        font4.setBold(False)
-        self.treeWidget.setFont(font4)
+        font5 = QFont()
+        font5.setPointSize(10)
+        font5.setBold(False)
+        self.treeWidget.setFont(font5)
         self.treeWidget.setStyleSheet(u"# Custom Style (Blue)\n"
 "QTreeWidget{\n"
 "    show-decoration-selected: 1;\n"
@@ -165,10 +170,10 @@ class Ui_Center(object):
         self.verticalLayout_6.setObjectName(u"verticalLayout_6")
         self.title_2 = QLabel(self.page_geometry)
         self.title_2.setObjectName(u"title_2")
-        font5 = QFont()
-        font5.setPointSize(12)
-        font5.setBold(True)
-        self.title_2.setFont(font5)
+        font6 = QFont()
+        font6.setPointSize(12)
+        font6.setBold(True)
+        self.title_2.setFont(font6)
 
         self.verticalLayout_6.addWidget(self.title_2)
 
@@ -188,17 +193,17 @@ class Ui_Center(object):
         self.button_geometry_add = QPushButton(self.page_geometry)
         self.button_geometry_add.setObjectName(u"button_geometry_add")
         self.button_geometry_add.setMinimumSize(QSize(0, 30))
-        font6 = QFont()
-        font6.setFamilies([u"Ubuntu"])
-        font6.setPointSize(10)
-        self.button_geometry_add.setFont(font6)
+        font7 = QFont()
+        font7.setFamilies([u"Ubuntu"])
+        font7.setPointSize(10)
+        self.button_geometry_add.setFont(font7)
 
         self.horizontalLayout_13.addWidget(self.button_geometry_add)
 
         self.button_geometry_remove = QPushButton(self.page_geometry)
         self.button_geometry_remove.setObjectName(u"button_geometry_remove")
         self.button_geometry_remove.setMinimumSize(QSize(0, 30))
-        self.button_geometry_remove.setFont(font6)
+        self.button_geometry_remove.setFont(font7)
 
         self.horizontalLayout_13.addWidget(self.button_geometry_remove)
 
@@ -207,7 +212,7 @@ class Ui_Center(object):
 
         self.tree_geometry = QTreeWidget(self.page_geometry)
         self.tree_geometry.setObjectName(u"tree_geometry")
-        self.tree_geometry.setFont(font4)
+        self.tree_geometry.setFont(font5)
         self.tree_geometry.setStyleSheet(u"# Custom Style (Blue)\n"
 "QTreeWidget{\n"
 "    show-decoration-selected: 1;\n"
@@ -247,10 +252,7 @@ class Ui_Center(object):
         sizePolicy1.setHeightForWidth(self.GroupBox.sizePolicy().hasHeightForWidth())
         self.GroupBox.setSizePolicy(sizePolicy1)
         self.GroupBox.setMaximumSize(QSize(16777215, 150))
-        font7 = QFont()
-        font7.setPointSize(10)
-        font7.setBold(True)
-        self.GroupBox.setFont(font7)
+        self.GroupBox.setFont(font1)
         self.GroupBox.setStyleSheet(u"QGroupBox {\n"
 "    border: 1px solid;\n"
 "    border-radius: 6;\n"
@@ -367,7 +369,7 @@ class Ui_Center(object):
         self.verticalLayout_12.setSizeConstraint(QLayout.SizeConstraint.SetDefaultConstraint)
         self.title_5 = QLabel(self.page_mesh_generation)
         self.title_5.setObjectName(u"title_5")
-        self.title_5.setFont(font5)
+        self.title_5.setFont(font6)
 
         self.verticalLayout_12.addWidget(self.title_5)
 
@@ -385,7 +387,7 @@ class Ui_Center(object):
         self.scrollArea.setWidgetResizable(True)
         self.scrollAreaWidgetContents = QWidget()
         self.scrollAreaWidgetContents.setObjectName(u"scrollAreaWidgetContents")
-        self.scrollAreaWidgetContents.setGeometry(QRect(0, 0, 420, 716))
+        self.scrollAreaWidgetContents.setGeometry(QRect(0, 0, 378, 714))
         self.verticalLayout_5 = QVBoxLayout(self.scrollAreaWidgetContents)
         self.verticalLayout_5.setObjectName(u"verticalLayout_5")
         self.verticalLayout_5.setContentsMargins(0, 0, 0, 0)
@@ -394,7 +396,7 @@ class Ui_Center(object):
         sizePolicy1.setHeightForWidth(self.AdvancedGroupBox.sizePolicy().hasHeightForWidth())
         self.AdvancedGroupBox.setSizePolicy(sizePolicy1)
         self.AdvancedGroupBox.setMaximumSize(QSize(16777215, 150))
-        self.AdvancedGroupBox.setFont(font7)
+        self.AdvancedGroupBox.setFont(font1)
         self.AdvancedGroupBox.setStyleSheet(u"QGroupBox {\n"
 "    border: 1px solid;\n"
 "    border-radius: 6;\n"
@@ -462,7 +464,7 @@ class Ui_Center(object):
 
         self.groupBox_3 = QGroupBox(self.scrollAreaWidgetContents)
         self.groupBox_3.setObjectName(u"groupBox_3")
-        self.groupBox_3.setFont(font7)
+        self.groupBox_3.setFont(font1)
         self.groupBox_3.setStyleSheet(u"QGroupBox {\n"
 "    border: 1px solid;\n"
 "    border-radius: 6;\n"
@@ -562,7 +564,7 @@ class Ui_Center(object):
         self.groupBox_14 = QGroupBox(self.scrollAreaWidgetContents)
         self.groupBox_14.setObjectName(u"groupBox_14")
         self.groupBox_14.setEnabled(True)
-        self.groupBox_14.setFont(font7)
+        self.groupBox_14.setFont(font1)
         self.groupBox_14.setStyleSheet(u"QGroupBox {\n"
 "    border: 1px solid;\n"
 "    border-radius: 6;\n"
@@ -648,7 +650,7 @@ class Ui_Center(object):
         self.groupBox_15 = QGroupBox(self.scrollAreaWidgetContents)
         self.groupBox_15.setObjectName(u"groupBox_15")
         self.groupBox_15.setEnabled(True)
-        self.groupBox_15.setFont(font7)
+        self.groupBox_15.setFont(font1)
         self.groupBox_15.setStyleSheet(u"QGroupBox {\n"
 "    border: 1px solid;\n"
 "    border-radius: 6;\n"
@@ -764,7 +766,7 @@ class Ui_Center(object):
         self.groupBox_16 = QGroupBox(self.scrollAreaWidgetContents)
         self.groupBox_16.setObjectName(u"groupBox_16")
         self.groupBox_16.setEnabled(True)
-        self.groupBox_16.setFont(font7)
+        self.groupBox_16.setFont(font1)
         self.groupBox_16.setStyleSheet(u"QGroupBox {\n"
 "    border: 1px solid;\n"
 "    border-radius: 6;\n"
@@ -861,7 +863,7 @@ class Ui_Center(object):
         self.verticalLayout_8.setObjectName(u"verticalLayout_8")
         self.title_3 = QLabel(self.page_models)
         self.title_3.setObjectName(u"title_3")
-        self.title_3.setFont(font5)
+        self.title_3.setFont(font6)
 
         self.verticalLayout_8.addWidget(self.title_3)
 
@@ -874,7 +876,7 @@ class Ui_Center(object):
 
         self.groupBox_10 = QGroupBox(self.page_models)
         self.groupBox_10.setObjectName(u"groupBox_10")
-        self.groupBox_10.setFont(font7)
+        self.groupBox_10.setFont(font1)
         self.groupBox_10.setStyleSheet(u"QGroupBox {\n"
 "    border: 1px solid;\n"
 "    border-radius: 6;\n"
@@ -1006,7 +1008,7 @@ class Ui_Center(object):
         self.verticalLayout_9.setObjectName(u"verticalLayout_9")
         self.title_4 = QLabel(self.page_initial_conditions)
         self.title_4.setObjectName(u"title_4")
-        self.title_4.setFont(font5)
+        self.title_4.setFont(font6)
 
         self.verticalLayout_9.addWidget(self.title_4)
 
@@ -1019,11 +1021,7 @@ class Ui_Center(object):
 
         self.groupBox_12 = QGroupBox(self.page_initial_conditions)
         self.groupBox_12.setObjectName(u"groupBox_12")
-        font10 = QFont()
-        font10.setFamilies([u"Ubuntu"])
-        font10.setPointSize(10)
-        font10.setBold(True)
-        self.groupBox_12.setFont(font10)
+        self.groupBox_12.setFont(font4)
         self.groupBox_12.setStyleSheet(u"QGroupBox {\n"
 "    border: 1px solid;\n"
 "    border-radius: 6;\n"
@@ -1117,7 +1115,7 @@ class Ui_Center(object):
 
         self.groupBox_11 = QGroupBox(self.page_initial_conditions)
         self.groupBox_11.setObjectName(u"groupBox_11")
-        self.groupBox_11.setFont(font7)
+        self.groupBox_11.setFont(font1)
         self.groupBox_11.setStyleSheet(u"QGroupBox {\n"
 "    border: 1px solid;\n"
 "    border-radius: 6;\n"
@@ -1170,9 +1168,9 @@ class Ui_Center(object):
         self.comboBox_9.addItem("")
         self.comboBox_9.addItem("")
         self.comboBox_9.setObjectName(u"comboBox_9")
-        font11 = QFont()
-        font11.setPointSize(10)
-        self.comboBox_9.setFont(font11)
+        font10 = QFont()
+        font10.setPointSize(10)
+        self.comboBox_9.setFont(font10)
 
         self.gridLayout_8.addWidget(self.comboBox_9, 3, 1, 1, 1)
 
@@ -1191,7 +1189,7 @@ class Ui_Center(object):
         self.verticalLayout_3.setObjectName(u"verticalLayout_3")
         self.sprayMMH = QLabel(self.page_mmh)
         self.sprayMMH.setObjectName(u"sprayMMH")
-        self.sprayMMH.setFont(font5)
+        self.sprayMMH.setFont(font6)
 
         self.verticalLayout_3.addWidget(self.sprayMMH)
 
@@ -1204,7 +1202,7 @@ class Ui_Center(object):
 
         self.groupBox_5 = QGroupBox(self.page_mmh)
         self.groupBox_5.setObjectName(u"groupBox_5")
-        self.groupBox_5.setFont(font7)
+        self.groupBox_5.setFont(font1)
         self.groupBox_5.setStyleSheet(u"QGroupBox {\n"
 "    border: 1px solid;\n"
 "    border-radius: 6;\n"
@@ -1291,7 +1289,7 @@ class Ui_Center(object):
 
         self.groupBox_4 = QGroupBox(self.page_mmh)
         self.groupBox_4.setObjectName(u"groupBox_4")
-        self.groupBox_4.setFont(font7)
+        self.groupBox_4.setFont(font1)
         self.groupBox_4.setStyleSheet(u"QGroupBox {\n"
 "    border: 1px solid;\n"
 "    border-radius: 6;\n"
@@ -1336,21 +1334,21 @@ class Ui_Center(object):
         self.horizontalLayout_5.setObjectName(u"horizontalLayout_5")
         self.edit_spray_mmh_9 = QLineEdit(self.groupBox_4)
         self.edit_spray_mmh_9.setObjectName(u"edit_spray_mmh_9")
-        self.edit_spray_mmh_9.setFont(font11)
+        self.edit_spray_mmh_9.setFont(font10)
         self.edit_spray_mmh_9.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.horizontalLayout_5.addWidget(self.edit_spray_mmh_9)
 
         self.edit_spray_mmh_10 = QLineEdit(self.groupBox_4)
         self.edit_spray_mmh_10.setObjectName(u"edit_spray_mmh_10")
-        self.edit_spray_mmh_10.setFont(font11)
+        self.edit_spray_mmh_10.setFont(font10)
         self.edit_spray_mmh_10.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.horizontalLayout_5.addWidget(self.edit_spray_mmh_10)
 
         self.edit_spray_mmh_11 = QLineEdit(self.groupBox_4)
         self.edit_spray_mmh_11.setObjectName(u"edit_spray_mmh_11")
-        self.edit_spray_mmh_11.setFont(font11)
+        self.edit_spray_mmh_11.setFont(font10)
         self.edit_spray_mmh_11.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.horizontalLayout_5.addWidget(self.edit_spray_mmh_11)
@@ -1368,21 +1366,21 @@ class Ui_Center(object):
         self.horizontalLayout_4.setObjectName(u"horizontalLayout_4")
         self.edit_spray_mmh_6 = QLineEdit(self.groupBox_4)
         self.edit_spray_mmh_6.setObjectName(u"edit_spray_mmh_6")
-        self.edit_spray_mmh_6.setFont(font11)
+        self.edit_spray_mmh_6.setFont(font10)
         self.edit_spray_mmh_6.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.horizontalLayout_4.addWidget(self.edit_spray_mmh_6)
 
         self.edit_spray_mmh_7 = QLineEdit(self.groupBox_4)
         self.edit_spray_mmh_7.setObjectName(u"edit_spray_mmh_7")
-        self.edit_spray_mmh_7.setFont(font11)
+        self.edit_spray_mmh_7.setFont(font10)
         self.edit_spray_mmh_7.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.horizontalLayout_4.addWidget(self.edit_spray_mmh_7)
 
         self.edit_spray_mmh_8 = QLineEdit(self.groupBox_4)
         self.edit_spray_mmh_8.setObjectName(u"edit_spray_mmh_8")
-        self.edit_spray_mmh_8.setFont(font11)
+        self.edit_spray_mmh_8.setFont(font10)
         self.edit_spray_mmh_8.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.horizontalLayout_4.addWidget(self.edit_spray_mmh_8)
@@ -1413,7 +1411,7 @@ class Ui_Center(object):
         self.verticalLayout_4.setObjectName(u"verticalLayout_4")
         self.sprayMMH_2 = QLabel(self.page_nto)
         self.sprayMMH_2.setObjectName(u"sprayMMH_2")
-        self.sprayMMH_2.setFont(font5)
+        self.sprayMMH_2.setFont(font6)
 
         self.verticalLayout_4.addWidget(self.sprayMMH_2)
 
@@ -1426,7 +1424,7 @@ class Ui_Center(object):
 
         self.groupBox_7 = QGroupBox(self.page_nto)
         self.groupBox_7.setObjectName(u"groupBox_7")
-        self.groupBox_7.setFont(font7)
+        self.groupBox_7.setFont(font1)
         self.groupBox_7.setStyleSheet(u"QGroupBox {\n"
 "    border: 1px solid;\n"
 "    border-radius: 6;\n"
@@ -1513,7 +1511,7 @@ class Ui_Center(object):
 
         self.groupBox_6 = QGroupBox(self.page_nto)
         self.groupBox_6.setObjectName(u"groupBox_6")
-        self.groupBox_6.setFont(font7)
+        self.groupBox_6.setFont(font1)
         self.groupBox_6.setStyleSheet(u"QGroupBox {\n"
 "    border: 1px solid;\n"
 "    border-radius: 6;\n"
@@ -1533,21 +1531,21 @@ class Ui_Center(object):
         self.horizontalLayout_6.setObjectName(u"horizontalLayout_6")
         self.edit_spray_nto_6 = QLineEdit(self.groupBox_6)
         self.edit_spray_nto_6.setObjectName(u"edit_spray_nto_6")
-        self.edit_spray_nto_6.setFont(font11)
+        self.edit_spray_nto_6.setFont(font10)
         self.edit_spray_nto_6.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.horizontalLayout_6.addWidget(self.edit_spray_nto_6)
 
         self.edit_spray_nto_7 = QLineEdit(self.groupBox_6)
         self.edit_spray_nto_7.setObjectName(u"edit_spray_nto_7")
-        self.edit_spray_nto_7.setFont(font11)
+        self.edit_spray_nto_7.setFont(font10)
         self.edit_spray_nto_7.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.horizontalLayout_6.addWidget(self.edit_spray_nto_7)
 
         self.edit_spray_nto_8 = QLineEdit(self.groupBox_6)
         self.edit_spray_nto_8.setObjectName(u"edit_spray_nto_8")
-        self.edit_spray_nto_8.setFont(font11)
+        self.edit_spray_nto_8.setFont(font10)
         self.edit_spray_nto_8.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.horizontalLayout_6.addWidget(self.edit_spray_nto_8)
@@ -1590,21 +1588,21 @@ class Ui_Center(object):
         self.horizontalLayout_7.setObjectName(u"horizontalLayout_7")
         self.edit_spray_nto_9 = QLineEdit(self.groupBox_6)
         self.edit_spray_nto_9.setObjectName(u"edit_spray_nto_9")
-        self.edit_spray_nto_9.setFont(font11)
+        self.edit_spray_nto_9.setFont(font10)
         self.edit_spray_nto_9.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.horizontalLayout_7.addWidget(self.edit_spray_nto_9)
 
         self.edit_spray_nto_10 = QLineEdit(self.groupBox_6)
         self.edit_spray_nto_10.setObjectName(u"edit_spray_nto_10")
-        self.edit_spray_nto_10.setFont(font11)
+        self.edit_spray_nto_10.setFont(font10)
         self.edit_spray_nto_10.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.horizontalLayout_7.addWidget(self.edit_spray_nto_10)
 
         self.edit_spray_nto_11 = QLineEdit(self.groupBox_6)
         self.edit_spray_nto_11.setObjectName(u"edit_spray_nto_11")
-        self.edit_spray_nto_11.setFont(font11)
+        self.edit_spray_nto_11.setFont(font10)
         self.edit_spray_nto_11.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.horizontalLayout_7.addWidget(self.edit_spray_nto_11)
@@ -1635,7 +1633,7 @@ class Ui_Center(object):
         self.verticalLayout_7.setObjectName(u"verticalLayout_7")
         self.label_8 = QLabel(self.page_numerical_conditions)
         self.label_8.setObjectName(u"label_8")
-        self.label_8.setFont(font5)
+        self.label_8.setFont(font6)
 
         self.verticalLayout_7.addWidget(self.label_8)
 
@@ -1648,7 +1646,7 @@ class Ui_Center(object):
 
         self.groupBox_8 = QGroupBox(self.page_numerical_conditions)
         self.groupBox_8.setObjectName(u"groupBox_8")
-        self.groupBox_8.setFont(font7)
+        self.groupBox_8.setFont(font1)
         self.groupBox_8.setStyleSheet(u"QGroupBox {\n"
 "    border: 1px solid;\n"
 "    border-radius: 6;\n"
@@ -1669,15 +1667,15 @@ class Ui_Center(object):
         self.combo_numerical_3.addItem("")
         self.combo_numerical_3.addItem("")
         self.combo_numerical_3.setObjectName(u"combo_numerical_3")
-        font12 = QFont()
-        font12.setPointSize(9)
-        self.combo_numerical_3.setFont(font12)
+        font11 = QFont()
+        font11.setPointSize(9)
+        self.combo_numerical_3.setFont(font11)
 
         self.gridLayout_15.addWidget(self.combo_numerical_3, 2, 1, 1, 1)
 
         self.label_29 = QLabel(self.groupBox_8)
         self.label_29.setObjectName(u"label_29")
-        self.label_29.setFont(font12)
+        self.label_29.setFont(font11)
 
         self.gridLayout_15.addWidget(self.label_29, 0, 0, 1, 1)
 
@@ -1686,20 +1684,20 @@ class Ui_Center(object):
         self.combo_numerical_2.addItem("")
         self.combo_numerical_2.addItem("")
         self.combo_numerical_2.setObjectName(u"combo_numerical_2")
-        self.combo_numerical_2.setFont(font12)
+        self.combo_numerical_2.setFont(font11)
         self.combo_numerical_2.setAcceptDrops(False)
 
         self.gridLayout_15.addWidget(self.combo_numerical_2, 1, 1, 1, 1)
 
         self.label_10 = QLabel(self.groupBox_8)
         self.label_10.setObjectName(u"label_10")
-        self.label_10.setFont(font12)
+        self.label_10.setFont(font11)
 
         self.gridLayout_15.addWidget(self.label_10, 4, 0, 1, 1)
 
         self.label_30 = QLabel(self.groupBox_8)
         self.label_30.setObjectName(u"label_30")
-        self.label_30.setFont(font12)
+        self.label_30.setFont(font11)
 
         self.gridLayout_15.addWidget(self.label_30, 1, 0, 1, 1)
 
@@ -1708,7 +1706,7 @@ class Ui_Center(object):
         self.combo_numerical_5.addItem("")
         self.combo_numerical_5.addItem("")
         self.combo_numerical_5.setObjectName(u"combo_numerical_5")
-        self.combo_numerical_5.setFont(font12)
+        self.combo_numerical_5.setFont(font11)
 
         self.gridLayout_15.addWidget(self.combo_numerical_5, 4, 1, 1, 1)
 
@@ -1716,7 +1714,7 @@ class Ui_Center(object):
         self.combo_numerical_4.addItem("")
         self.combo_numerical_4.addItem("")
         self.combo_numerical_4.setObjectName(u"combo_numerical_4")
-        self.combo_numerical_4.setFont(font12)
+        self.combo_numerical_4.setFont(font11)
 
         self.gridLayout_15.addWidget(self.combo_numerical_4, 3, 1, 1, 1)
 
@@ -1724,19 +1722,19 @@ class Ui_Center(object):
         self.combo_numerical_1.addItem("")
         self.combo_numerical_1.addItem("")
         self.combo_numerical_1.setObjectName(u"combo_numerical_1")
-        self.combo_numerical_1.setFont(font12)
+        self.combo_numerical_1.setFont(font11)
 
         self.gridLayout_15.addWidget(self.combo_numerical_1, 0, 1, 1, 1)
 
         self.label_32 = QLabel(self.groupBox_8)
         self.label_32.setObjectName(u"label_32")
-        self.label_32.setFont(font12)
+        self.label_32.setFont(font11)
 
         self.gridLayout_15.addWidget(self.label_32, 3, 0, 1, 1)
 
         self.label_31 = QLabel(self.groupBox_8)
         self.label_31.setObjectName(u"label_31")
-        self.label_31.setFont(font12)
+        self.label_31.setFont(font11)
 
         self.gridLayout_15.addWidget(self.label_31, 2, 0, 1, 1)
 
@@ -1747,7 +1745,7 @@ class Ui_Center(object):
 
         self.groupBox_9 = QGroupBox(self.page_numerical_conditions)
         self.groupBox_9.setObjectName(u"groupBox_9")
-        self.groupBox_9.setFont(font7)
+        self.groupBox_9.setFont(font1)
         self.groupBox_9.setStyleSheet(u"QGroupBox {\n"
 "    border: 1px solid;\n"
 "    border-radius: 6;\n"
@@ -1773,7 +1771,7 @@ class Ui_Center(object):
         self.combo_numerical_6.addItem("")
         self.combo_numerical_6.addItem("")
         self.combo_numerical_6.setObjectName(u"combo_numerical_6")
-        self.combo_numerical_6.setFont(font12)
+        self.combo_numerical_6.setFont(font11)
 
         self.gridLayout_5.addWidget(self.combo_numerical_6, 3, 1, 1, 1)
 
@@ -1803,11 +1801,11 @@ class Ui_Center(object):
         sizePolicy4.setHeightForWidth(self.edit_numerical_1.sizePolicy().hasHeightForWidth())
         self.edit_numerical_1.setSizePolicy(sizePolicy4)
         self.edit_numerical_1.setMinimumSize(QSize(0, 0))
-        font13 = QFont()
-        font13.setFamilies([u"Ubuntu"])
-        font13.setPointSize(9)
-        font13.setBold(False)
-        self.edit_numerical_1.setFont(font13)
+        font12 = QFont()
+        font12.setFamilies([u"Ubuntu"])
+        font12.setPointSize(9)
+        font12.setBold(False)
+        self.edit_numerical_1.setFont(font12)
         self.edit_numerical_1.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.gridLayout_5.addWidget(self.edit_numerical_1, 0, 1, 1, 1)
@@ -1817,7 +1815,7 @@ class Ui_Center(object):
         sizePolicy4.setHeightForWidth(self.edit_numerical_2.sizePolicy().hasHeightForWidth())
         self.edit_numerical_2.setSizePolicy(sizePolicy4)
         self.edit_numerical_2.setMinimumSize(QSize(0, 0))
-        self.edit_numerical_2.setFont(font13)
+        self.edit_numerical_2.setFont(font12)
         self.edit_numerical_2.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.gridLayout_5.addWidget(self.edit_numerical_2, 1, 1, 1, 1)
@@ -1827,7 +1825,7 @@ class Ui_Center(object):
         sizePolicy4.setHeightForWidth(self.edit_numerical_3.sizePolicy().hasHeightForWidth())
         self.edit_numerical_3.setSizePolicy(sizePolicy4)
         self.edit_numerical_3.setMinimumSize(QSize(0, 0))
-        self.edit_numerical_3.setFont(font13)
+        self.edit_numerical_3.setFont(font12)
         self.edit_numerical_3.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.gridLayout_5.addWidget(self.edit_numerical_3, 2, 1, 1, 1)
@@ -1849,7 +1847,7 @@ class Ui_Center(object):
         self.title.setObjectName(u"title")
         sizePolicy2.setHeightForWidth(self.title.sizePolicy().hasHeightForWidth())
         self.title.setSizePolicy(sizePolicy2)
-        self.title.setFont(font5)
+        self.title.setFont(font6)
 
         self.verticalLayout.addWidget(self.title)
 
@@ -1862,7 +1860,7 @@ class Ui_Center(object):
 
         self.groupBox_2 = QGroupBox(self.page_run_conditions)
         self.groupBox_2.setObjectName(u"groupBox_2")
-        self.groupBox_2.setFont(font7)
+        self.groupBox_2.setFont(font1)
         self.groupBox_2.setStyleSheet(u"QGroupBox {\n"
 "    border: 1px solid;\n"
 "    border-radius: 6;\n"
@@ -1883,7 +1881,7 @@ class Ui_Center(object):
         self.combo_run_1.addItem("")
         self.combo_run_1.addItem("")
         self.combo_run_1.setObjectName(u"combo_run_1")
-        self.combo_run_1.setFont(font11)
+        self.combo_run_1.setFont(font10)
 
         self.gridLayout_2.addWidget(self.combo_run_1, 6, 1, 1, 1)
 
@@ -1892,11 +1890,11 @@ class Ui_Center(object):
         sizePolicy4.setHeightForWidth(self.edit_run_3.sizePolicy().hasHeightForWidth())
         self.edit_run_3.setSizePolicy(sizePolicy4)
         self.edit_run_3.setMinimumSize(QSize(0, 0))
-        font14 = QFont()
-        font14.setFamilies([u"\ub9d1\uc740 \uace0\ub515"])
-        font14.setPointSize(9)
-        font14.setBold(False)
-        self.edit_run_3.setFont(font14)
+        font13 = QFont()
+        font13.setFamilies([u"\ub9d1\uc740 \uace0\ub515"])
+        font13.setPointSize(9)
+        font13.setBold(False)
+        self.edit_run_3.setFont(font13)
         self.edit_run_3.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.gridLayout_2.addWidget(self.edit_run_3, 2, 1, 1, 1)
@@ -1906,14 +1904,14 @@ class Ui_Center(object):
         sizePolicy4.setHeightForWidth(self.edit_run_5.sizePolicy().hasHeightForWidth())
         self.edit_run_5.setSizePolicy(sizePolicy4)
         self.edit_run_5.setMinimumSize(QSize(0, 0))
-        self.edit_run_5.setFont(font14)
+        self.edit_run_5.setFont(font13)
         self.edit_run_5.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.gridLayout_2.addWidget(self.edit_run_5, 4, 1, 1, 1)
 
         self.label_71 = QLabel(self.groupBox_2)
         self.label_71.setObjectName(u"label_71")
-        self.label_71.setFont(font14)
+        self.label_71.setFont(font13)
 
         self.gridLayout_2.addWidget(self.label_71, 8, 0, 1, 1)
 
@@ -1922,20 +1920,20 @@ class Ui_Center(object):
         sizePolicy4.setHeightForWidth(self.edit_run_8.sizePolicy().hasHeightForWidth())
         self.edit_run_8.setSizePolicy(sizePolicy4)
         self.edit_run_8.setMinimumSize(QSize(0, 0))
-        self.edit_run_8.setFont(font14)
+        self.edit_run_8.setFont(font13)
         self.edit_run_8.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.gridLayout_2.addWidget(self.edit_run_8, 8, 1, 1, 1)
 
         self.label_77 = QLabel(self.groupBox_2)
         self.label_77.setObjectName(u"label_77")
-        self.label_77.setFont(font13)
+        self.label_77.setFont(font12)
 
         self.gridLayout_2.addWidget(self.label_77, 0, 0, 1, 1)
 
         self.label_67 = QLabel(self.groupBox_2)
         self.label_67.setObjectName(u"label_67")
-        self.label_67.setFont(font13)
+        self.label_67.setFont(font12)
 
         self.gridLayout_2.addWidget(self.label_67, 4, 0, 1, 1)
 
@@ -1944,14 +1942,14 @@ class Ui_Center(object):
         sizePolicy4.setHeightForWidth(self.edit_run_7.sizePolicy().hasHeightForWidth())
         self.edit_run_7.setSizePolicy(sizePolicy4)
         self.edit_run_7.setMinimumSize(QSize(0, 0))
-        self.edit_run_7.setFont(font14)
+        self.edit_run_7.setFont(font13)
         self.edit_run_7.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.gridLayout_2.addWidget(self.edit_run_7, 7, 1, 1, 1)
 
         self.label_78 = QLabel(self.groupBox_2)
         self.label_78.setObjectName(u"label_78")
-        self.label_78.setFont(font13)
+        self.label_78.setFont(font12)
 
         self.gridLayout_2.addWidget(self.label_78, 1, 0, 1, 1)
 
@@ -1960,20 +1958,20 @@ class Ui_Center(object):
         sizePolicy4.setHeightForWidth(self.edit_run_2.sizePolicy().hasHeightForWidth())
         self.edit_run_2.setSizePolicy(sizePolicy4)
         self.edit_run_2.setMinimumSize(QSize(0, 0))
-        self.edit_run_2.setFont(font14)
+        self.edit_run_2.setFont(font13)
         self.edit_run_2.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.gridLayout_2.addWidget(self.edit_run_2, 1, 1, 1, 1)
 
         self.label_72 = QLabel(self.groupBox_2)
         self.label_72.setObjectName(u"label_72")
-        self.label_72.setFont(font14)
+        self.label_72.setFont(font13)
 
         self.gridLayout_2.addWidget(self.label_72, 6, 0, 1, 1)
 
         self.label_79 = QLabel(self.groupBox_2)
         self.label_79.setObjectName(u"label_79")
-        self.label_79.setFont(font13)
+        self.label_79.setFont(font12)
 
         self.gridLayout_2.addWidget(self.label_79, 2, 0, 1, 1)
 
@@ -1982,20 +1980,20 @@ class Ui_Center(object):
         sizePolicy4.setHeightForWidth(self.edit_run_4.sizePolicy().hasHeightForWidth())
         self.edit_run_4.setSizePolicy(sizePolicy4)
         self.edit_run_4.setMinimumSize(QSize(0, 0))
-        self.edit_run_4.setFont(font14)
+        self.edit_run_4.setFont(font13)
         self.edit_run_4.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.gridLayout_2.addWidget(self.edit_run_4, 3, 1, 1, 1)
 
         self.label_70 = QLabel(self.groupBox_2)
         self.label_70.setObjectName(u"label_70")
-        self.label_70.setFont(font14)
+        self.label_70.setFont(font13)
 
         self.gridLayout_2.addWidget(self.label_70, 7, 0, 1, 1)
 
         self.label_80 = QLabel(self.groupBox_2)
         self.label_80.setObjectName(u"label_80")
-        self.label_80.setFont(font13)
+        self.label_80.setFont(font12)
 
         self.gridLayout_2.addWidget(self.label_80, 3, 0, 1, 1)
 
@@ -2004,7 +2002,7 @@ class Ui_Center(object):
         sizePolicy4.setHeightForWidth(self.edit_run_1.sizePolicy().hasHeightForWidth())
         self.edit_run_1.setSizePolicy(sizePolicy4)
         self.edit_run_1.setMinimumSize(QSize(0, 0))
-        self.edit_run_1.setFont(font14)
+        self.edit_run_1.setFont(font13)
         self.edit_run_1.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.gridLayout_2.addWidget(self.edit_run_1, 0, 1, 1, 1)
@@ -2013,11 +2011,11 @@ class Ui_Center(object):
         self.groupBox_13.setObjectName(u"groupBox_13")
         sizePolicy2.setHeightForWidth(self.groupBox_13.sizePolicy().hasHeightForWidth())
         self.groupBox_13.setSizePolicy(sizePolicy2)
-        font15 = QFont()
-        font15.setFamilies([u"\ub9d1\uc740 \uace0\ub515"])
-        font15.setPointSize(10)
-        font15.setBold(True)
-        self.groupBox_13.setFont(font15)
+        font14 = QFont()
+        font14.setFamilies([u"\ub9d1\uc740 \uace0\ub515"])
+        font14.setPointSize(10)
+        font14.setBold(True)
+        self.groupBox_13.setFont(font14)
         self.groupBox_13.setStyleSheet(u"QGroupBox {\n"
 "    border: 1px solid;\n"
 "    border-radius: 6;\n"
@@ -2043,7 +2041,7 @@ class Ui_Center(object):
         self.horizontalLayout_16.setContentsMargins(-1, 0, -1, 0)
         self.label_68 = QLabel(self.frame)
         self.label_68.setObjectName(u"label_68")
-        self.label_68.setFont(font14)
+        self.label_68.setFont(font13)
 
         self.horizontalLayout_16.addWidget(self.label_68)
 
@@ -2052,7 +2050,7 @@ class Ui_Center(object):
         sizePolicy4.setHeightForWidth(self.edit_run_6.sizePolicy().hasHeightForWidth())
         self.edit_run_6.setSizePolicy(sizePolicy4)
         self.edit_run_6.setMinimumSize(QSize(0, 0))
-        self.edit_run_6.setFont(font14)
+        self.edit_run_6.setFont(font13)
         self.edit_run_6.setAlignment(Qt.AlignmentFlag.AlignRight|Qt.AlignmentFlag.AlignTrailing|Qt.AlignmentFlag.AlignVCenter)
 
         self.horizontalLayout_16.addWidget(self.edit_run_6)
@@ -2080,7 +2078,7 @@ class Ui_Center(object):
         self.title_6.setObjectName(u"title_6")
         sizePolicy2.setHeightForWidth(self.title_6.sizePolicy().hasHeightForWidth())
         self.title_6.setSizePolicy(sizePolicy2)
-        self.title_6.setFont(font5)
+        self.title_6.setFont(font6)
 
         self.verticalLayout_2.addWidget(self.title_6)
 
@@ -2094,7 +2092,7 @@ class Ui_Center(object):
         self.groupBox_17 = QGroupBox(self.page_run)
         self.groupBox_17.setObjectName(u"groupBox_17")
         self.groupBox_17.setEnabled(True)
-        self.groupBox_17.setFont(font7)
+        self.groupBox_17.setFont(font1)
         self.groupBox_17.setStyleSheet(u"QGroupBox {\n"
 "    border: 1px solid;\n"
 "    border-radius: 6;\n"
@@ -2139,7 +2137,7 @@ class Ui_Center(object):
         sizePolicy4.setHeightForWidth(self.edit_number_of_subdomains_2.sizePolicy().hasHeightForWidth())
         self.edit_number_of_subdomains_2.setSizePolicy(sizePolicy4)
         self.edit_number_of_subdomains_2.setMinimumSize(QSize(0, 0))
-        self.edit_number_of_subdomains_2.setFont(font14)
+        self.edit_number_of_subdomains_2.setFont(font13)
         self.edit_number_of_subdomains_2.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.gridLayout_18.addWidget(self.edit_number_of_subdomains_2, 0, 1, 1, 1)
@@ -2150,7 +2148,7 @@ class Ui_Center(object):
 
         self.groupBox = QGroupBox(self.page_run)
         self.groupBox.setObjectName(u"groupBox")
-        self.groupBox.setFont(font7)
+        self.groupBox.setFont(font1)
         self.groupBox.setStyleSheet(u"QGroupBox {\n"
 "    border: 1px solid;\n"
 "    border-radius: 6;\n"
@@ -2167,52 +2165,67 @@ class Ui_Center(object):
         self.gridLayout_3 = QGridLayout(self.groupBox)
         self.gridLayout_3.setObjectName(u"gridLayout_3")
         self.gridLayout_3.setContentsMargins(-1, 9, -1, -1)
-        self.edit_run_9 = QLabel(self.groupBox)
-        self.edit_run_9.setObjectName(u"edit_run_9")
-        self.edit_run_9.setFont(font4)
-        self.edit_run_9.setFrameShape(QFrame.Shape.NoFrame)
-        self.edit_run_9.setFrameShadow(QFrame.Shadow.Sunken)
-        self.edit_run_9.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.edit_run_status = QLabel(self.groupBox)
+        self.edit_run_status.setObjectName(u"edit_run_status")
+        self.edit_run_status.setFont(font5)
+        self.edit_run_status.setFrameShape(QFrame.Shape.NoFrame)
+        self.edit_run_status.setFrameShadow(QFrame.Shadow.Sunken)
+        self.edit_run_status.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        self.gridLayout_3.addWidget(self.edit_run_9, 1, 1, 1, 1)
+        self.gridLayout_3.addWidget(self.edit_run_status, 3, 1, 1, 1)
+
+        self.label_4 = QLabel(self.groupBox)
+        self.label_4.setObjectName(u"label_4")
+        self.label_4.setFont(font5)
+
+        self.gridLayout_3.addWidget(self.label_4, 3, 0, 1, 1)
+
+        self.edit_ru_started = QLabel(self.groupBox)
+        self.edit_ru_started.setObjectName(u"edit_ru_started")
+        self.edit_ru_started.setFont(font5)
+        self.edit_ru_started.setFrameShape(QFrame.Shape.NoFrame)
+        self.edit_ru_started.setFrameShadow(QFrame.Shadow.Sunken)
+        self.edit_ru_started.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        self.gridLayout_3.addWidget(self.edit_ru_started, 2, 1, 1, 1)
+
+        self.label_2 = QLabel(self.groupBox)
+        self.label_2.setObjectName(u"label_2")
+        self.label_2.setFont(font5)
+        self.label_2.setScaledContents(False)
+        self.label_2.setAlignment(Qt.AlignmentFlag.AlignLeading|Qt.AlignmentFlag.AlignLeft|Qt.AlignmentFlag.AlignVCenter)
+
+        self.gridLayout_3.addWidget(self.label_2, 1, 0, 1, 1)
+
+        self.label_3 = QLabel(self.groupBox)
+        self.label_3.setObjectName(u"label_3")
+        self.label_3.setFont(font5)
+
+        self.gridLayout_3.addWidget(self.label_3, 2, 0, 1, 1)
 
         self.edit_run_id = QLabel(self.groupBox)
         self.edit_run_id.setObjectName(u"edit_run_id")
-        self.edit_run_id.setFont(font4)
+        self.edit_run_id.setFont(font5)
         self.edit_run_id.setFrameShape(QFrame.Shape.NoFrame)
         self.edit_run_id.setFrameShadow(QFrame.Shadow.Sunken)
         self.edit_run_id.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        self.gridLayout_3.addWidget(self.edit_run_id, 0, 1, 1, 1)
+        self.gridLayout_3.addWidget(self.edit_run_id, 1, 1, 1, 1)
 
-        self.label_2 = QLabel(self.groupBox)
-        self.label_2.setObjectName(u"label_2")
-        self.label_2.setFont(font4)
-        self.label_2.setScaledContents(False)
-        self.label_2.setAlignment(Qt.AlignmentFlag.AlignLeading|Qt.AlignmentFlag.AlignLeft|Qt.AlignmentFlag.AlignVCenter)
+        self.label_17 = QLabel(self.groupBox)
+        self.label_17.setObjectName(u"label_17")
+        self.label_17.setFont(font5)
 
-        self.gridLayout_3.addWidget(self.label_2, 0, 0, 1, 1)
+        self.gridLayout_3.addWidget(self.label_17, 0, 0, 1, 1)
 
-        self.label_4 = QLabel(self.groupBox)
-        self.label_4.setObjectName(u"label_4")
-        self.label_4.setFont(font4)
+        self.edit_run_name = QLabel(self.groupBox)
+        self.edit_run_name.setObjectName(u"edit_run_name")
+        self.edit_run_name.setFont(font5)
+        self.edit_run_name.setFrameShape(QFrame.Shape.NoFrame)
+        self.edit_run_name.setFrameShadow(QFrame.Shadow.Sunken)
+        self.edit_run_name.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        self.gridLayout_3.addWidget(self.label_4, 2, 0, 1, 1)
-
-        self.edit_run_10 = QLabel(self.groupBox)
-        self.edit_run_10.setObjectName(u"edit_run_10")
-        self.edit_run_10.setFont(font4)
-        self.edit_run_10.setFrameShape(QFrame.Shape.NoFrame)
-        self.edit_run_10.setFrameShadow(QFrame.Shadow.Sunken)
-        self.edit_run_10.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-        self.gridLayout_3.addWidget(self.edit_run_10, 2, 1, 1, 1)
-
-        self.label_3 = QLabel(self.groupBox)
-        self.label_3.setObjectName(u"label_3")
-        self.label_3.setFont(font4)
-
-        self.gridLayout_3.addWidget(self.label_3, 1, 0, 1, 1)
+        self.gridLayout_3.addWidget(self.edit_run_name, 0, 1, 1, 1)
 
         self.gridLayout_3.setColumnStretch(0, 1)
         self.gridLayout_3.setColumnStretch(1, 1)
@@ -2232,7 +2245,7 @@ class Ui_Center(object):
         self.button_run = QPushButton(self.page_run)
         self.button_run.setObjectName(u"button_run")
         self.button_run.setMinimumSize(QSize(0, 35))
-        self.button_run.setFont(font7)
+        self.button_run.setFont(font1)
         self.button_run.setCheckable(False)
 
         self.horizontalLayout_2.addWidget(self.button_run)
@@ -2240,14 +2253,14 @@ class Ui_Center(object):
         self.button_pause = QPushButton(self.page_run)
         self.button_pause.setObjectName(u"button_pause")
         self.button_pause.setMinimumSize(QSize(0, 35))
-        self.button_pause.setFont(font4)
+        self.button_pause.setFont(font5)
 
         self.horizontalLayout_2.addWidget(self.button_pause)
 
         self.button_stop = QPushButton(self.page_run)
         self.button_stop.setObjectName(u"button_stop")
         self.button_stop.setMinimumSize(QSize(0, 35))
-        self.button_stop.setFont(font4)
+        self.button_stop.setFont(font5)
 
         self.horizontalLayout_2.addWidget(self.button_stop)
 
@@ -2360,7 +2373,7 @@ class Ui_Center(object):
     def retranslateUi(self, Center):
         Center.setWindowTitle(QCoreApplication.translate("Center", u"Form", None))
         ___qtreewidgetitem = self.treeWidget.headerItem()
-        ___qtreewidgetitem.setText(0, QCoreApplication.translate("Center", u"Control Menu", None));
+        ___qtreewidgetitem.setText(0, QCoreApplication.translate("Center", u"Settings", None));
 
         __sortingEnabled = self.treeWidget.isSortingEnabled()
         self.treeWidget.setSortingEnabled(False)
@@ -2477,7 +2490,7 @@ class Ui_Center(object):
         self.label_81.setText(QCoreApplication.translate("Center", u"\u2514 Reaction Model", None))
         self.comboBox_10.setItemText(0, QCoreApplication.translate("Center", u"31Reaction", None))
         self.comboBox_10.setItemText(1, QCoreApplication.translate("Center", u"31Reaction+global", None))
-        self.comboBox_10.setItemText(2, QCoreApplication.translate("Center", u"51Reaction", None))
+        self.comboBox_10.setItemText(2, QCoreApplication.translate("Center", u"5Reaction", None))
 
         self.label_76.setText(QCoreApplication.translate("Center", u"Species", None))
         self.comboBox_8.setItemText(0, QCoreApplication.translate("Center", u"MMH+NTO", None))
@@ -2499,7 +2512,7 @@ class Ui_Center(object):
         self.label_42.setText(QCoreApplication.translate("Center", u"External Type", None))
         self.label_41.setText(QCoreApplication.translate("Center", u"Temperature [K]", None))
         self.comboBox_9.setItemText(0, QCoreApplication.translate("Center", u"externalWallHeatFluxTemperature", None))
-        self.comboBox_9.setItemText(1, QCoreApplication.translate("Center", u"ConvectiveHeatTransfer", None))
+        self.comboBox_9.setItemText(1, QCoreApplication.translate("Center", u"convectiveHeatTransfer", None))
         self.comboBox_9.setItemText(2, QCoreApplication.translate("Center", u"wallHeatTransfer", None))
 
         self.sprayMMH.setText(QCoreApplication.translate("Center", u"Spray Property - MMH", None))
@@ -2590,8 +2603,8 @@ class Ui_Center(object):
         self.edit_numerical_3.setText(QCoreApplication.translate("Center", u"0", None))
         self.title.setText(QCoreApplication.translate("Center", u"Run Conditions", None))
         self.groupBox_2.setTitle(QCoreApplication.translate("Center", u"< Properties >", None))
-        self.combo_run_1.setItemText(0, QCoreApplication.translate("Center", u"Binary", None))
-        self.combo_run_1.setItemText(1, QCoreApplication.translate("Center", u"Ascii", None))
+        self.combo_run_1.setItemText(0, QCoreApplication.translate("Center", u"ascii", None))
+        self.combo_run_1.setItemText(1, QCoreApplication.translate("Center", u"binary", None))
 
         self.edit_run_3.setText(QCoreApplication.translate("Center", u"1.e-6", None))
         self.edit_run_5.setText(QCoreApplication.translate("Center", u"1000", None))
@@ -2599,7 +2612,7 @@ class Ui_Center(object):
 "(Number of Significnat Figures)", None))
         self.edit_run_8.setText(QCoreApplication.translate("Center", u"6", None))
         self.label_77.setText(QCoreApplication.translate("Center", u"Start Time", None))
-        self.label_67.setText(QCoreApplication.translate("Center", u"Number of Iterations", None))
+        self.label_67.setText(QCoreApplication.translate("Center", u"max Co", None))
         self.edit_run_7.setText(QCoreApplication.translate("Center", u"6", None))
         self.label_78.setText(QCoreApplication.translate("Center", u"End Time", None))
         self.edit_run_2.setText(QCoreApplication.translate("Center", u"0.02", None))
@@ -2612,19 +2625,21 @@ class Ui_Center(object):
         self.edit_run_1.setText(QCoreApplication.translate("Center", u"0", None))
         self.groupBox_13.setTitle(QCoreApplication.translate("Center", u"Retain Only the Most Recent Files", None))
         self.label_68.setText(QCoreApplication.translate("Center", u"Maximum Number of Data Files", None))
-        self.title_6.setText(QCoreApplication.translate("Center", u"Run", None))
+        self.title_6.setText(QCoreApplication.translate("Center", u"Run State", None))
         self.groupBox_17.setTitle(QCoreApplication.translate("Center", u"< System Config >", None))
         self.label_73.setText(QCoreApplication.translate("Center", u"Number of Subdomains ", None))
         self.label_85.setText(QCoreApplication.translate("Center", u"Host Configuration", None))
         self.button_edit_hostfile_run.setText(QCoreApplication.translate("Center", u"Edit host file", None))
-        self.edit_number_of_subdomains_2.setText(QCoreApplication.translate("Center", u"0", None))
+        self.edit_number_of_subdomains_2.setText(QCoreApplication.translate("Center", u"2", None))
         self.groupBox.setTitle(QCoreApplication.translate("Center", u"< Process Information >", None))
-        self.edit_run_9.setText(QCoreApplication.translate("Center", u"-", None))
-        self.edit_run_id.setText(QCoreApplication.translate("Center", u"-", None))
-        self.label_2.setText(QCoreApplication.translate("Center", u"ID", None))
+        self.edit_run_status.setText(QCoreApplication.translate("Center", u"Ready", None))
         self.label_4.setText(QCoreApplication.translate("Center", u"Status", None))
-        self.edit_run_10.setText(QCoreApplication.translate("Center", u"Ready", None))
+        self.edit_ru_started.setText(QCoreApplication.translate("Center", u"-", None))
+        self.label_2.setText(QCoreApplication.translate("Center", u"ID", None))
         self.label_3.setText(QCoreApplication.translate("Center", u"Started ", None))
+        self.edit_run_id.setText(QCoreApplication.translate("Center", u"-", None))
+        self.label_17.setText(QCoreApplication.translate("Center", u"Name", None))
+        self.edit_run_name.setText(QCoreApplication.translate("Center", u"-", None))
         self.button_run.setText(QCoreApplication.translate("Center", u"Run", None))
         self.button_pause.setText(QCoreApplication.translate("Center", u"Pause", None))
         self.button_stop.setText(QCoreApplication.translate("Center", u"Stop", None))
