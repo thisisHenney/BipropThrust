@@ -16,7 +16,7 @@ from nextlib.widgets.dock import DockWidget
 from nextlib.execute.exec_widget import ExecWidget
 from nextlib.vtk import PreprocessWidget, PostprocessWidget
 from nextlib.graph.pyqtgraph.residual_plot_widget import ResidualPlotWidget
-from nextlib.utils.window import center_on_screen
+from nextlib.utils.window import center_on_screen, save_window_geometry, restore_window_geometry
 from nextlib.utils.file import copy_files
 from nextlib.dialogbox.dialogbox import DirDialogBox
 
@@ -158,8 +158,7 @@ class MainWindow(QMainWindow):
         # Customize vtk_pre toolbar
         self._setup_vtk_pre_toolbar()
 
-        # Customize vtk_post toolbar
-        self._setup_vtk_post_toolbar()
+        # vtk_post는 자체 Refresh 버튼 사용 (set_case_path로 경로 등록)
 
         # Residual plot widget
         self.residual_graph = ResidualPlotWidget(self)
@@ -188,28 +187,6 @@ class MainWindow(QMainWindow):
         if probe_tool:
             probe_tool.center_moved.connect(self._on_probe_position_changed)
             probe_tool.visibility_changed.connect(self._on_probe_visibility_changed)
-
-    def _setup_vtk_post_toolbar(self) -> None:
-        """Customize vtk_post toolbar - add refresh button."""
-        # Hide "Load OpenFOAM" action (use automatic loading instead)
-        for action in self.vtk_post.toolbar.actions():
-            if action.text() == "Load OpenFOAM":
-                action.setVisible(False)
-                break
-
-        # Add separator and refresh action
-        self.vtk_post.toolbar.addSeparator()
-
-        self.action_post_refresh = QAction("Refresh", self)
-        self.action_post_refresh.setToolTip("Reload simulation results")
-        self.action_post_refresh.triggered.connect(self._on_post_refresh)
-        self.vtk_post.toolbar.addAction(self.action_post_refresh)
-
-    def _on_post_refresh(self) -> None:
-        """Handle post-processing refresh button click."""
-        post_view = self.center_widget.panel_views.get("post")
-        if post_view:
-            post_view.reload_results()
 
     def _on_save_clicked(self) -> None:
         """Handle Save menu action - save all settings to files."""
@@ -265,8 +242,9 @@ class MainWindow(QMainWindow):
         self.ui = _UI()
         self.ui.centralwidget = self._central_container
 
-        # Create dock manager
-        self.dock_manager = DockWidget(self)
+        # Create dock manager with layout file path
+        dock_layout_file = str(Path(self.app_data.user_path) / "dock_layout.dat")
+        self.dock_manager = DockWidget(self, layout_file=dock_layout_file)
         self.context.register("dock", self.dock_manager)
 
         # Create center widget with navigation tree and panels
@@ -287,12 +265,15 @@ class MainWindow(QMainWindow):
         # Set window title (will be updated after case is loaded)
         self.setWindowTitle(self.app_data.title)
 
-        # Set window size
+        # Set minimum size
         self.setMinimumSize(650, 450)
-        self.resize(1300, 900)
 
-        # Center on screen
-        center_on_screen(self)
+        # Load saved app_data and restore window geometry
+        self.app_data.load()
+        restore_window_geometry(self, self.app_data.window_geometry)
+
+        # Restore dock layout
+        self.dock_manager.restore_layout()
 
         # Setup statusbar
         self.statusBar().showMessage("Ready", 3000)
@@ -538,6 +519,13 @@ class MainWindow(QMainWindow):
 
     def _cleanup(self) -> None:
         """Cleanup resources before closing."""
+        # Save dock layout
+        self.dock_manager.save_layout()
+
+        # Save window geometry (always, regardless of case)
+        self.app_data.window_geometry = save_window_geometry(self)
+        self.app_data.save()
+
         # Save case data (only if not temp)
         if self.case_data.path and "temp" not in self.case_path:
             self.case_data.save()

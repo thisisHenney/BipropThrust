@@ -7,7 +7,7 @@ and implements geometry file management functionality.
 
 from pathlib import Path
 from PySide6.QtWidgets import (
-    QProgressDialog, QApplication, QHBoxLayout, QLabel, QComboBox, QSlider, QWidget, QCheckBox, QPushButton
+    QProgressDialog, QApplication, QToolBar, QLabel, QComboBox, QSlider, QCheckBox, QPushButton
 )
 from PySide6.QtCore import Qt
 
@@ -65,33 +65,31 @@ class GeometryView:
 
     def _create_slice_widget(self):
         """
-        Create clip controls as a separate widget to be added below VTK viewer.
+        Create clip controls as a QToolBar to be added to VTK viewer (bottom area).
+        QToolBar supports floating/docking within the QMainWindow-based VTK widget.
 
         Returns:
-            QWidget containing clip controls
+            QToolBar containing clip controls
         """
         if not self.vtk_pre:
             return None
 
-        # Create container widget
-        slice_widget = QWidget()
-        layout = QHBoxLayout(slice_widget)
-        layout.setContentsMargins(6, 3, 6, 3)
-        layout.setSpacing(6)
+        # Create toolbar
+        clip_toolbar = QToolBar("Clip Controls", self.vtk_pre)
+        clip_toolbar.setFloatable(True)
+        clip_toolbar.setMovable(True)
 
         # Clip mode selection
-        lbl_clip = QLabel("Clip:")
-        layout.addWidget(lbl_clip)
+        clip_toolbar.addWidget(QLabel("Clip:"))
 
         self._clip_combo = QComboBox()
         self._clip_combo.addItems(["Off", "X", "Y", "Z"])
         self._clip_combo.setCurrentText("Off")
         self._clip_combo.setFixedWidth(60)
-        layout.addWidget(self._clip_combo)
+        clip_toolbar.addWidget(self._clip_combo)
 
         # Position slider
-        lbl_pos = QLabel("Pos:")
-        layout.addWidget(lbl_pos)
+        clip_toolbar.addWidget(QLabel("Pos:"))
 
         self._clip_slider = QSlider(Qt.Horizontal)
         self._clip_slider.setMinimum(0)
@@ -99,41 +97,37 @@ class GeometryView:
         self._clip_slider.setValue(50)
         self._clip_slider.setMinimumWidth(200)
         self._clip_slider.setEnabled(False)
-        layout.addWidget(self._clip_slider)
+        clip_toolbar.addWidget(self._clip_slider)
 
         self._lbl_pos_value = QLabel("50%")
         self._lbl_pos_value.setMinimumWidth(40)
-        layout.addWidget(self._lbl_pos_value)
+        clip_toolbar.addWidget(self._lbl_pos_value)
 
         # Preview checkbox (shows outline instead of real-time clip)
         self._clip_preview_check = QCheckBox("Preview")
         self._clip_preview_check.setChecked(True)  # Default to preview mode
         self._clip_preview_check.setEnabled(False)
-        layout.addWidget(self._clip_preview_check)
+        clip_toolbar.addWidget(self._clip_preview_check)
 
         # Apply button (applies the clip when in preview mode)
         self._clip_apply_btn = QPushButton("Apply")
         self._clip_apply_btn.setFixedWidth(60)
         self._clip_apply_btn.setEnabled(False)
-        layout.addWidget(self._clip_apply_btn)
+        clip_toolbar.addWidget(self._clip_apply_btn)
 
         # Reset button (restores original state)
         self._clip_reset_btn = QPushButton("Reset")
         self._clip_reset_btn.setFixedWidth(60)
         self._clip_reset_btn.setEnabled(False)
-        layout.addWidget(self._clip_reset_btn)
+        clip_toolbar.addWidget(self._clip_reset_btn)
 
-        # Add spacer to push controls to the left
-        layout.addStretch()
+        # Hide toolbar initially
+        clip_toolbar.hide()
 
-        # Hide widget initially
-        slice_widget.hide()
+        # Add to VTK widget as bottom toolbar (QMainWindow 기반)
+        self.vtk_pre.addToolBar(Qt.BottomToolBarArea, clip_toolbar)
 
-        # Add to VTK widget layout (below vtk_widget)
-        vtk_layout = self.vtk_pre.layout()
-        vtk_layout.addWidget(slice_widget)
-
-        return slice_widget
+        return clip_toolbar
 
     def _init_connect(self):
         """Initialize signal connections."""

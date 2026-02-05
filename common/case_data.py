@@ -87,6 +87,9 @@ class CaseData(BaseCase):
     description: str = ""
     point_probe_position: tuple[float, float, float] = field(default_factory=lambda: (0.0, 0.0, 0.0))
 
+    def __post_init__(self):
+        super().__post_init__()
+
     def add_geometry(self, file_path: str) -> str:
         """
         Add a geometry to the case.

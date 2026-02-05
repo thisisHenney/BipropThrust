@@ -14,8 +14,7 @@ from pathlib import Path
 import vtk
 from PySide6.QtCore import QThread, Qt, Signal
 from PySide6.QtWidgets import (
-    QWidget,
-    QHBoxLayout,
+    QToolBar,
     QLabel,
     QComboBox,
     QSlider,
@@ -143,94 +142,82 @@ class MeshGenerationView:
 
     def _create_slice_widget(self):
         """
-        Create slice controls as a separate widget to be added below VTK viewer.
+        Create slice controls as a QToolBar to be added to VTK viewer (bottom area).
+        QToolBar supports floating/docking within the QMainWindow-based VTK widget.
 
         Returns:
-            QWidget containing slice controls
+            QToolBar containing slice controls
         """
         if not self.vtk_pre:
             return None
 
-        # Create container widget
-        slice_widget = QWidget()
-        layout = QHBoxLayout(slice_widget)
-        layout.setContentsMargins(6, 3, 6, 3)
-        layout.setSpacing(6)
+        # Create toolbar
+        slice_toolbar = QToolBar("Slice Controls", self.vtk_pre)
+        slice_toolbar.setFloatable(True)
+        slice_toolbar.setMovable(True)
 
         # Direction selection
-        lbl_dir = QLabel("Slice:")
-        layout.addWidget(lbl_dir)
+        slice_toolbar.addWidget(QLabel("Slice:"))
 
         self.combo_dir = QComboBox()
         self.combo_dir.addItems(["X", "Y", "Z", "Custom"])
-        layout.addWidget(self.combo_dir)
+        slice_toolbar.addWidget(self.combo_dir)
 
         # Custom normal controls
-        lbl_n = QLabel(" n=(")
-        layout.addWidget(lbl_n)
+        slice_toolbar.addWidget(QLabel(" n=("))
 
         self.spin_nx = QDoubleSpinBox()
         self.spin_nx.setRange(-1.0, 1.0)
         self.spin_nx.setSingleStep(0.1)
         self.spin_nx.setValue(0.0)
         self.spin_nx.setMaximumWidth(60)
-        layout.addWidget(self.spin_nx)
+        slice_toolbar.addWidget(self.spin_nx)
 
-        lbl_comma1 = QLabel(",")
-        layout.addWidget(lbl_comma1)
+        slice_toolbar.addWidget(QLabel(","))
 
         self.spin_ny = QDoubleSpinBox()
         self.spin_ny.setRange(-1.0, 1.0)
         self.spin_ny.setSingleStep(0.1)
         self.spin_ny.setValue(0.0)
         self.spin_ny.setMaximumWidth(60)
-        layout.addWidget(self.spin_ny)
+        slice_toolbar.addWidget(self.spin_ny)
 
-        lbl_comma2 = QLabel(",")
-        layout.addWidget(lbl_comma2)
+        slice_toolbar.addWidget(QLabel(","))
 
         self.spin_nz = QDoubleSpinBox()
         self.spin_nz.setRange(-1.0, 1.0)
         self.spin_nz.setSingleStep(0.1)
         self.spin_nz.setValue(1.0)
         self.spin_nz.setMaximumWidth(60)
-        layout.addWidget(self.spin_nz)
+        slice_toolbar.addWidget(self.spin_nz)
 
-        lbl_close = QLabel(")")
-        layout.addWidget(lbl_close)
+        slice_toolbar.addWidget(QLabel(")"))
 
         # Position slider
-        lbl_pos = QLabel(" Pos:")
-        layout.addWidget(lbl_pos)
+        slice_toolbar.addWidget(QLabel(" Pos:"))
 
         self.slider_pos = QSlider(Qt.Horizontal)
         self.slider_pos.setRange(0, 100)
         self.slider_pos.setValue(50)
         self.slider_pos.setMinimumWidth(200)
-        layout.addWidget(self.slider_pos)
+        slice_toolbar.addWidget(self.slider_pos)
 
         self.lbl_pos_value = QLabel("50%")
         self.lbl_pos_value.setMinimumWidth(40)
-        layout.addWidget(self.lbl_pos_value)
+        slice_toolbar.addWidget(self.lbl_pos_value)
 
         # Clip checkbox
         self.chk_clip = QCheckBox("Clip")
         self.chk_clip.setChecked(False)
-        layout.addWidget(self.chk_clip)
+        slice_toolbar.addWidget(self.chk_clip)
 
-        # Add spacer to push controls to the left
-        layout.addStretch()
+        # Hide toolbar initially
+        slice_toolbar.hide()
 
-        # Hide widget initially
-        slice_widget.hide()
+        # Add to VTK widget as bottom toolbar (QMainWindow 기반)
+        self.vtk_pre.addToolBar(Qt.BottomToolBarArea, slice_toolbar)
 
-        # Add to VTK widget layout (below vtk_widget, above status bar if exists)
-        vtk_layout = self.vtk_pre.layout()
-        # vtk_layout has: toolbar (index 0), vtk_widget (index 1)
-        # Insert slice widget after vtk_widget
-        vtk_layout.addWidget(slice_widget)
-
-        return slice_widget
+        return slice_toolbar
 
     def _on_edit_hostfile_clicked(self):
         """Handle Edit host file button click - open hosts file in text editor."""

@@ -15,8 +15,10 @@ from datetime import datetime
 # Add nextlib to path
 sys.path.insert(0, '/home/test/lib')
 
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QMessageBox
 from PySide6.QtCore import Qt
+
+from nextlib.utils.single_instance import SingleInstance
 
 from common.app_data import app_data
 from view.main.main_window import MainWindow
@@ -69,6 +71,15 @@ class BipropThrustApp:
         self.app.setApplicationName(app_data.name)
         self.app.setApplicationVersion(app_data.version)
         self.app.setOrganizationName("NEXTfoam")
+
+        # Prevent duplicate instances
+        self._single_instance = SingleInstance(f"com.nextfoam.{app_data.name}")
+        if not self._single_instance.try_lock():
+            QMessageBox.warning(
+                None, app_data.name,
+                f"{app_data.name} is already running."
+            )
+            sys.exit(0)
 
     def _get_or_create_case_path(self) -> str:
         """

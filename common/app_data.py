@@ -40,6 +40,9 @@ class AppData:
     res_path: str = field(default="", init=False)
     user_path: str = field(default="", init=False)
 
+    # Window geometry (saved/restored across sessions)
+    window_geometry: dict = field(default_factory=dict, init=False)
+
     # Platform-specific user paths
     _user_path_win: str = field(default="", init=False, repr=False)
     _user_path_linux: str = field(default="", init=False, repr=False)
@@ -130,7 +133,10 @@ class AppData:
                 data = json.load(f)
 
             # Only update safe fields (not paths)
-            safe_fields = {"name", "version"}
+            safe_fields = {
+                "name", "version",
+                "window_geometry",
+            }
             for k, v in data.items():
                 if k in safe_fields:
                     setattr(self, k, v)

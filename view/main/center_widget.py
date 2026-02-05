@@ -159,9 +159,10 @@ class CenterWidget(QWidget):
                     post_view = self.panel_views.get("post")
                     if post_view:
                         post_view.load_results()
-                # Update visibility for Results tabs (show mesh, hide geometry)
+                # Update visibility for Results tabs (show mesh with slice)
                 if self.vtk_pre:
-                    self._show_mesh_objects_only()
+                    self._show_mesh_objects()
+                    self._show_slice_toolbar("mesh")
                 return
         else:
             # Top-level item
@@ -178,25 +179,14 @@ class CenterWidget(QWidget):
             if self.vtk_pre:
                 # Check if this is a top-level item or submenu item
                 # For submenu items, always show mesh and hide geometry
-                if parent_text:
-                    # Submenu item (Setup, Solution) - show mesh, hide geometry
-                    self._show_mesh_objects_only()
-                    self._hide_slice_toolbar()
-                elif item_text == "Geometry":
-                    # Show geometry STL, hide mesh
+                if item_text == "Geometry" and not parent_text:
+                    # Show geometry STL, hide mesh, show geometry clip toolbar
                     self._show_geometry_objects()
-                    # Show geometry slice toolbar
                     self._show_slice_toolbar("geometry")
-                elif item_text == "Mesh Generation":
-                    # Hide geometry STL, show mesh
-                    self._show_mesh_objects()
-                    # Show mesh slice toolbar
-                    self._show_slice_toolbar("mesh")
                 else:
-                    # Other top-level tabs (Run, etc.) - show mesh, hide STL and slice controls
-                    self._show_mesh_objects_only()
-                    # Hide slice toolbar
-                    self._hide_slice_toolbar()
+                    # All other tabs - show mesh with slice
+                    self._show_mesh_objects()
+                    self._show_slice_toolbar("mesh")
 
     def _show_geometry_objects(self):
         """Show geometry group objects, hide mesh group objects."""

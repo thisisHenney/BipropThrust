@@ -37,6 +37,16 @@ class PostView:
         # Track if results are loaded
         self._results_loaded = False
 
+        # 케이스 경로 등록 (Refresh 버튼용)
+        self._register_case_path()
+
+    def _register_case_path(self):
+        """5.CHTFCase 경로를 PostprocessWidget에 등록."""
+        if not self.vtk_post or not self.case_data.path:
+            return
+        chtf_case = Path(self.case_data.path) / "5.CHTFCase"
+        self.vtk_post.set_case_path(str(chtf_case))
+
     def load_results(self) -> bool:
         """
         Load simulation results from 5.CHTFCase folder.
@@ -75,13 +85,8 @@ class PostView:
         if not has_results:
             return False
 
-        # Create .foam file if not exists
-        foam_file = chtf_case / "case.foam"
-        if not foam_file.exists():
-            foam_file.touch()
-
-        # Load OpenFOAM case into vtk_post
-        self.vtk_post.load_foam(str(foam_file))
+        # Load OpenFOAM case into vtk_post (직접 케이스 폴더 경로 전달)
+        self.vtk_post.load_foam_file(str(chtf_case))
 
         # Configure slice view (Z=0 plane)
         self._configure_slice()
