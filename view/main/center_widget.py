@@ -8,7 +8,7 @@ Uses Qt Designer generated UI file (center_form_ui.py).
 
 from pathlib import Path
 
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QWidget, QGroupBox, QTreeWidget
 from PySide6.QtCore import Qt
 
 from common.app_context import AppContext
@@ -51,6 +51,10 @@ class CenterWidget(QWidget):
         self.ui = Ui_Center()
         self.ui.setupUi(self)
 
+        # Clear hardcoded light-theme styles from auto-generated UI
+        # (global dark theme from view.style.theme handles all styling)
+        self._clear_designer_styles()
+
         # Get services from context
         self.exec_widget = context.get("exec") if context else None
         self.vtk_pre = context.get("vtk_pre") if context else None
@@ -89,6 +93,13 @@ class CenterWidget(QWidget):
         # self.panel_views["materials"] = MaterialsView(self)
         # self.panel_views["spray_mmh"] = SprayMMHView(self)
         # self.panel_views["spray_nto"] = SprayNTOView(self)
+
+    def _clear_designer_styles(self) -> None:
+        """Clear hardcoded light-theme styles from Qt Designer generated UI."""
+        for tree in self.findChildren(QTreeWidget):
+            tree.setStyleSheet("")
+        for gb in self.findChildren(QGroupBox):
+            gb.setStyleSheet("")
 
     def _connect_signals(self) -> None:
         """Connect tree selection signals."""

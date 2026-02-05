@@ -8,7 +8,10 @@ and component lifecycle.
 import shutil
 from pathlib import Path
 
-from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QLabel, QMessageBox
+from PySide6.QtWidgets import (
+    QMainWindow, QWidget, QVBoxLayout, QLabel, QMessageBox,
+    QGroupBox, QPushButton, QCheckBox, QComboBox, QProgressBar
+)
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction
 
@@ -145,6 +148,13 @@ class MainWindow(QMainWindow):
         # Execution widget (log output)
         self.exec_widget = ExecWidget(self)
         self.context.register("exec", self.exec_widget)
+
+        # Clear hardcoded light-theme styles from exec_widget UI
+        for w in self.exec_widget.findChildren(
+            (QGroupBox, QPushButton, QCheckBox, QComboBox, QProgressBar)
+        ):
+            if w.styleSheet():
+                w.setStyleSheet("")
 
         # Connect to statusbar
         self.exec_widget.connect_to_statusbar(self.statusBar())

@@ -22,6 +22,7 @@ from nextlib.utils.single_instance import SingleInstance
 
 from common.app_data import app_data
 from view.main.main_window import MainWindow
+from view.style.theme import apply_theme
 
 
 def qt_message_handler(_msg_type, _context, message):
@@ -71,6 +72,9 @@ class BipropThrustApp:
         self.app.setApplicationName(app_data.name)
         self.app.setApplicationVersion(app_data.version)
         self.app.setOrganizationName("NEXTfoam")
+
+        # Apply professional dark theme
+        apply_theme(self.app)
 
         # Prevent duplicate instances
         self._single_instance = SingleInstance(f"com.nextfoam.{app_data.name}")
