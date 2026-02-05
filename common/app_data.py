@@ -43,6 +43,10 @@ class AppData:
     # Window geometry (saved/restored across sessions)
     window_geometry: dict = field(default_factory=dict, init=False)
 
+    # Parallel execution settings (saved/restored across sessions)
+    parallel_mesh_enabled: bool = field(default=True, init=False)
+    parallel_run_enabled: bool = field(default=True, init=False)
+
     # Platform-specific user paths
     _user_path_win: str = field(default="", init=False, repr=False)
     _user_path_linux: str = field(default="", init=False, repr=False)
@@ -136,6 +140,7 @@ class AppData:
             safe_fields = {
                 "name", "version",
                 "window_geometry",
+                "parallel_mesh_enabled", "parallel_run_enabled",
             }
             for k, v in data.items():
                 if k in safe_fields:

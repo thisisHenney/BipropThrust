@@ -9,6 +9,7 @@ Usage:
 """
 
 import sys
+import traceback
 from pathlib import Path
 from datetime import datetime
 
@@ -17,6 +18,17 @@ sys.path.insert(0, '/home/test/lib')
 
 from PySide6.QtWidgets import QApplication, QMessageBox
 from PySide6.QtCore import Qt
+
+
+def _global_excepthook(exc_type, exc_value, exc_tb):
+    """Global exception hook - print full traceback to terminal."""
+    print("\n" + "=" * 60)
+    print("[UNHANDLED EXCEPTION]")
+    traceback.print_exception(exc_type, exc_value, exc_tb)
+    print("=" * 60 + "\n")
+
+
+sys.excepthook = _global_excepthook
 
 from nextlib.utils.single_instance import SingleInstance
 
@@ -155,7 +167,7 @@ class BipropThrustApp:
                     shutil.copy2(src, dst)
 
         except Exception:
-            pass
+            traceback.print_exc()
 
     def start(self) -> None:
         """
@@ -218,7 +230,7 @@ class BipropThrustApp:
                     deleted_count += 1
 
         except Exception:
-            pass
+            traceback.print_exc()
 
 
 def main():

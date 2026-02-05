@@ -5,6 +5,7 @@ This view connects to UI widgets defined in center_form_ui.py
 and implements geometry file management functionality.
 """
 
+import traceback
 from pathlib import Path
 from PySide6.QtWidgets import (
     QProgressDialog, QApplication, QToolBar, QLabel, QComboBox, QSlider, QCheckBox, QPushButton
@@ -76,6 +77,7 @@ class GeometryView:
 
         # Create toolbar
         clip_toolbar = QToolBar("Clip Controls", self.vtk_pre)
+        clip_toolbar.setObjectName("vtkBottomBar")
         clip_toolbar.setFloatable(True)
         clip_toolbar.setMovable(True)
 
@@ -145,9 +147,9 @@ class GeometryView:
         self.ui.button_geometry_apply.clicked.connect(self._on_set_apply_clicked)
         self.ui.button_geometry_cancel.clicked.connect(self._on_cancel_clicked)
 
-        # Change button text to "Position Picking Mode" and keep enabled
+        # Change button text to "Position Picking Mode" - disabled until tree item selected
         self.ui.button_geometry_apply.setText("Position Picking Mode")
-        self.ui.button_geometry_apply.setEnabled(True)
+        self.ui.button_geometry_apply.setEnabled(False)
 
         # Hide Cancel and Reset buttons by default
         self.ui.button_geometry_cancel.hide()
@@ -192,6 +194,7 @@ class GeometryView:
             try:
                 shutil.copy2(src_file, dst_file)
             except Exception:
+                traceback.print_exc()
                 continue
 
             # Add to case_data and tree
@@ -361,7 +364,7 @@ class GeometryView:
             try:
                 stl_file.unlink()
             except Exception:
-                pass
+                traceback.print_exc()
 
         self.case_data.remove_geometry(obj_name)
         self.case_data.save()
@@ -380,19 +383,42 @@ class GeometryView:
                     if pos is not None:
                         obj_name = self.tree.get_text(pos)
 
-                        # Get selected object bounds
+                        # Get selected object bounds, or combined bounds of all geometries
                         obj = self.vtk_pre.obj_manager.find_by_name(obj_name)
                         if obj:
                             bounds = obj.actor.GetBounds()
-                            obj_size = (
-                                bounds[1] - bounds[0],
-                                bounds[3] - bounds[2],
-                                bounds[5] - bounds[4]
-                            )
+                        else:
+                            # obj가 없으면 (fluid 등) 이전 VTK 선택 초기화
+                            self.vtk_pre.obj_manager.clear_selection()
 
-                            # Calculate probe box size as 140% of object bounds
-                            scale = 1.4
-                            probe_box_size = tuple(s * scale for s in obj_size)
+                            # Use combined bounding box of all geometry objects
+                            all_objs = self.vtk_pre.obj_manager.get_all()
+                            geom_objs = [o for o in all_objs
+                                         if hasattr(o, 'group') and o.group == "geometry"]
+                            if not geom_objs:
+                                return
+                            combined = [float('inf'), float('-inf'),
+                                        float('inf'), float('-inf'),
+                                        float('inf'), float('-inf')]
+                            for go in geom_objs:
+                                gb = go.actor.GetBounds()
+                                combined[0] = min(combined[0], gb[0])
+                                combined[1] = max(combined[1], gb[1])
+                                combined[2] = min(combined[2], gb[2])
+                                combined[3] = max(combined[3], gb[3])
+                                combined[4] = min(combined[4], gb[4])
+                                combined[5] = max(combined[5], gb[5])
+                            bounds = tuple(combined)
+
+                        obj_size = (
+                            bounds[1] - bounds[0],
+                            bounds[3] - bounds[2],
+                            bounds[5] - bounds[4]
+                        )
+
+                        # Calculate probe box size as 140% of object bounds
+                        scale = 1.4
+                        probe_box_size = tuple(s * scale for s in obj_size)
 
                         # Get saved probe position, or use object center if none
                         probe_pos = self.case_data.get_geometry_probe_position(obj_name)
@@ -433,7 +459,11 @@ class GeometryView:
                         from vtkmodules.vtkCommonTransforms import vtkTransform
                         probe_tool._saved_bounds = new_bounds
                         probe_tool._saved_transform = vtkTransform()  # Identity (no rotation)
-                        probe_tool._saved_selection_ids = self.vtk_pre.obj_manager.selected_ids.copy()
+                        # obj가 없으면 (fluid 등) 선택 ID를 비워서 이전 선택 상태 방지
+                        if obj:
+                            probe_tool._saved_selection_ids = self.vtk_pre.obj_manager.selected_ids.copy()
+                        else:
+                            probe_tool._saved_selection_ids = set()
 
                         # Now show() will restore our saved state with correct position
                         probe_tool.show()
@@ -490,13 +520,35 @@ class GeometryView:
                     if probe_pos and probe_pos != (0.0, 0.0, 0.0):
                         x, y, z = probe_pos
                     else:
-                        # No saved position - use object center
+                        # No saved position - use object center or combined bounds
                         obj = self.vtk_pre.obj_manager.find_by_name(obj_name)
                         if obj:
                             bounds = obj.actor.GetBounds()
+                        else:
+                            all_objs = self.vtk_pre.obj_manager.get_all()
+                            geom_objs = [o for o in all_objs
+                                         if hasattr(o, 'group') and o.group == "geometry"]
+                            if geom_objs:
+                                combined = [float('inf'), float('-inf'),
+                                            float('inf'), float('-inf'),
+                                            float('inf'), float('-inf')]
+                                for go in geom_objs:
+                                    gb = go.actor.GetBounds()
+                                    combined[0] = min(combined[0], gb[0])
+                                    combined[1] = max(combined[1], gb[1])
+                                    combined[2] = min(combined[2], gb[2])
+                                    combined[3] = max(combined[3], gb[3])
+                                    combined[4] = min(combined[4], gb[4])
+                                    combined[5] = max(combined[5], gb[5])
+                                bounds = tuple(combined)
+                            else:
+                                bounds = None
+                        if bounds:
                             x = (bounds[0] + bounds[1]) / 2
                             y = (bounds[2] + bounds[3]) / 2
                             z = (bounds[4] + bounds[5]) / 2
+                        else:
+                            x, y, z = 0.0, 0.0, 0.0
 
                     # Update line editors
                     self.ui.edit_input_position_x.setText(f"{x:.4f}")
@@ -583,9 +635,9 @@ class GeometryView:
             self.ui.edit_input_position_x.setText("0")
             self.ui.edit_input_position_y.setText("0")
             self.ui.edit_input_position_z.setText("0")
-            # Enable Input Position group and Set button
+            # Disable Position Picking button when nothing is selected
             self.ui.AdvancedGroupBox.setEnabled(True)
-            self.ui.button_geometry_apply.setEnabled(True)
+            self.ui.button_geometry_apply.setEnabled(False)
         elif selected_count == 1:
             # Enable Input Position group and Set button for single selection
             self.ui.AdvancedGroupBox.setEnabled(True)
@@ -729,9 +781,9 @@ class GeometryView:
             self.ui.edit_input_position_x.setText("0")
             self.ui.edit_input_position_y.setText("0")
             self.ui.edit_input_position_z.setText("0")
-            # Enable Input Position group and Set button
+            # Disable Position Picking button when nothing is selected
             self.ui.AdvancedGroupBox.setEnabled(True)
-            self.ui.button_geometry_apply.setEnabled(True)
+            self.ui.button_geometry_apply.setEnabled(False)
         elif selected_count == 1:
             # Enable Input Position group and Set button for single selection
             self.ui.AdvancedGroupBox.setEnabled(True)

@@ -121,6 +121,13 @@ class CenterWidget(QWidget):
 
         item = selected_items[0]
 
+        # If a parent item with children is clicked, expand and select first child
+        if item.childCount() > 0:
+            self.ui.treeWidget.expandItem(item)
+            first_child = item.child(0)
+            self.ui.treeWidget.setCurrentItem(first_child)
+            return  # setCurrentItem triggers this method again with the child
+
         # Get item text to determine which page to show
         item_text = item.text(0)
         parent = item.parent()

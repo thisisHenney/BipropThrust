@@ -8,6 +8,7 @@ and implements OpenFOAM simulation execution functionality.
 import re
 import sys
 import subprocess
+import traceback
 from datetime import datetime
 from pathlib import Path
 
@@ -74,12 +75,18 @@ class RunView:
         self.ui.button_stop.setEnabled(False)
         self.ui.button_pause.setEnabled(False)
 
+        self.ui.groupBox_19.toggled.connect(self._on_parallel_run_toggled)
+
         # Connect comboBox_7 to enable/disable comboBox_10
         self.ui.comboBox_7.currentIndexChanged.connect(self._on_combustion_changed)
 
         # Connect exec_widget signals for process status
         if self.exec_widget:
             self.exec_widget.sig_proc_status.connect(self._on_proc_status_changed)
+
+    def _on_parallel_run_toggled(self, checked: bool):
+        """Save parallel run checkbox state to app_data."""
+        self.app_data.parallel_run_enabled = checked
 
     def _load_number_of_subdomains(self):
         """Load numberOfSubdomains from 5.CHTFCase/system/decomposeParDict."""
@@ -99,7 +106,7 @@ class RunView:
                     self.ui.edit_number_of_subdomains_2.setText(match.group(1))
                     return
             except Exception:
-                pass
+                traceback.print_exc()
 
         # Set default value if file doesn't exist or couldn't read
         self.ui.edit_number_of_subdomains_2.setText(str(default_value))
@@ -125,7 +132,7 @@ class RunView:
             )
             decompose_dict_path.write_text(new_content)
         except Exception:
-            pass
+            traceback.print_exc()
 
     def _on_edit_hostfile_clicked(self):
         """Handle Edit host file button click - open hosts file in text editor."""
@@ -144,7 +151,7 @@ class RunView:
             else:
                 subprocess.Popen(["gedit", str(hosts_path)])
         except Exception:
-            pass
+            traceback.print_exc()
 
     def _on_combustion_changed(self, index):
         """Handle combustion comboBox_7 change - enable/disable comboBox_10."""
@@ -164,6 +171,7 @@ class RunView:
         self.ui.button_mesh_generate.setEnabled(True)  # Re-enable Mesh Generate
         self.ui.edit_run_name.setText("-")  # Reset task name
         self.ui.edit_run_status.setText("Stopped")
+        self.ui.edit_run_finished.setText(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
         self._stop_log_monitoring()
 
     def _on_pause_clicked(self):
@@ -214,12 +222,33 @@ class RunView:
             self.exec_widget.set_function_after_error(self._on_simulation_error)
             self.exec_widget.set_function_restore_ui(self._restore_ui_after_run)
 
-            # Create temporary run script to avoid quote escaping issues
-            # Run Allclean first, then Allrun
+            # Create modified Allrun based on hostfile checkbox
+            use_hostfile = self.ui.groupBox_19.isChecked()
+            allrun_content = allrun_path.read_text(encoding='utf-8')
+
+            if use_hostfile:
+                # Ensure --hostfile is used (replace localhost fallback if present)
+                allrun_content = allrun_content.replace(
+                    '--host localhost --oversubscribe',
+                    '--hostfile system/hosts'
+                )
+            else:
+                # Replace --hostfile with localhost execution
+                allrun_content = allrun_content.replace(
+                    '--hostfile system/hosts',
+                    '--host localhost --oversubscribe'
+                )
+
+            # Write modified Allrun as temporary file
+            temp_allrun = case_path / "_Allrun_gui"
+            temp_allrun.write_text(allrun_content, encoding='utf-8')
+            temp_allrun.chmod(0o755)
+
+            # Create temporary run script
             script_content = """#!/bin/bash
 source /usr/lib/openfoam/openfoam2212/etc/bashrc
 ./Allclean
-./Allrun
+./_Allrun_gui
 """
             script_path = case_path / "run_simulation.sh"
             script_path.write_text(script_content, encoding='utf-8')
@@ -246,7 +275,8 @@ source /usr/lib/openfoam/openfoam2212/etc/bashrc
             # Update process info display
             self.ui.edit_run_name.setText("Solver")  # Show task name
             self.ui.edit_run_id.setText("-")
-            self.ui.edit_ru_started.setText(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+            self.ui.edit_run_started.setText(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+            self.ui.edit_run_finished.setText("-")
             self.ui.edit_run_status.setText("Running...")
 
             # Start log monitoring
@@ -299,7 +329,7 @@ source /usr/lib/openfoam/openfoam2212/etc/bashrc
             try:
                 self.residual_graph.load_file(str(self._log_file_path))
             except Exception:
-                pass
+                traceback.print_exc()
 
     def _on_simulation_finished(self):
         """Handle simulation completion."""
@@ -313,6 +343,7 @@ source /usr/lib/openfoam/openfoam2212/etc/bashrc
         self.ui.button_mesh_generate.setEnabled(True)  # Re-enable Mesh Generate
         self.ui.edit_run_name.setText("-")  # Reset task name
         self.ui.edit_run_status.setText("Finished")
+        self.ui.edit_run_finished.setText(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
     def _on_simulation_error(self):
         """Handle simulation error."""
@@ -325,6 +356,7 @@ source /usr/lib/openfoam/openfoam2212/etc/bashrc
         self.ui.button_mesh_generate.setEnabled(True)  # Re-enable Mesh Generate
         self.ui.edit_run_name.setText("-")  # Reset task name
         self.ui.edit_run_status.setText("Error")
+        self.ui.edit_run_finished.setText(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
     def _restore_ui_after_run(self):
         """Restore UI after simulation ends."""
@@ -338,6 +370,7 @@ source /usr/lib/openfoam/openfoam2212/etc/bashrc
 
         # Update status to show completion
         self.ui.edit_run_status.setText("Ready")
+        self.ui.edit_run_finished.setText(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
         self._stop_log_monitoring()
         self._update_residual_graph()
@@ -409,7 +442,7 @@ source /usr/lib/openfoam/openfoam2212/etc/bashrc
             return True
 
         except Exception:
-            pass
+            traceback.print_exc()
             return False
 
     def _update_turbulence_properties(self, case_path: Path):
@@ -429,7 +462,7 @@ source /usr/lib/openfoam/openfoam2212/etc/bashrc
             foam_file.save()
 
         except Exception:
-            pass
+            traceback.print_exc()
     def _update_surface_film_properties(self, case_path: Path):
         """Update surfaceFilmProperties with surfaceFilmModel and phaseChangeModel."""
         try:
@@ -454,7 +487,7 @@ source /usr/lib/openfoam/openfoam2212/etc/bashrc
             foam_file.save()
 
         except Exception:
-            pass
+            traceback.print_exc()
     def _update_combustion_properties(self, case_path: Path):
         """Update combustionProperties with combustionModel from comboBox_7."""
         try:
@@ -473,7 +506,7 @@ source /usr/lib/openfoam/openfoam2212/etc/bashrc
             foam_file.save()
 
         except Exception:
-            pass
+            traceback.print_exc()
     def _update_thermophysical_properties(self, case_path: Path):
         """Update thermophysicalProperties CHEMKINFile and thermo type."""
         try:
@@ -524,9 +557,12 @@ source /usr/lib/openfoam/openfoam2212/etc/bashrc
                 f.write(content)
 
         except Exception:
-            pass
+            traceback.print_exc()
     def load_data(self):
         """Load run settings and parameters."""
+
+        # Restore parallel execution checkbox from app_data
+        self.ui.groupBox_19.setChecked(self.app_data.parallel_run_enabled)
 
         # Load numberOfSubdomains from decomposeParDict
         self._load_number_of_subdomains()
@@ -576,7 +612,7 @@ source /usr/lib/openfoam/openfoam2212/etc/bashrc
             self._load_control_dict(system_root)
 
         except Exception:
-            pass
+            traceback.print_exc()
     def _load_turbulence_properties(self, case_path: Path):
         """Load RAS.RASModel from turbulenceProperties to comboBox_2."""
         try:
@@ -598,7 +634,7 @@ source /usr/lib/openfoam/openfoam2212/etc/bashrc
                         break
 
         except Exception:
-            pass
+            traceback.print_exc()
     def _load_surface_film_properties(self, case_path: Path):
         """Load surfaceFilmModel and phaseChangeModel from surfaceFilmProperties."""
         try:
@@ -624,7 +660,7 @@ source /usr/lib/openfoam/openfoam2212/etc/bashrc
                 self.ui.comboBox_4.setCurrentIndex(0 if is_on else 1)
 
         except Exception:
-            pass
+            traceback.print_exc()
     def _load_combustion_properties(self, case_path: Path):
         """Load combustionModel from combustionProperties to comboBox_7."""
         try:
@@ -643,7 +679,7 @@ source /usr/lib/openfoam/openfoam2212/etc/bashrc
                 self.ui.comboBox_7.setCurrentIndex(0 if is_on else 1)
 
         except Exception:
-            pass
+            traceback.print_exc()
     def _load_thermophysical_properties(self, case_path: Path):
         """Load CHEMKINFile and thermo type from thermophysicalProperties."""
         try:
@@ -687,7 +723,7 @@ source /usr/lib/openfoam/openfoam2212/etc/bashrc
                         self.ui.comboBox_6.setCurrentIndex(-1)  # Clear/empty
 
         except Exception:
-            pass
+            traceback.print_exc()
     def _update_fluid_initial_conditions(self, fluid_path: Path):
         """Update fluid initial conditions (p, T, U files)."""
         try:
@@ -718,7 +754,7 @@ source /usr/lib/openfoam/openfoam2212/etc/bashrc
                 self._update_internal_field_vector(u_file, vx, vy, vz)
 
         except Exception:
-            pass
+            traceback.print_exc()
     def _update_internal_field_scalar(self, file_path: Path, value):
         """Update internalField uniform scalar value using regex."""
         with open(file_path, 'r', encoding='utf-8') as f:
@@ -769,7 +805,7 @@ source /usr/lib/openfoam/openfoam2212/etc/bashrc
                     self._update_solid_t_file(t_file, solid_folder.name, solid_temp, solid_h, solid_type)
 
         except Exception:
-            pass
+            traceback.print_exc()
     def _update_solid_t_file(self, file_path: Path, solid_name: str, temp: float, h_value: str, bc_type: str):
         """Update solid T file with temperature, h value, and boundary type."""
         with open(file_path, 'r', encoding='utf-8') as f:
@@ -828,7 +864,7 @@ source /usr/lib/openfoam/openfoam2212/etc/bashrc
                     self.ui.edit_fluid_v_z.setText(str(vz))
 
         except Exception:
-            pass
+            traceback.print_exc()
     def _read_internal_field_scalar(self, file_path: Path):
         """Read internalField uniform scalar value."""
         try:
@@ -840,7 +876,7 @@ source /usr/lib/openfoam/openfoam2212/etc/bashrc
             if match:
                 return float(match.group(1))
         except Exception:
-            pass
+            traceback.print_exc()
         return None
 
     def _read_internal_field_vector(self, file_path: Path):
@@ -854,7 +890,7 @@ source /usr/lib/openfoam/openfoam2212/etc/bashrc
             if match:
                 return float(match.group(1)), float(match.group(2)), float(match.group(3))
         except Exception:
-            pass
+            traceback.print_exc()
         return None, None, None
 
     def _load_solid_initial_conditions(self, orig_path: Path):
@@ -908,7 +944,7 @@ source /usr/lib/openfoam/openfoam2212/etc/bashrc
                         break
 
         except Exception:
-            pass
+            traceback.print_exc()
     def _update_spray_mmh_properties(self, case_path: Path):
         """Update sprayMMHCloudProperties with spray settings from UI."""
         try:
@@ -955,7 +991,7 @@ source /usr/lib/openfoam/openfoam2212/etc/bashrc
                 f.write(content)
 
         except Exception:
-            pass
+            traceback.print_exc()
     def _update_spray_nto_properties(self, case_path: Path):
         """Update sprayNTOCloudProperties with spray settings from UI."""
         try:
@@ -1002,7 +1038,7 @@ source /usr/lib/openfoam/openfoam2212/etc/bashrc
                 f.write(content)
 
         except Exception:
-            pass
+            traceback.print_exc()
     def _load_spray_mmh_properties(self, case_path: Path):
         """Load sprayMMHCloudProperties settings to UI."""
         try:
@@ -1066,7 +1102,7 @@ source /usr/lib/openfoam/openfoam2212/etc/bashrc
                 self.ui.edit_spray_mmh_13.setText(match.group(1))
 
         except Exception:
-            pass
+            traceback.print_exc()
     def _load_spray_nto_properties(self, case_path: Path):
         """Load sprayNTOCloudProperties settings to UI."""
         try:
@@ -1130,7 +1166,7 @@ source /usr/lib/openfoam/openfoam2212/etc/bashrc
                 self.ui.edit_spray_nto_13.setText(match.group(1))
 
         except Exception:
-            pass
+            traceback.print_exc()
     def _update_fv_schemes(self, system_path: Path):
         """Update fvSchemes with numerical scheme settings from UI."""
         try:
@@ -1204,7 +1240,7 @@ source /usr/lib/openfoam/openfoam2212/etc/bashrc
                 f.write(content)
 
         except Exception:
-            pass
+            traceback.print_exc()
     def _load_fv_schemes(self, system_path: Path):
         """Load fvSchemes settings to UI."""
         try:
@@ -1254,7 +1290,7 @@ source /usr/lib/openfoam/openfoam2212/etc/bashrc
                 self._set_combo_text(self.ui.combo_numerical_5, yi_scheme)
 
         except Exception:
-            pass
+            traceback.print_exc()
     def _update_fv_solution(self, system_path: Path):
         """Update fvSolution with PIMPLE settings from UI."""
         try:
@@ -1301,7 +1337,7 @@ source /usr/lib/openfoam/openfoam2212/etc/bashrc
                 f.write(content)
 
         except Exception:
-            pass
+            traceback.print_exc()
     def _load_fv_solution(self, system_path: Path):
         """Load fvSolution settings to UI."""
         try:
@@ -1334,7 +1370,7 @@ source /usr/lib/openfoam/openfoam2212/etc/bashrc
                 self._set_combo_text(self.ui.combo_numerical_6, flux_scheme)
 
         except Exception:
-            pass
+            traceback.print_exc()
     def _set_combo_text(self, combo, text: str):
         """Set combobox to item matching the given text."""
         for i in range(combo.count()):
@@ -1436,7 +1472,7 @@ source /usr/lib/openfoam/openfoam2212/etc/bashrc
                 f.write(content)
 
         except Exception:
-            pass
+            traceback.print_exc()
 
     def _load_control_dict(self, system_path: Path):
         """Load controlDict settings to UI."""
@@ -1501,4 +1537,4 @@ source /usr/lib/openfoam/openfoam2212/etc/bashrc
                 self.ui.edit_run_8.setText(match.group(1))
 
         except Exception:
-            pass
+            traceback.print_exc()

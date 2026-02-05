@@ -1,92 +1,215 @@
 """
-Application Theme - Professional Dark Theme
+Application Theme - Light/Dark Theme Toggle
 
-Sets Fusion style with custom dark QPalette and global stylesheet.
+Supports switching between professional light and dark themes at runtime.
 """
 
+import tempfile
+from pathlib import Path
+
 from PySide6.QtWidgets import QApplication
-from PySide6.QtGui import QPalette, QColor
-from PySide6.QtCore import Qt
+from PySide6.QtGui import QPalette, QColor, QPixmap, QPainter, QPolygonF, QPen
+from PySide6.QtCore import Qt, QPointF
 
 
-# Color constants
-_WINDOW = "#2d2d30"
-_WINDOW_DARKER = "#252526"
-_BASE = "#1e1e1e"
-_ALT_BASE = "#2d2d30"
-_TEXT = "#cccccc"
-_TEXT_BRIGHT = "#ffffff"
-_TEXT_DIM = "#808080"
-_BUTTON = "#3c3c3c"
-_BUTTON_HOVER = "#505050"
-_BORDER = "#555555"
-_BORDER_LIGHT = "#666666"
-_ACCENT = "#3574c4"
-_ACCENT_HOVER = "#4a8ad4"
-_HIGHLIGHT = "#264f78"
-_LINK = "#4a9cd6"
-_ERROR = "#f44747"
-_SUCCESS = "#4ec9b0"
+# Current theme mode
+_current_mode = "light"
 
 
-def apply_theme(app: QApplication) -> None:
-    """Apply professional dark theme to the application."""
+# ===== Light Theme Colors =====
+_LIGHT = {
+    "window":         "#f0f0f0",
+    "base":           "#ffffff",
+    "alt_base":       "#f5f7fa",
+    "text":           "#1e1e1e",
+    "text_dim":       "#888888",
+    "text_disabled":  "#a0a0a0",
+    "button":         "#e8e8e8",
+    "button_hover":   "#d0d8e0",
+    "border":         "#c0c0c0",
+    "border_light":   "#d8d8d8",
+    "accent":         "#3574c4",
+    "accent_hover":   "#4a8ad4",
+    "highlight":      "#3574c4",
+    "highlight_text": "#ffffff",
+    "link":           "#2a6cb6",
+    "status_bg":      "#3574c4",
+    "light":          "#ffffff",
+    "midlight":       "#e8ecf0",
+    "mid":            "#c0c0c0",
+    "dark":           "#a0a0a0",
+    "shadow":         "#808080",
+    "tooltip_bg":     "#ffffee",
+    "tree_hover":       "#e0eaf5",
+    "tree_sel_start":   "#6ea1f1",
+    "tree_sel_end":     "#3d87bf",
+    "tree_sel2_start":  "#6b9be8",
+    "tree_sel2_end":    "#577fbf",
+    "btn_grad_top":     "#fcfcfc",
+    "btn_grad_bot":     "#e8e8e8",
+    "btn_hover_top":    "#e5f1fb",
+    "btn_hover_bot":    "#c1d8f0",
+    "btn_disabled_bg":  "#eeeeee",
+    "btn_disabled_text":"#a0a0a0",
+    "btn_pressed_bg":   "#2a5fa0",
+    "prog_start":       "#1c76c1",
+    "prog_end":         "#8ccbff",
+    "scroll_handle":    "#b0b0b0",
+    "scroll_hover":     "#909090",
+    "tool_pressed":     "#b0c8e0",
+    "tool_checked":     "#cce0f0",
+    "panel_bg":         "#f8f8f8",
+    "base_disabled":    "#f0f0f0",
+    "btn_disabled_base":"#e0e0e0",
+    # VTK
+    "vtk_bg1": (0.32, 0.34, 0.43),
+    "vtk_bg2": (0.82, 0.87, 0.97),
+    "vtk_post_bg1": (0.65, 0.65, 0.70),
+    "vtk_post_bg2": (0.40, 0.40, 0.50),
+    # Graph
+    "graph_bg":   "w",
+    "graph_axis": "#333333",
+}
+
+# ===== Dark Theme Colors =====
+_DARK = {
+    "window":         "#2d2d30",
+    "base":           "#1e1e1e",
+    "alt_base":       "#2d2d30",
+    "text":           "#cccccc",
+    "text_dim":       "#808080",
+    "text_disabled":  "#707070",
+    "button":         "#3c3c3c",
+    "button_hover":   "#505050",
+    "border":         "#555555",
+    "border_light":   "#666666",
+    "accent":         "#3574c4",
+    "accent_hover":   "#4a8ad4",
+    "highlight":      "#264f78",
+    "highlight_text": "#ffffff",
+    "link":           "#4a9cd6",
+    "status_bg":      "#3574c4",
+    "light":          "#505050",
+    "midlight":       "#404040",
+    "mid":            "#353535",
+    "dark":           "#1a1a1a",
+    "shadow":         "#141414",
+    "tooltip_bg":     "#2d2d30",
+    "tree_hover":       "#505050",
+    "tree_sel_start":   "#264f78",
+    "tree_sel_end":     "#264f78",
+    "tree_sel2_start":  "#264f78",
+    "tree_sel2_end":    "#264f78",
+    "btn_grad_top":     "#444444",
+    "btn_grad_bot":     "#3c3c3c",
+    "btn_hover_top":    "#505050",
+    "btn_hover_bot":    "#484848",
+    "btn_disabled_bg":  "#333333",
+    "btn_disabled_text":"#707070",
+    "btn_pressed_bg":   "#264f78",
+    "prog_start":       "#3574c4",
+    "prog_end":         "#5ba3d9",
+    "scroll_handle":    "#555555",
+    "scroll_hover":     "#777777",
+    "tool_pressed":     "#264f78",
+    "tool_checked":     "#264f78",
+    "panel_bg":         "#252528",
+    "base_disabled":    "#282828",
+    "btn_disabled_base":"#333333",
+    # VTK
+    "vtk_bg1": (0.15, 0.15, 0.18),
+    "vtk_bg2": (0.25, 0.27, 0.33),
+    "vtk_post_bg1": (0.15, 0.15, 0.18),
+    "vtk_post_bg2": (0.25, 0.27, 0.33),
+    # Graph
+    "graph_bg":   "#1e1e1e",
+    "graph_axis": "#cccccc",
+}
+
+_THEMES = {"light": _LIGHT, "dark": _DARK}
+
+
+def get_current_mode() -> str:
+    return _current_mode
+
+
+def get_colors(mode: str = None) -> dict:
+    return _THEMES[mode or _current_mode]
+
+
+def apply_theme(app: QApplication, mode: str = "light") -> None:
+    global _current_mode
+    _current_mode = mode
+    c = _THEMES[mode]
     app.setStyle("Fusion")
-    _apply_palette(app)
-    app.setStyleSheet(_build_stylesheet())
+    _apply_palette(app, c)
+    app.setStyleSheet(_build_stylesheet(c))
 
 
-def _apply_palette(app: QApplication) -> None:
-    """Set custom dark QPalette."""
+def toggle_theme(app: QApplication) -> str:
+    new_mode = "dark" if _current_mode == "light" else "light"
+    apply_theme(app, new_mode)
+    return new_mode
+
+
+def _apply_palette(app: QApplication, c: dict) -> None:
     p = QPalette()
-
-    # Active colors
-    p.setColor(QPalette.ColorRole.Window, QColor(_WINDOW))
-    p.setColor(QPalette.ColorRole.WindowText, QColor(_TEXT))
-    p.setColor(QPalette.ColorRole.Base, QColor(_BASE))
-    p.setColor(QPalette.ColorRole.AlternateBase, QColor(_ALT_BASE))
-    p.setColor(QPalette.ColorRole.ToolTipBase, QColor(_WINDOW))
-    p.setColor(QPalette.ColorRole.ToolTipText, QColor(_TEXT))
-    p.setColor(QPalette.ColorRole.PlaceholderText, QColor(_TEXT_DIM))
-    p.setColor(QPalette.ColorRole.Text, QColor(_TEXT))
-    p.setColor(QPalette.ColorRole.Button, QColor(_BUTTON))
-    p.setColor(QPalette.ColorRole.ButtonText, QColor(_TEXT))
-    p.setColor(QPalette.ColorRole.BrightText, QColor(_TEXT_BRIGHT))
-    p.setColor(QPalette.ColorRole.Link, QColor(_LINK))
-    p.setColor(QPalette.ColorRole.Highlight, QColor(_HIGHLIGHT))
-    p.setColor(QPalette.ColorRole.HighlightedText, QColor(_TEXT_BRIGHT))
-
-    # Fusion-specific palette roles
-    p.setColor(QPalette.ColorRole.Light, QColor("#505050"))
-    p.setColor(QPalette.ColorRole.Midlight, QColor("#404040"))
-    p.setColor(QPalette.ColorRole.Mid, QColor("#353535"))
-    p.setColor(QPalette.ColorRole.Dark, QColor("#1a1a1a"))
-    p.setColor(QPalette.ColorRole.Shadow, QColor("#141414"))
-
-    # Disabled colors
-    p.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.WindowText, QColor("#707070"))
-    p.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Text, QColor("#707070"))
-    p.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.ButtonText, QColor("#707070"))
-    p.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Base, QColor("#282828"))
-    p.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Button, QColor("#333333"))
-
+    p.setColor(QPalette.ColorRole.Window, QColor(c["window"]))
+    p.setColor(QPalette.ColorRole.WindowText, QColor(c["text"]))
+    p.setColor(QPalette.ColorRole.Base, QColor(c["base"]))
+    p.setColor(QPalette.ColorRole.AlternateBase, QColor(c["alt_base"]))
+    p.setColor(QPalette.ColorRole.ToolTipBase, QColor(c["tooltip_bg"]))
+    p.setColor(QPalette.ColorRole.ToolTipText, QColor(c["text"]))
+    p.setColor(QPalette.ColorRole.PlaceholderText, QColor(c["text_dim"]))
+    p.setColor(QPalette.ColorRole.Text, QColor(c["text"]))
+    p.setColor(QPalette.ColorRole.Button, QColor(c["button"]))
+    p.setColor(QPalette.ColorRole.ButtonText, QColor(c["text"]))
+    p.setColor(QPalette.ColorRole.BrightText, QColor("#ffffff"))
+    p.setColor(QPalette.ColorRole.Link, QColor(c["link"]))
+    p.setColor(QPalette.ColorRole.Highlight, QColor(c["highlight"]))
+    p.setColor(QPalette.ColorRole.HighlightedText, QColor(c["highlight_text"]))
+    p.setColor(QPalette.ColorRole.Light, QColor(c["light"]))
+    p.setColor(QPalette.ColorRole.Midlight, QColor(c["midlight"]))
+    p.setColor(QPalette.ColorRole.Mid, QColor(c["mid"]))
+    p.setColor(QPalette.ColorRole.Dark, QColor(c["dark"]))
+    p.setColor(QPalette.ColorRole.Shadow, QColor(c["shadow"]))
+    p.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.WindowText, QColor(c["text_disabled"]))
+    p.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Text, QColor(c["text_disabled"]))
+    p.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.ButtonText, QColor(c["text_disabled"]))
+    p.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Base, QColor(c["base_disabled"]))
+    p.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Button, QColor(c["btn_disabled_base"]))
     app.setPalette(p)
 
 
-def _build_stylesheet() -> str:
-    """Build global stylesheet string."""
-    return f"""
-        /* ===== QToolTip ===== */
-        QToolTip {{
-            background-color: {_WINDOW_DARKER};
-            color: {_TEXT};
-            border: 1px solid {_BORDER};
-            padding: 4px;
-        }}
+def _generate_combo_arrows(c: dict) -> dict:
+    """Generate small combobox arrow PNGs for the current theme."""
+    tmp = Path(tempfile.gettempdir()) / "bipropthrust_theme"
+    tmp.mkdir(exist_ok=True)
+    arrows = {}
+    for key, color in [("normal", c["text"]), ("disabled", c["text_disabled"])]:
+        sz = 10
+        pixmap = QPixmap(sz, sz)
+        pixmap.fill(QColor(0, 0, 0, 0))
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(QPen(Qt.PenStyle.NoPen))
+        painter.setBrush(QColor(color))
+        painter.drawPolygon(QPolygonF([
+            QPointF(2, 3), QPointF(sz - 2, 3), QPointF(sz / 2, sz - 3)
+        ]))
+        painter.end()
+        path = tmp / f"combo_arrow_{key}.png"
+        pixmap.save(str(path))
+        arrows[key] = str(path).replace('\\', '/')
+    return arrows
 
+
+def _build_stylesheet(c: dict) -> str:
+    arrows = _generate_combo_arrows(c)
+    return f"""
         /* ===== QGroupBox ===== */
         QGroupBox {{
-            border: 1px solid {_BORDER};
+            border: 1px solid {c["border_light"]};
             border-radius: 6px;
             margin-top: 7px;
             padding: 4px;
@@ -96,140 +219,154 @@ def _build_stylesheet() -> str:
             subcontrol-position: top left;
             left: 16px;
             padding: 0 3px;
-            color: {_TEXT};
+            color: {c["text"]};
         }}
 
-        /* ===== QTreeWidget (navigation) ===== */
+        /* ===== QTreeWidget ===== */
         QTreeWidget {{
-            background-color: {_BASE};
-            alternate-background-color: {_ALT_BASE};
+            background-color: {c["base"]};
+            alternate-background-color: {c["alt_base"]};
             show-decoration-selected: 1;
-            border: none;
+            border: 1px solid {c["border_light"]};
             outline: none;
         }}
         QTreeWidget::item {{
             height: 26px;
-            border-right: 1px dotted {_BORDER};
-            color: {_TEXT};
+            border-right: 1px dotted {c["border_light"]};
+            color: {c["text"]};
         }}
         QTreeWidget::item:hover {{
-            background-color: {_BUTTON_HOVER};
+            background-color: {c["tree_hover"]};
             border-radius: 4px;
         }}
         QTreeWidget::item:selected:active {{
-            background-color: {_HIGHLIGHT};
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                stop:0 {c["tree_sel_start"]}, stop:1 {c["tree_sel_end"]});
             border-radius: 4px;
-            color: {_TEXT_BRIGHT};
+            color: {c["highlight_text"]};
         }}
         QTreeWidget::item:selected:!active {{
-            background-color: {_HIGHLIGHT};
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                stop:0 {c["tree_sel2_start"]}, stop:1 {c["tree_sel2_end"]});
             border-radius: 4px;
-            color: {_TEXT};
-        }}
-        QTreeWidget::branch:hover {{
-            background-color: {_BUTTON_HOVER};
+            color: {c["highlight_text"]};
         }}
 
         /* ===== QLineEdit ===== */
         QLineEdit {{
-            background-color: {_BASE};
-            border: 1px solid {_BORDER};
+            background-color: {c["base"]};
+            border: 1px solid {c["border"]};
             border-radius: 3px;
             padding: 3px 6px;
-            color: {_TEXT};
-            selection-background-color: {_HIGHLIGHT};
+            color: {c["text"]};
+            selection-background-color: {c["highlight"]};
+            selection-color: {c["highlight_text"]};
         }}
         QLineEdit:focus {{
-            border: 1px solid {_ACCENT};
+            border: 1px solid {c["accent"]};
         }}
 
         /* ===== QComboBox ===== */
         QComboBox {{
-            background-color: {_BUTTON};
-            border: 1px solid {_BORDER};
+            background-color: {c["base"]};
+            border: 1px solid {c["border"]};
             border-radius: 3px;
             padding: 3px 8px;
-            color: {_TEXT};
+            color: {c["text"]};
             combobox-popup: 0;
         }}
         QComboBox:hover {{
-            border: 1px solid {_ACCENT};
+            border: 1px solid {c["accent"]};
         }}
         QComboBox::drop-down {{
+            subcontrol-origin: padding;
+            subcontrol-position: center right;
+            width: 18px;
             border: none;
-            width: 20px;
+        }}
+        QComboBox::down-arrow {{
+            image: url({arrows["normal"]});
+            width: 10px;
+            height: 10px;
+        }}
+        QComboBox::down-arrow:disabled {{
+            image: url({arrows["disabled"]});
         }}
         QComboBox QAbstractItemView {{
-            background-color: {_WINDOW_DARKER};
-            border: 1px solid {_BORDER};
-            selection-background-color: {_HIGHLIGHT};
-            color: {_TEXT};
+            background-color: {c["base"]};
+            border: 1px solid {c["border"]};
+            selection-background-color: {c["highlight"]};
+            selection-color: {c["highlight_text"]};
+            color: {c["text"]};
         }}
 
         /* ===== QPushButton ===== */
         QPushButton {{
-            background-color: {_BUTTON};
-            border: 1px solid {_BORDER};
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                stop:0 {c["btn_grad_top"]}, stop:1 {c["btn_grad_bot"]});
+            border: 1px solid {c["border"]};
             border-radius: 4px;
             padding: 4px 16px;
-            color: {_TEXT};
+            color: {c["text"]};
             min-height: 20px;
         }}
         QPushButton:hover {{
-            background-color: {_BUTTON_HOVER};
-            border: 1px solid {_ACCENT};
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                stop:0 {c["btn_hover_top"]}, stop:1 {c["btn_hover_bot"]});
+            border: 1px solid {c["accent"]};
         }}
         QPushButton:pressed {{
-            background-color: {_HIGHLIGHT};
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                stop:0 {c["btn_hover_bot"]}, stop:1 {c["btn_hover_top"]});
         }}
         QPushButton:disabled {{
-            background-color: #333333;
-            color: #707070;
-            border: 1px solid #444444;
+            background-color: {c["btn_disabled_bg"]};
+            color: {c["btn_disabled_text"]};
+            border: 1px solid {c["border_light"]};
         }}
 
-        /* ===== Primary Button (Generate, Run, etc.) ===== */
+        /* ===== Primary Button ===== */
         QPushButton[cssClass="primary"] {{
-            background-color: {_ACCENT};
-            border: 1px solid {_ACCENT};
-            color: {_TEXT_BRIGHT};
+            background-color: {c["accent"]};
+            border: 1px solid {c["accent"]};
+            color: {c["highlight_text"]};
         }}
         QPushButton[cssClass="primary"]:hover {{
-            background-color: {_ACCENT_HOVER};
-            border: 1px solid {_ACCENT_HOVER};
+            background-color: {c["accent_hover"]};
+            border: 1px solid {c["accent_hover"]};
         }}
         QPushButton[cssClass="primary"]:pressed {{
-            background-color: #2a5fa0;
+            background-color: {c["btn_pressed_bg"]};
         }}
 
         /* ===== QProgressBar ===== */
         QProgressBar {{
-            border: 1px solid {_BORDER};
+            border: 1px solid {c["border"]};
             border-radius: 4px;
             text-align: center;
-            background-color: {_BASE};
-            color: {_TEXT};
+            background-color: {c["base"]};
+            color: {c["text"]};
         }}
         QProgressBar::chunk {{
             background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                stop:0 {_ACCENT}, stop:1 #5ba3d9);
+                stop:0 {c["prog_start"]}, stop:1 {c["prog_end"]});
             border-radius: 3px;
         }}
 
         /* ===== QScrollBar (vertical) ===== */
         QScrollBar:vertical {{
-            background: {_WINDOW_DARKER};
+            background: {c["window"]};
             width: 12px;
             margin: 0;
         }}
         QScrollBar::handle:vertical {{
-            background: #555555;
+            background: {c["scroll_handle"]};
             min-height: 30px;
             border-radius: 4px;
             margin: 2px;
         }}
         QScrollBar::handle:vertical:hover {{
-            background: #777777;
+            background: {c["scroll_hover"]};
         }}
         QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
             height: 0;
@@ -240,18 +377,18 @@ def _build_stylesheet() -> str:
 
         /* ===== QScrollBar (horizontal) ===== */
         QScrollBar:horizontal {{
-            background: {_WINDOW_DARKER};
+            background: {c["window"]};
             height: 12px;
             margin: 0;
         }}
         QScrollBar::handle:horizontal {{
-            background: #555555;
+            background: {c["scroll_handle"]};
             min-width: 30px;
             border-radius: 4px;
             margin: 2px;
         }}
         QScrollBar::handle:horizontal:hover {{
-            background: #777777;
+            background: {c["scroll_hover"]};
         }}
         QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
             width: 0;
@@ -262,22 +399,34 @@ def _build_stylesheet() -> str:
 
         /* ===== QTextEdit ===== */
         QTextEdit {{
-            background-color: {_BASE};
-            color: {_TEXT};
-            border: 1px solid {_BORDER};
+            background-color: {c["base"]};
+            color: {c["text"]};
+            border: 1px solid {c["border_light"]};
             border-radius: 3px;
-            selection-background-color: {_HIGHLIGHT};
+            selection-background-color: {c["highlight"]};
+            selection-color: {c["highlight_text"]};
+        }}
+
+        /* ===== QStackedWidget (center panel pages) ===== */
+        QStackedWidget {{
+            background-color: {c["panel_bg"]};
+        }}
+        QStackedWidget > QWidget {{
+            background-color: {c["panel_bg"]};
         }}
 
         /* ===== QScrollArea ===== */
         QScrollArea {{
             border: none;
-            background-color: transparent;
+            background-color: {c["panel_bg"]};
+        }}
+        QScrollArea > QWidget > QWidget {{
+            background-color: {c["panel_bg"]};
         }}
 
         /* ===== QSplitter ===== */
         QSplitter::handle {{
-            background-color: {_BORDER};
+            background-color: {c["border_light"]};
         }}
         QSplitter::handle:horizontal {{
             width: 2px;
@@ -288,46 +437,48 @@ def _build_stylesheet() -> str:
 
         /* ===== QMenuBar ===== */
         QMenuBar {{
-            background-color: {_WINDOW};
-            color: {_TEXT};
-            border-bottom: 1px solid {_BORDER};
+            background-color: {c["window"]};
+            color: {c["text"]};
+            border-bottom: 1px solid {c["border_light"]};
         }}
         QMenuBar::item:selected {{
-            background-color: {_BUTTON_HOVER};
+            background-color: {c["button_hover"]};
         }}
 
         /* ===== QMenu ===== */
         QMenu {{
-            background-color: {_WINDOW_DARKER};
-            color: {_TEXT};
-            border: 1px solid {_BORDER};
+            background-color: {c["base"]};
+            color: {c["text"]};
+            border: 1px solid {c["border"]};
         }}
         QMenu::item:selected {{
-            background-color: {_HIGHLIGHT};
+            background-color: {c["highlight"]};
+            color: {c["highlight_text"]};
         }}
         QMenu::separator {{
             height: 1px;
-            background-color: {_BORDER};
+            background-color: {c["border_light"]};
             margin: 4px 8px;
         }}
 
         /* ===== QStatusBar ===== */
         QStatusBar {{
-            background-color: {_ACCENT};
-            color: {_TEXT_BRIGHT};
+            background-color: {c["status_bg"]};
+            color: {c["highlight_text"]};
+            font-size: 8pt;
         }}
 
         /* ===== QHeaderView ===== */
         QHeaderView::section {{
-            background-color: {_BUTTON};
-            color: {_TEXT};
-            border: 1px solid {_BORDER};
+            background-color: {c["window"]};
+            color: {c["text"]};
+            border: 1px solid {c["border_light"]};
             padding: 4px;
         }}
 
         /* ===== QToolBar ===== */
         QToolBar {{
-            background-color: {_WINDOW};
+            background-color: {c["window"]};
             border: none;
             spacing: 2px;
         }}
@@ -336,79 +487,115 @@ def _build_stylesheet() -> str:
             border: 1px solid transparent;
             border-radius: 3px;
             padding: 3px;
-            color: {_TEXT};
+            color: {c["text"]};
         }}
         QToolButton:hover {{
-            background-color: {_BUTTON_HOVER};
-            border: 1px solid {_BORDER};
+            background-color: {c["button_hover"]};
+            border: 1px solid {c["border"]};
         }}
         QToolButton:pressed {{
-            background-color: {_HIGHLIGHT};
+            background-color: {c["tool_pressed"]};
         }}
         QToolButton:checked {{
-            background-color: {_HIGHLIGHT};
-            border: 1px solid {_ACCENT};
+            background-color: {c["tool_checked"]};
+            border: 1px solid {c["accent"]};
+        }}
+
+        /* ===== VTK Bottom Toolbar (clip/slice controls) ===== */
+        QToolBar#vtkBottomBar {{
+            background-color: {c["window"]};
+            border-top: 1px solid {c["border_light"]};
+            spacing: 4px;
+            padding: 1px 4px;
+            font-size: 9pt;
+        }}
+        QToolBar#vtkBottomBar QLabel {{
+            font-size: 9pt;
+            color: {c["text"]};
+            padding: 0px 2px;
+        }}
+        QToolBar#vtkBottomBar QComboBox {{
+            font-size: 9pt;
+            padding: 1px 4px;
+            min-height: 18px;
+            max-height: 22px;
+        }}
+        QToolBar#vtkBottomBar QCheckBox {{
+            font-size: 9pt;
+            spacing: 3px;
+        }}
+        QToolBar#vtkBottomBar QPushButton {{
+            font-size: 9pt;
+            padding: 1px 8px;
+            min-height: 18px;
+            max-height: 22px;
+        }}
+        QToolBar#vtkBottomBar QDoubleSpinBox {{
+            font-size: 9pt;
+            padding: 1px 2px;
+            min-height: 18px;
+            max-height: 22px;
+        }}
+        QToolBar#vtkBottomBar QSlider::groove:horizontal {{
+            height: 4px;
+            background: {c["border"]};
+            border-radius: 2px;
+        }}
+        QToolBar#vtkBottomBar QSlider::handle:horizontal {{
+            background: {c["accent"]};
+            width: 12px;
+            height: 12px;
+            margin: -4px 0;
+            border-radius: 6px;
+        }}
+        QToolBar#vtkBottomBar QSlider::handle:horizontal:hover {{
+            background: {c["accent_hover"]};
+        }}
+        QToolBar#vtkBottomBar QLineEdit {{
+            font-size: 9pt;
+            padding: 1px 4px;
+            min-height: 18px;
+            max-height: 22px;
         }}
 
         /* ===== QTabWidget / QTabBar ===== */
         QTabWidget::pane {{
-            border: 1px solid {_BORDER};
-            background-color: {_WINDOW};
+            border: 1px solid {c["border_light"]};
+            background-color: {c["base"]};
         }}
         QTabBar::tab {{
-            background-color: {_BUTTON};
-            color: {_TEXT};
-            border: 1px solid {_BORDER};
+            background-color: {c["window"]};
+            color: {c["text"]};
+            border: 1px solid {c["border_light"]};
             padding: 6px 12px;
             margin-right: 1px;
         }}
         QTabBar::tab:selected {{
-            background-color: {_WINDOW};
-            border-bottom-color: {_WINDOW};
+            background-color: {c["base"]};
+            border-bottom-color: {c["base"]};
         }}
         QTabBar::tab:hover {{
-            background-color: {_BUTTON_HOVER};
+            background-color: {c["button_hover"]};
         }}
 
         /* ===== QCheckBox ===== */
         QCheckBox {{
-            color: {_TEXT};
+            color: {c["text"]};
             spacing: 6px;
         }}
         QCheckBox:hover {{
-            color: {_ACCENT_HOVER};
-        }}
-
-        /* ===== QLabel ===== */
-        QLabel {{
-            color: {_TEXT};
+            color: {c["accent"]};
         }}
 
         /* ===== QSpinBox / QDoubleSpinBox ===== */
         QSpinBox, QDoubleSpinBox {{
-            background-color: {_BASE};
-            border: 1px solid {_BORDER};
+            background-color: {c["base"]};
+            border: 1px solid {c["border"]};
             border-radius: 3px;
             padding: 3px 6px;
-            color: {_TEXT};
+            color: {c["text"]};
         }}
         QSpinBox:focus, QDoubleSpinBox:focus {{
-            border: 1px solid {_ACCENT};
+            border: 1px solid {c["accent"]};
         }}
     """
-
-
-def clear_widget_styles(widget):
-    """Recursively clear hardcoded stylesheets from a widget tree.
-
-    This is needed to remove auto-generated Qt Designer styles
-    that conflict with the dark theme.
-    """
-    # Clear this widget's stylesheet
-    if widget.styleSheet():
-        widget.setStyleSheet("")
-
-    # Recurse into children
-    for child in widget.findChildren(type(widget).__mro__[1]):
-        if child.styleSheet():
-            child.setStyleSheet("")

@@ -9,6 +9,8 @@ import sys
 import subprocess
 import math
 import re
+import traceback
+from datetime import datetime
 from pathlib import Path
 
 import vtk
@@ -34,18 +36,19 @@ class PrepareMeshThread(QThread):
     finished_success = Signal()
     finished_error = Signal(str)
 
-    def __init__(self, view, cells_x, cells_y, cells_z):
+    def __init__(self, view, cells_x, cells_y, cells_z, bounds=None):
         super().__init__()
         self.view = view
         self.cells_x = cells_x
         self.cells_y = cells_y
         self.cells_z = cells_z
+        self.bounds = bounds  # Pre-computed VTK bounding box (main thread)
 
     def run(self):
         """Run all file update operations in background thread."""
         try:
-            # Update blockMeshDict
-            if not self.view._update_blockmesh_dict(self.cells_x, self.cells_y, self.cells_z):
+            # Update blockMeshDict (pass pre-computed bounds to avoid VTK access from thread)
+            if not self.view._update_blockmesh_dict(self.cells_x, self.cells_y, self.cells_z, bounds=self.bounds):
                 self.finished_error.emit("Failed to update blockMeshDict")
                 return
 
@@ -131,6 +134,7 @@ class MeshGenerationView:
         """Initialize signal connections."""
         self.ui.button_mesh_generate.clicked.connect(self._on_generate_clicked)
         self.ui.button_edit_hostfile_mesh.clicked.connect(self._on_edit_hostfile_clicked)
+        self.ui.groupBox_18.toggled.connect(self._on_parallel_mesh_toggled)
 
         # Slice toolbar signals
         self.combo_dir.currentIndexChanged.connect(self.update_slice)
@@ -153,6 +157,7 @@ class MeshGenerationView:
 
         # Create toolbar
         slice_toolbar = QToolBar("Slice Controls", self.vtk_pre)
+        slice_toolbar.setObjectName("vtkBottomBar")
         slice_toolbar.setFloatable(True)
         slice_toolbar.setMovable(True)
 
@@ -219,6 +224,10 @@ class MeshGenerationView:
 
         return slice_toolbar
 
+    def _on_parallel_mesh_toggled(self, checked: bool):
+        """Save parallel mesh checkbox state to app_data."""
+        self.app_data.parallel_mesh_enabled = checked
+
     def _on_edit_hostfile_clicked(self):
         """Handle Edit host file button click - open hosts file in text editor."""
         # Path to hosts file in 2.meshing_MheadBL/system/
@@ -238,7 +247,7 @@ class MeshGenerationView:
                 # Linux - use gedit
                 subprocess.Popen(["gedit", str(hosts_path)])
         except Exception:
-            pass
+            traceback.print_exc()
 
     def _on_generate_clicked(self):
         """Handle Generate button click - prepare files in background then run mesh generation."""
@@ -266,6 +275,8 @@ class MeshGenerationView:
         self.ui.button_run.setEnabled(False)  # Disable Run button during mesh generation
         self.ui.edit_run_name.setText("Mesh Generation")  # Show task name
         self.ui.edit_run_status.setText("Preparing...")  # Show status
+        self.ui.edit_run_started.setText(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        self.ui.edit_run_finished.setText("-")
 
         # Clear existing mesh from VTK widget
         self._clear_existing_mesh()
@@ -278,8 +289,27 @@ class MeshGenerationView:
         y = self.ui.lineEdit_basegrid_y.text() or "100"
         z = self.ui.lineEdit_basegrid_z.text() or "100"
 
+        # Compute geometry bounding box on main thread (VTK is NOT thread-safe)
+        geom_bounds = None
+        if self.vtk_pre:
+            all_objs = self.vtk_pre.obj_manager.get_all()
+            geom_objects = [obj for obj in all_objs if hasattr(obj, 'group') and obj.group == "geometry"]
+            if geom_objects:
+                raw = [float('inf'), float('-inf'),
+                       float('inf'), float('-inf'),
+                       float('inf'), float('-inf')]
+                for obj in geom_objects:
+                    ob = obj.actor.GetBounds()
+                    raw[0] = min(raw[0], ob[0])
+                    raw[1] = max(raw[1], ob[1])
+                    raw[2] = min(raw[2], ob[2])
+                    raw[3] = max(raw[3], ob[3])
+                    raw[4] = min(raw[4], ob[4])
+                    raw[5] = max(raw[5], ob[5])
+                geom_bounds = tuple(raw)
+
         # Start background thread for file preparation
-        self.prepare_thread = PrepareMeshThread(self, x, y, z)
+        self.prepare_thread = PrepareMeshThread(self, x, y, z, bounds=geom_bounds)
         self.prepare_thread.finished_success.connect(self._on_preparation_finished)
         self.prepare_thread.finished_error.connect(self._on_preparation_error)
         self.prepare_thread.start()
@@ -386,7 +416,7 @@ class MeshGenerationView:
                 )
                 decompose_dict.write_text(new_content)
             except Exception:
-                pass
+                traceback.print_exc()
 
         # Copy STL files from case_data to triSurface folder
         import shutil
@@ -413,6 +443,7 @@ class MeshGenerationView:
             '#!/bin/bash\n'
             'source /usr/lib/openfoam/openfoam2212/etc/bashrc\n'
             '. ${WM_PROJECT_DIR}/bin/tools/RunFunctions\n'
+            '. ${WM_PROJECT_DIR}/bin/tools/CleanFunctions\n'
             '"$@"\n',
             encoding='utf-8'
         )
@@ -422,11 +453,12 @@ class MeshGenerationView:
         allclean = meshing_path / "Allclean"
         allrun = meshing_path / "Allrun"
 
+        use_hostfile = self.ui.groupBox_18.isChecked()
         commands = []
         if allclean.exists():
-            commands.extend(self._parse_script(allclean, n_procs))
+            commands.extend(self._parse_script(allclean, n_procs, use_hostfile))
         if allrun.exists():
-            commands.extend(self._parse_script(allrun, n_procs))
+            commands.extend(self._parse_script(allrun, n_procs, use_hostfile))
 
         if not commands:
             QMessageBox.warning(
@@ -440,12 +472,13 @@ class MeshGenerationView:
         # Run mesh generation commands with progress bar
         self.exec_widget.run(commands)
 
-    def _parse_script(self, script_path: Path, n_procs: int) -> list:
+    def _parse_script(self, script_path: Path, n_procs: int, use_hostfile: bool = False) -> list:
         """Allclean/Allrun 스크립트를 파싱하여 실행 명령어 리스트 반환.
 
         Args:
             script_path: Allclean 또는 Allrun 파일 경로
             n_procs: 병렬 처리 프로세서 수
+            use_hostfile: True면 --hostfile system/hosts 사용, False면 --host localhost 사용
 
         Returns:
             래퍼(shell_cmd.sh/of_cmd.sh)가 붙은 명령어 리스트
@@ -456,6 +489,8 @@ class MeshGenerationView:
             '. ${WM_PROJECT_DIR',       # source RunFunctions/CleanFunctions
             'cp ../',                   # STL copy (GUI handles this)
         )
+        # Lines containing these are skipped (GUI manages triSurface)
+        SKIP_CONTAINS = ('constant/triSurface',)
         SHELL_CMDS = {'rm', 'cp', 'mkdir', 'mv', 'ls', 'find', 'echo'}
 
         commands = []
@@ -475,6 +510,10 @@ class MeshGenerationView:
             if any(line.startswith(p) for p in SKIP_PREFIXES):
                 continue
 
+            # GUI가 triSurface를 관리하므로 관련 명령 건너뛰기
+            if any(s in line for s in SKIP_CONTAINS):
+                continue
+
             # 인라인 리다이렉션/주석 제거
             line = re.sub(r'>\s*/dev/null.*', '', line).strip()
             line = re.sub(r'#.*$', '', line).strip()
@@ -487,11 +526,24 @@ class MeshGenerationView:
 
             # runParallel → mpirun 변환
             if line.startswith('runParallel '):
-                line = f"mpirun -np {n_procs} " + line[len('runParallel '):]
+                app_and_args = line[len('runParallel '):]
+                if use_hostfile:
+                    line = f"mpirun -np {n_procs} --hostfile system/hosts {app_and_args} -parallel"
+                else:
+                    line = f"mpirun -np {n_procs} --host localhost --oversubscribe {app_and_args} -parallel"
 
             # getNumberOfProcessors 치환
             line = line.replace('`getNumberOfProcessors`', str(n_procs))
             line = line.replace('$(getNumberOfProcessors)', str(n_procs))
+
+            # mpirun hostfile 처리: 체크박스 상태에 따라 hostfile 옵션 변경
+            if 'mpirun' in line:
+                if use_hostfile:
+                    if '--host localhost' in line:
+                        line = line.replace('--host localhost --oversubscribe', '--hostfile system/hosts')
+                else:
+                    if '--hostfile system/hosts' in line:
+                        line = line.replace('--hostfile system/hosts', '--host localhost --oversubscribe')
 
             # 래퍼 분류: 쉘 명령 vs OpenFOAM 명령
             first_word = line.split()[0]
@@ -509,6 +561,7 @@ class MeshGenerationView:
         self.ui.button_run.setEnabled(True)  # Re-enable Run button
         self.ui.edit_run_name.setText("-")  # Reset task name
         self.ui.edit_run_status.setText("Error")  # Show error status
+        self.ui.edit_run_finished.setText(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
     def _restore_ui(self):
         """Restore UI state after command execution (success, error, or cancel)."""
@@ -517,8 +570,9 @@ class MeshGenerationView:
         self.ui.button_run.setEnabled(True)  # Re-enable Run button
         self.ui.edit_run_name.setText("-")  # Reset task name
         self.ui.edit_run_status.setText("Complete")  # Show completion status
+        self.ui.edit_run_finished.setText(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
-    def _update_blockmesh_dict(self, cells_x: str, cells_y: str, cells_z: str) -> bool:
+    def _update_blockmesh_dict(self, cells_x: str, cells_y: str, cells_z: str, bounds=None) -> bool:
         """
         Update blockMeshDict with geometry bounding box vertices and base grid cells.
 
@@ -526,33 +580,14 @@ class MeshGenerationView:
             cells_x: Number of cells in x direction
             cells_y: Number of cells in y direction
             cells_z: Number of cells in z direction
+            bounds: Pre-computed bounding box (xmin, xmax, ymin, ymax, zmin, zmax)
+                    from main thread. Required to avoid VTK access from background thread.
 
         Returns:
             True if successful, False otherwise
         """
-        if not self.vtk_pre:
+        if bounds is None:
             return False
-
-        # Get all geometry objects
-        all_objs = self.vtk_pre.obj_manager.get_all()
-        geom_objects = [obj for obj in all_objs if hasattr(obj, 'group') and obj.group == "geometry"]
-
-        if not geom_objects:
-            return False
-
-        # Calculate overall bounding box
-        bounds = [float('inf'), float('-inf'),
-                  float('inf'), float('-inf'),
-                  float('inf'), float('-inf')]
-
-        for obj in geom_objects:
-            obj_bounds = obj.actor.GetBounds()
-            bounds[0] = min(bounds[0], obj_bounds[0])  # xmin
-            bounds[1] = max(bounds[1], obj_bounds[1])  # xmax
-            bounds[2] = min(bounds[2], obj_bounds[2])  # ymin
-            bounds[3] = max(bounds[3], obj_bounds[3])  # ymax
-            bounds[4] = min(bounds[4], obj_bounds[4])  # zmin
-            bounds[5] = max(bounds[5], obj_bounds[5])  # zmax
 
         xmin, xmax, ymin, ymax, zmin, zmax = bounds
 
@@ -621,6 +656,7 @@ class MeshGenerationView:
             return True
 
         except Exception:
+            traceback.print_exc()
             return False
 
     def _update_snappyhex_dict(self) -> bool:
@@ -754,6 +790,7 @@ class MeshGenerationView:
             return True
 
         except Exception:
+            traceback.print_exc()
             return False
 
     def _update_surface_feature_extract_dict(self) -> bool:
@@ -814,6 +851,7 @@ FoamFile
             return True
 
         except Exception:
+            traceback.print_exc()
             return False
 
     def _on_mesh_generated(self):
@@ -1006,7 +1044,7 @@ FoamFile
                 self.update_slice()
 
         except Exception:
-            pass
+            traceback.print_exc()
 
     def _clear_slice_clip(self):
         """Clear slice/clip pipeline actors from renderer."""
@@ -1294,10 +1332,13 @@ FoamFile
                 self.case_data.save()
 
         except Exception:
-            pass
+            traceback.print_exc()
 
     def load_data(self):
         """Load mesh settings from blockMeshDict."""
+
+        # Restore parallel execution checkbox from app_data
+        self.ui.groupBox_18.setChecked(self.app_data.parallel_mesh_enabled)
 
         # Default values
         default_cells = ["100", "100", "100"]
@@ -1385,7 +1426,7 @@ FoamFile
                     self.ui.edit_number_of_subdomains.setText(match.group(1))
                     return
             except Exception:
-                pass
+                traceback.print_exc()
 
         # Set default value if file doesn't exist or couldn't read
         self.ui.edit_number_of_subdomains.setText(str(default_value))
@@ -1430,7 +1471,7 @@ FoamFile
                             self.ui.edit_castellation_4.setText(str(actual_level[1]))
 
         except Exception:
-            pass
+            traceback.print_exc()
 
     def _update_castellation_settings(self) -> bool:
         """
@@ -1484,6 +1525,7 @@ FoamFile
             return True
 
         except Exception:
+            traceback.print_exc()
             return False
 
     def _update_refinement_surfaces_level(self, snappy_path: Path, min_level: int, max_level: int):
@@ -1515,7 +1557,7 @@ FoamFile
 
 
         except Exception:
-            pass
+            traceback.print_exc()
 
     def _load_snap_settings(self):
         """Load snap settings from snappyHexMeshDict to UI."""
@@ -1551,7 +1593,7 @@ FoamFile
                 self.ui.edit_snap_4.setText(str(val))
 
         except Exception:
-            pass
+            traceback.print_exc()
 
     def _update_snap_settings(self) -> bool:
         """
@@ -1588,6 +1630,7 @@ FoamFile
             return True
 
         except Exception:
+            traceback.print_exc()
             return False
 
     def _load_boundary_layer_settings(self):
@@ -1632,7 +1675,7 @@ FoamFile
             self._load_n_surface_layers(snappy_path)
 
         except Exception:
-            pass
+            traceback.print_exc()
 
     def _load_n_surface_layers(self, snappy_path: Path):
         """Load nSurfaceLayers from layers section using regex."""
@@ -1649,7 +1692,7 @@ FoamFile
                 self.ui.edit_boundary_layer_1.setText(val)
 
         except Exception:
-            pass
+            traceback.print_exc()
 
     def _update_boundary_layer_settings(self) -> bool:
         """
@@ -1697,6 +1740,7 @@ FoamFile
             return True
 
         except Exception:
+            traceback.print_exc()
             return False
 
     def _update_n_surface_layers(self, snappy_path: Path):
@@ -1718,4 +1762,4 @@ FoamFile
 
 
         except Exception:
-            pass
+            traceback.print_exc()

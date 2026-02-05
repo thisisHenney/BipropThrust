@@ -6,14 +6,18 @@ and component lifecycle.
 """
 
 import shutil
+import traceback
 from pathlib import Path
 
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QLabel, QMessageBox,
-    QGroupBox, QPushButton, QCheckBox, QComboBox, QProgressBar
+    QGroupBox, QPushButton, QCheckBox, QComboBox, QProgressBar,
+    QToolButton
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction
+
+from view.style.theme import toggle_theme, get_current_mode, get_colors
 
 from nextlib.widgets.dock import DockWidget
 from nextlib.execute.exec_widget import ExecWidget
@@ -139,6 +143,9 @@ class MainWindow(QMainWindow):
         self.action_about = QAction("&About", self)
         help_menu.addAction(self.action_about)
 
+        # Theme toggle button (right side of menu bar)
+        menubar.setCornerWidget(self._create_theme_toggle(), Qt.Corner.TopRightCorner)
+
         # Create menu handler and connect signals
         self.menu_handler = MenuHandler(self)
         self.menu_handler.connect_actions()
@@ -150,11 +157,10 @@ class MainWindow(QMainWindow):
         self.context.register("exec", self.exec_widget)
 
         # Clear hardcoded light-theme styles from exec_widget UI
-        for w in self.exec_widget.findChildren(
-            (QGroupBox, QPushButton, QCheckBox, QComboBox, QProgressBar)
-        ):
-            if w.styleSheet():
-                w.setStyleSheet("")
+        for cls in (QGroupBox, QPushButton, QCheckBox, QComboBox, QProgressBar):
+            for w in self.exec_widget.findChildren(cls):
+                if w.styleSheet():
+                    w.setStyleSheet("")
 
         # Connect to statusbar
         self.exec_widget.connect_to_statusbar(self.statusBar())
@@ -214,6 +220,56 @@ class MainWindow(QMainWindow):
     def _on_residual_refresh(self) -> None:
         """Handle residual graph refresh button click."""
         self.center_widget._load_residual_log()
+
+    def _create_theme_toggle(self) -> QToolButton:
+        """Create theme toggle button for the menu bar corner."""
+        self._theme_btn = QToolButton()
+        self._theme_btn.setText("\u25D0")  # ◐ half-circle symbol
+        self._theme_btn.setToolTip("Switch to dark theme")
+        self._theme_btn.setStyleSheet(
+            "QToolButton { padding: 2px 8px; margin: 2px 4px; font-size: 14px; }"
+        )
+        self._theme_btn.clicked.connect(self._on_theme_toggle)
+        return self._theme_btn
+
+    def _on_theme_toggle(self) -> None:
+        """Toggle between light and dark themes."""
+        import pyqtgraph as pg
+        from PySide6.QtWidgets import QApplication
+
+        new_mode = toggle_theme(QApplication.instance())
+        c = get_colors()
+
+        # Update tooltip (symbol stays the same)
+        if new_mode == "dark":
+            self._theme_btn.setToolTip("Switch to light theme")
+        else:
+            self._theme_btn.setToolTip("Switch to dark theme")
+
+        # Update VTK pre backgrounds
+        if self.vtk_pre:
+            r = self.vtk_pre.renderer
+            r.SetBackground(*c["vtk_bg1"])
+            r.SetBackground2(*c["vtk_bg2"])
+            self.vtk_pre.vtk_widget.GetRenderWindow().Render()
+
+        # Update VTK post backgrounds
+        if self.vtk_post:
+            r = self.vtk_post.renderer
+            r.SetBackground(*c["vtk_post_bg1"])
+            r.SetBackground2(*c["vtk_post_bg2"])
+            self.vtk_post.vtk_widget.GetRenderWindow().Render()
+
+        # Update residual graph
+        if self.residual_graph:
+            self.residual_graph.plot_widget.setBackground(c["graph_bg"])
+            axis_pen = pg.mkPen(color=c["graph_axis"])
+            for axis_name in ('bottom', 'left'):
+                axis = self.residual_graph.plot_widget.getAxis(axis_name)
+                axis.setPen(axis_pen)
+                axis.setTextPen(axis_pen)
+            self.residual_graph.plot_widget.setLabel('bottom', 'Time', color=c["graph_axis"])
+            self.residual_graph.plot_widget.setLabel('left', 'Residual', color=c["graph_axis"])
 
     def _on_probe_position_changed(self, x: float, y: float, z: float) -> None:
         """Handle probe position change - sync to geometry panel."""
@@ -525,7 +581,7 @@ class MainWindow(QMainWindow):
             try:
                 shutil.rmtree(self.case_path, ignore_errors=True)
             except Exception:
-                pass
+                traceback.print_exc()
 
     def _cleanup(self) -> None:
         """Cleanup resources before closing."""

@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>644</width>
-    <height>839</height>
+    <height>923</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -105,6 +105,7 @@ QTreeWidget::item:selected:!active {
           </property>
           <property name="font">
            <font>
+            <pointsize>10</pointsize>
             <bold>true</bold>
            </font>
           </property>
@@ -403,6 +404,7 @@ QTreeWidget::item:selected:!active {
                 <font>
                  <family>Ubuntu</family>
                  <pointsize>10</pointsize>
+                 <bold>false</bold>
                 </font>
                </property>
                <property name="text">
@@ -422,6 +424,7 @@ QTreeWidget::item:selected:!active {
                 <font>
                  <family>Ubuntu</family>
                  <pointsize>10</pointsize>
+                 <bold>false</bold>
                 </font>
                </property>
                <property name="text">
@@ -646,6 +649,12 @@ QGroupBox::title {
                     <verstretch>0</verstretch>
                    </sizepolicy>
                   </property>
+                  <property name="minimumSize">
+                   <size>
+                    <width>0</width>
+                    <height>24</height>
+                   </size>
+                  </property>
                   <property name="font">
                    <font>
                     <pointsize>9</pointsize>
@@ -668,6 +677,12 @@ QGroupBox::title {
                     <verstretch>0</verstretch>
                    </sizepolicy>
                   </property>
+                  <property name="minimumSize">
+                   <size>
+                    <width>0</width>
+                    <height>24</height>
+                   </size>
+                  </property>
                   <property name="font">
                    <font>
                     <pointsize>9</pointsize>
@@ -689,6 +704,12 @@ QGroupBox::title {
                     <horstretch>0</horstretch>
                     <verstretch>0</verstretch>
                    </sizepolicy>
+                  </property>
+                  <property name="minimumSize">
+                   <size>
+                    <width>0</width>
+                    <height>24</height>
+                   </size>
                   </property>
                   <property name="font">
                    <font>
@@ -769,7 +790,7 @@ QGroupBox::title {
                 <x>0</x>
                 <y>0</y>
                 <width>378</width>
-                <height>714</height>
+                <height>776</height>
                </rect>
               </property>
               <layout class="QVBoxLayout" name="verticalLayout_5">
@@ -843,6 +864,12 @@ QGroupBox::title {
                         <verstretch>0</verstretch>
                        </sizepolicy>
                       </property>
+                      <property name="minimumSize">
+                       <size>
+                        <width>0</width>
+                        <height>24</height>
+                       </size>
+                      </property>
                       <property name="font">
                        <font>
                         <pointsize>9</pointsize>
@@ -865,6 +892,12 @@ QGroupBox::title {
                         <verstretch>0</verstretch>
                        </sizepolicy>
                       </property>
+                      <property name="minimumSize">
+                       <size>
+                        <width>0</width>
+                        <height>24</height>
+                       </size>
+                      </property>
                       <property name="font">
                        <font>
                         <pointsize>9</pointsize>
@@ -886,6 +919,12 @@ QGroupBox::title {
                         <horstretch>0</horstretch>
                         <verstretch>0</verstretch>
                        </sizepolicy>
+                      </property>
+                      <property name="minimumSize">
+                       <size>
+                        <width>0</width>
+                        <height>24</height>
+                       </size>
                       </property>
                       <property name="font">
                        <font>
@@ -970,6 +1009,12 @@ QGroupBox::title {
                       <verstretch>0</verstretch>
                      </sizepolicy>
                     </property>
+                    <property name="minimumSize">
+                     <size>
+                      <width>0</width>
+                      <height>24</height>
+                     </size>
+                    </property>
                     <property name="font">
                      <font>
                       <pointsize>9</pointsize>
@@ -991,6 +1036,12 @@ QGroupBox::title {
                       <horstretch>0</horstretch>
                       <verstretch>0</verstretch>
                      </sizepolicy>
+                    </property>
+                    <property name="minimumSize">
+                     <size>
+                      <width>0</width>
+                      <height>24</height>
+                     </size>
                     </property>
                     <property name="font">
                      <font>
@@ -1026,6 +1077,12 @@ QGroupBox::title {
                       <horstretch>0</horstretch>
                       <verstretch>0</verstretch>
                      </sizepolicy>
+                    </property>
+                    <property name="minimumSize">
+                     <size>
+                      <width>0</width>
+                      <height>24</height>
+                     </size>
                     </property>
                     <property name="font">
                      <font>
@@ -1078,6 +1135,12 @@ QGroupBox::title {
                       <verstretch>0</verstretch>
                      </sizepolicy>
                     </property>
+                    <property name="minimumSize">
+                     <size>
+                      <width>0</width>
+                      <height>24</height>
+                     </size>
+                    </property>
                     <property name="font">
                      <font>
                       <pointsize>9</pointsize>
@@ -1099,6 +1162,12 @@ QGroupBox::title {
                       <horstretch>0</horstretch>
                       <verstretch>0</verstretch>
                      </sizepolicy>
+                    </property>
+                    <property name="minimumSize">
+                     <size>
+                      <width>0</width>
+                      <height>24</height>
+                     </size>
                     </property>
                     <property name="font">
                      <font>
@@ -1196,6 +1265,12 @@ QGroupBox::title {
                       <verstretch>0</verstretch>
                      </sizepolicy>
                     </property>
+                    <property name="minimumSize">
+                     <size>
+                      <width>0</width>
+                      <height>24</height>
+                     </size>
+                    </property>
                     <property name="font">
                      <font>
                       <pointsize>9</pointsize>
@@ -1231,6 +1306,12 @@ QGroupBox::title {
                       <verstretch>0</verstretch>
                      </sizepolicy>
                     </property>
+                    <property name="minimumSize">
+                     <size>
+                      <width>0</width>
+                      <height>24</height>
+                     </size>
+                    </property>
                     <property name="font">
                      <font>
                       <pointsize>9</pointsize>
@@ -1253,6 +1334,12 @@ QGroupBox::title {
                       <verstretch>0</verstretch>
                      </sizepolicy>
                     </property>
+                    <property name="minimumSize">
+                     <size>
+                      <width>0</width>
+                      <height>24</height>
+                     </size>
+                    </property>
                     <property name="font">
                      <font>
                       <pointsize>9</pointsize>
@@ -1274,6 +1361,12 @@ QGroupBox::title {
                       <horstretch>0</horstretch>
                       <verstretch>0</verstretch>
                      </sizepolicy>
+                    </property>
+                    <property name="minimumSize">
+                     <size>
+                      <width>0</width>
+                      <height>24</height>
+                     </size>
                     </property>
                     <property name="font">
                      <font>
@@ -1394,6 +1487,12 @@ QGroupBox::title {
                       <verstretch>0</verstretch>
                      </sizepolicy>
                     </property>
+                    <property name="minimumSize">
+                     <size>
+                      <width>0</width>
+                      <height>24</height>
+                     </size>
+                    </property>
                     <property name="font">
                      <font>
                       <pointsize>9</pointsize>
@@ -1455,6 +1554,12 @@ QGroupBox::title {
                       <verstretch>0</verstretch>
                      </sizepolicy>
                     </property>
+                    <property name="minimumSize">
+                     <size>
+                      <width>0</width>
+                      <height>24</height>
+                     </size>
+                    </property>
                     <property name="font">
                      <font>
                       <pointsize>9</pointsize>
@@ -1477,6 +1582,12 @@ QGroupBox::title {
                       <verstretch>0</verstretch>
                      </sizepolicy>
                     </property>
+                    <property name="minimumSize">
+                     <size>
+                      <width>0</width>
+                      <height>24</height>
+                     </size>
+                    </property>
                     <property name="font">
                      <font>
                       <pointsize>9</pointsize>
@@ -1498,6 +1609,12 @@ QGroupBox::title {
                       <horstretch>0</horstretch>
                       <verstretch>0</verstretch>
                      </sizepolicy>
+                    </property>
+                    <property name="minimumSize">
+                     <size>
+                      <width>0</width>
+                      <height>24</height>
+                     </size>
                     </property>
                     <property name="font">
                      <font>
@@ -1534,6 +1651,12 @@ QGroupBox::title {
                       <verstretch>0</verstretch>
                      </sizepolicy>
                     </property>
+                    <property name="minimumSize">
+                     <size>
+                      <width>0</width>
+                      <height>24</height>
+                     </size>
+                    </property>
                     <property name="font">
                      <font>
                       <pointsize>9</pointsize>
@@ -1555,6 +1678,12 @@ QGroupBox::title {
                       <horstretch>0</horstretch>
                       <verstretch>0</verstretch>
                      </sizepolicy>
+                    </property>
+                    <property name="minimumSize">
+                     <size>
+                      <width>0</width>
+                      <height>24</height>
+                     </size>
                     </property>
                     <property name="font">
                      <font>
@@ -1628,8 +1757,20 @@ QGroupBox::title {
                   <property name="bottomMargin">
                    <number>9</number>
                   </property>
-                  <item row="1" column="0">
-                   <widget class="QLabel" name="label_84">
+                  <item row="0" column="1">
+                   <widget class="QLineEdit" name="edit_number_of_subdomains">
+                    <property name="sizePolicy">
+                     <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                      <horstretch>0</horstretch>
+                      <verstretch>0</verstretch>
+                     </sizepolicy>
+                    </property>
+                    <property name="minimumSize">
+                     <size>
+                      <width>0</width>
+                      <height>24</height>
+                     </size>
+                    </property>
                     <property name="font">
                      <font>
                       <pointsize>9</pointsize>
@@ -1637,7 +1778,10 @@ QGroupBox::title {
                      </font>
                     </property>
                     <property name="text">
-                     <string>Host Configuration</string>
+                     <string>32</string>
+                    </property>
+                    <property name="alignment">
+                     <set>Qt::AlignmentFlag::AlignCenter</set>
                     </property>
                    </widget>
                   </item>
@@ -1654,51 +1798,74 @@ QGroupBox::title {
                     </property>
                    </widget>
                   </item>
-                  <item row="0" column="1">
-                   <widget class="QLineEdit" name="edit_number_of_subdomains">
-                    <property name="sizePolicy">
-                     <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
-                      <horstretch>0</horstretch>
-                      <verstretch>0</verstretch>
-                     </sizepolicy>
-                    </property>
+                  <item row="1" column="0" colspan="2">
+                   <widget class="QGroupBox" name="groupBox_18">
                     <property name="font">
                      <font>
-                      <pointsize>9</pointsize>
-                      <bold>false</bold>
+                      <pointsize>10</pointsize>
                      </font>
                     </property>
-                    <property name="text">
-                     <string>32</string>
+                    <property name="styleSheet">
+                     <string notr="true">QGroupBox {
+    border: 1px solid;
+    border-radius: 6;
+    margin-top: 9;
+    border-color : #c8c8c8;
+	padding: 3;   
+}
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    left: 10;
+    padding: 2 3;
+}</string>
                     </property>
-                    <property name="alignment">
-                     <set>Qt::AlignmentFlag::AlignCenter</set>
+                    <property name="title">
+                     <string>&lt; Parallel Execution &gt;</string>
                     </property>
-                   </widget>
-                  </item>
-                  <item row="1" column="1">
-                   <widget class="QPushButton" name="button_edit_hostfile_mesh">
-                    <property name="sizePolicy">
-                     <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
-                      <horstretch>0</horstretch>
-                      <verstretch>0</verstretch>
-                     </sizepolicy>
+                    <property name="checkable">
+                     <bool>true</bool>
                     </property>
-                    <property name="minimumSize">
-                     <size>
-                      <width>0</width>
-                      <height>35</height>
-                     </size>
-                    </property>
-                    <property name="font">
-                     <font>
-                      <pointsize>9</pointsize>
-                      <bold>false</bold>
-                     </font>
-                    </property>
-                    <property name="text">
-                     <string>Edit host file</string>
-                    </property>
+                    <layout class="QGridLayout" name="gridLayout_21" columnstretch="1,0">
+                     <item row="0" column="0">
+                      <widget class="QLabel" name="label_84">
+                       <property name="font">
+                        <font>
+                         <pointsize>9</pointsize>
+                         <bold>false</bold>
+                        </font>
+                       </property>
+                       <property name="text">
+                        <string>Host Configuration</string>
+                       </property>
+                      </widget>
+                     </item>
+                     <item row="0" column="1">
+                      <widget class="QPushButton" name="button_edit_hostfile_mesh">
+                       <property name="sizePolicy">
+                        <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                         <horstretch>0</horstretch>
+                         <verstretch>0</verstretch>
+                        </sizepolicy>
+                       </property>
+                       <property name="minimumSize">
+                        <size>
+                         <width>0</width>
+                         <height>28</height>
+                        </size>
+                       </property>
+                       <property name="font">
+                        <font>
+                         <pointsize>9</pointsize>
+                         <bold>false</bold>
+                        </font>
+                       </property>
+                       <property name="text">
+                        <string>Edit host file</string>
+                       </property>
+                      </widget>
+                     </item>
+                    </layout>
                    </widget>
                   </item>
                  </layout>
@@ -1760,7 +1927,7 @@ QGroupBox::title {
                <property name="minimumSize">
                 <size>
                  <width>0</width>
-                 <height>35</height>
+                 <height>36</height>
                 </size>
                </property>
                <property name="font">
@@ -1842,6 +2009,12 @@ QGroupBox::title {
               </item>
               <item row="0" column="1">
                <widget class="QComboBox" name="comboBox_2">
+                <property name="minimumSize">
+                 <size>
+                  <width>0</width>
+                  <height>24</height>
+                 </size>
+                </property>
                 <property name="font">
                  <font>
                   <pointsize>9</pointsize>
@@ -1883,6 +2056,12 @@ QGroupBox::title {
               </item>
               <item row="1" column="1">
                <widget class="QComboBox" name="comboBox_3">
+                <property name="minimumSize">
+                 <size>
+                  <width>0</width>
+                  <height>24</height>
+                 </size>
+                </property>
                 <property name="font">
                  <font>
                   <pointsize>9</pointsize>
@@ -1916,6 +2095,12 @@ QGroupBox::title {
               </item>
               <item row="2" column="1">
                <widget class="QComboBox" name="comboBox_4">
+                <property name="minimumSize">
+                 <size>
+                  <width>0</width>
+                  <height>24</height>
+                 </size>
+                </property>
                 <property name="font">
                  <font>
                   <pointsize>9</pointsize>
@@ -1949,6 +2134,12 @@ QGroupBox::title {
               </item>
               <item row="3" column="1">
                <widget class="QComboBox" name="comboBox_6">
+                <property name="minimumSize">
+                 <size>
+                  <width>0</width>
+                  <height>24</height>
+                 </size>
+                </property>
                 <property name="font">
                  <font>
                   <pointsize>9</pointsize>
@@ -1977,6 +2168,12 @@ QGroupBox::title {
               </item>
               <item row="4" column="1">
                <widget class="QComboBox" name="comboBox_7">
+                <property name="minimumSize">
+                 <size>
+                  <width>0</width>
+                  <height>24</height>
+                 </size>
+                </property>
                 <property name="font">
                  <font>
                   <pointsize>9</pointsize>
@@ -2019,6 +2216,12 @@ QGroupBox::title {
                 <property name="enabled">
                  <bool>true</bool>
                 </property>
+                <property name="minimumSize">
+                 <size>
+                  <width>0</width>
+                  <height>24</height>
+                 </size>
+                </property>
                 <property name="font">
                  <font>
                   <pointsize>9</pointsize>
@@ -2057,6 +2260,12 @@ QGroupBox::title {
               </item>
               <item row="6" column="1">
                <widget class="QComboBox" name="comboBox_8">
+                <property name="minimumSize">
+                 <size>
+                  <width>0</width>
+                  <height>24</height>
+                 </size>
+                </property>
                 <property name="font">
                  <font>
                   <pointsize>9</pointsize>
@@ -2153,6 +2362,12 @@ QGroupBox::title {
               </item>
               <item row="0" column="1">
                <widget class="QLineEdit" name="edit_fluid_1">
+                <property name="minimumSize">
+                 <size>
+                  <width>0</width>
+                  <height>24</height>
+                 </size>
+                </property>
                 <property name="font">
                  <font>
                   <pointsize>9</pointsize>
@@ -2182,6 +2397,12 @@ QGroupBox::title {
               </item>
               <item row="1" column="1">
                <widget class="QLineEdit" name="edit_fluid_2">
+                <property name="minimumSize">
+                 <size>
+                  <width>0</width>
+                  <height>24</height>
+                 </size>
+                </property>
                 <property name="font">
                  <font>
                   <pointsize>9</pointsize>
@@ -2222,6 +2443,12 @@ QGroupBox::title {
                     <verstretch>0</verstretch>
                    </sizepolicy>
                   </property>
+                  <property name="minimumSize">
+                   <size>
+                    <width>0</width>
+                    <height>24</height>
+                   </size>
+                  </property>
                   <property name="maximumSize">
                    <size>
                     <width>16777215</width>
@@ -2250,6 +2477,12 @@ QGroupBox::title {
                     <verstretch>0</verstretch>
                    </sizepolicy>
                   </property>
+                  <property name="minimumSize">
+                   <size>
+                    <width>0</width>
+                    <height>24</height>
+                   </size>
+                  </property>
                   <property name="maximumSize">
                    <size>
                     <width>16777215</width>
@@ -2277,6 +2510,12 @@ QGroupBox::title {
                     <horstretch>0</horstretch>
                     <verstretch>0</verstretch>
                    </sizepolicy>
+                  </property>
+                  <property name="minimumSize">
+                   <size>
+                    <width>0</width>
+                    <height>24</height>
+                   </size>
                   </property>
                   <property name="maximumSize">
                    <size>
@@ -2332,6 +2571,12 @@ QGroupBox::title {
              <layout class="QGridLayout" name="gridLayout_8" columnstretch="1,0">
               <item row="2" column="1">
                <widget class="QLineEdit" name="edit_solid_2">
+                <property name="minimumSize">
+                 <size>
+                  <width>0</width>
+                  <height>24</height>
+                 </size>
+                </property>
                 <property name="font">
                  <font>
                   <pointsize>9</pointsize>
@@ -2361,6 +2606,12 @@ QGroupBox::title {
               </item>
               <item row="0" column="1" rowspan="2">
                <widget class="QLineEdit" name="edit_solid_1">
+                <property name="minimumSize">
+                 <size>
+                  <width>0</width>
+                  <height>24</height>
+                 </size>
+                </property>
                 <property name="font">
                  <font>
                   <pointsize>9</pointsize>
@@ -2403,6 +2654,12 @@ QGroupBox::title {
               </item>
               <item row="3" column="1">
                <widget class="QComboBox" name="comboBox_9">
+                <property name="minimumSize">
+                 <size>
+                  <width>0</width>
+                  <height>24</height>
+                 </size>
+                </property>
                 <property name="font">
                  <font>
                   <pointsize>10</pointsize>
@@ -2520,6 +2777,12 @@ QGroupBox::title {
               </item>
               <item row="3" column="1">
                <widget class="QLineEdit" name="edit_spray_mmh_3">
+                <property name="minimumSize">
+                 <size>
+                  <width>0</width>
+                  <height>24</height>
+                 </size>
+                </property>
                 <property name="font">
                  <font>
                   <pointsize>9</pointsize>
@@ -2549,6 +2812,12 @@ QGroupBox::title {
               </item>
               <item row="4" column="1">
                <widget class="QLineEdit" name="edit_spray_mmh_4">
+                <property name="minimumSize">
+                 <size>
+                  <width>0</width>
+                  <height>24</height>
+                 </size>
+                </property>
                 <property name="font">
                  <font>
                   <pointsize>9</pointsize>
@@ -2565,6 +2834,12 @@ QGroupBox::title {
               </item>
               <item row="6" column="1">
                <widget class="QLineEdit" name="edit_spray_mmh_5">
+                <property name="minimumSize">
+                 <size>
+                  <width>0</width>
+                  <height>24</height>
+                 </size>
+                </property>
                 <property name="font">
                  <font>
                   <pointsize>9</pointsize>
@@ -2594,6 +2869,12 @@ QGroupBox::title {
               </item>
               <item row="2" column="1">
                <widget class="QLineEdit" name="edit_spray_mmh_2">
+                <property name="minimumSize">
+                 <size>
+                  <width>0</width>
+                  <height>24</height>
+                 </size>
+                </property>
                 <property name="font">
                  <font>
                   <pointsize>9</pointsize>
@@ -2610,6 +2891,12 @@ QGroupBox::title {
               </item>
               <item row="0" column="1">
                <widget class="QLineEdit" name="edit_spray_mmh_1">
+                <property name="minimumSize">
+                 <size>
+                  <width>0</width>
+                  <height>24</height>
+                 </size>
+                </property>
                 <property name="font">
                  <font>
                   <pointsize>9</pointsize>
@@ -2669,6 +2956,12 @@ QGroupBox::title {
              <layout class="QGridLayout" name="gridLayout_6" columnstretch="1,1">
               <item row="4" column="1">
                <widget class="QLineEdit" name="edit_spray_mmh_13">
+                <property name="minimumSize">
+                 <size>
+                  <width>0</width>
+                  <height>24</height>
+                 </size>
+                </property>
                 <property name="font">
                  <font>
                   <pointsize>9</pointsize>
@@ -2726,6 +3019,12 @@ QGroupBox::title {
                <layout class="QHBoxLayout" name="horizontalLayout_5">
                 <item>
                  <widget class="QLineEdit" name="edit_spray_mmh_9">
+                  <property name="minimumSize">
+                   <size>
+                    <width>0</width>
+                    <height>24</height>
+                   </size>
+                  </property>
                   <property name="font">
                    <font>
                     <pointsize>10</pointsize>
@@ -2741,6 +3040,12 @@ QGroupBox::title {
                 </item>
                 <item>
                  <widget class="QLineEdit" name="edit_spray_mmh_10">
+                  <property name="minimumSize">
+                   <size>
+                    <width>0</width>
+                    <height>24</height>
+                   </size>
+                  </property>
                   <property name="font">
                    <font>
                     <pointsize>10</pointsize>
@@ -2756,6 +3061,12 @@ QGroupBox::title {
                 </item>
                 <item>
                  <widget class="QLineEdit" name="edit_spray_mmh_11">
+                  <property name="minimumSize">
+                   <size>
+                    <width>0</width>
+                    <height>24</height>
+                   </size>
+                  </property>
                   <property name="font">
                    <font>
                     <pointsize>10</pointsize>
@@ -2788,6 +3099,12 @@ QGroupBox::title {
                <layout class="QHBoxLayout" name="horizontalLayout_4">
                 <item>
                  <widget class="QLineEdit" name="edit_spray_mmh_6">
+                  <property name="minimumSize">
+                   <size>
+                    <width>0</width>
+                    <height>24</height>
+                   </size>
+                  </property>
                   <property name="font">
                    <font>
                     <pointsize>10</pointsize>
@@ -2803,6 +3120,12 @@ QGroupBox::title {
                 </item>
                 <item>
                  <widget class="QLineEdit" name="edit_spray_mmh_7">
+                  <property name="minimumSize">
+                   <size>
+                    <width>0</width>
+                    <height>24</height>
+                   </size>
+                  </property>
                   <property name="font">
                    <font>
                     <pointsize>10</pointsize>
@@ -2818,6 +3141,12 @@ QGroupBox::title {
                 </item>
                 <item>
                  <widget class="QLineEdit" name="edit_spray_mmh_8">
+                  <property name="minimumSize">
+                   <size>
+                    <width>0</width>
+                    <height>24</height>
+                   </size>
+                  </property>
                   <property name="font">
                    <font>
                     <pointsize>10</pointsize>
@@ -2835,6 +3164,12 @@ QGroupBox::title {
               </item>
               <item row="3" column="1">
                <widget class="QLineEdit" name="edit_spray_mmh_12">
+                <property name="minimumSize">
+                 <size>
+                  <width>0</width>
+                  <height>24</height>
+                 </size>
+                </property>
                 <property name="font">
                  <font>
                   <pointsize>9</pointsize>
@@ -2957,6 +3292,12 @@ QGroupBox::title {
               </item>
               <item row="4" column="1">
                <widget class="QLineEdit" name="edit_spray_nto_4">
+                <property name="minimumSize">
+                 <size>
+                  <width>0</width>
+                  <height>24</height>
+                 </size>
+                </property>
                 <property name="font">
                  <font>
                   <pointsize>9</pointsize>
@@ -2973,6 +3314,12 @@ QGroupBox::title {
               </item>
               <item row="6" column="1">
                <widget class="QLineEdit" name="edit_spray_nto_5">
+                <property name="minimumSize">
+                 <size>
+                  <width>0</width>
+                  <height>24</height>
+                 </size>
+                </property>
                 <property name="font">
                  <font>
                   <pointsize>9</pointsize>
@@ -3002,6 +3349,12 @@ QGroupBox::title {
               </item>
               <item row="3" column="1">
                <widget class="QLineEdit" name="edit_spray_nto_3">
+                <property name="minimumSize">
+                 <size>
+                  <width>0</width>
+                  <height>24</height>
+                 </size>
+                </property>
                 <property name="font">
                  <font>
                   <pointsize>9</pointsize>
@@ -3018,6 +3371,12 @@ QGroupBox::title {
               </item>
               <item row="2" column="1">
                <widget class="QLineEdit" name="edit_spray_nto_2">
+                <property name="minimumSize">
+                 <size>
+                  <width>0</width>
+                  <height>24</height>
+                 </size>
+                </property>
                 <property name="font">
                  <font>
                   <pointsize>9</pointsize>
@@ -3034,6 +3393,12 @@ QGroupBox::title {
               </item>
               <item row="0" column="1">
                <widget class="QLineEdit" name="edit_spray_nto_1">
+                <property name="minimumSize">
+                 <size>
+                  <width>0</width>
+                  <height>24</height>
+                 </size>
+                </property>
                 <property name="font">
                  <font>
                   <pointsize>9</pointsize>
@@ -3095,6 +3460,12 @@ QGroupBox::title {
                <layout class="QHBoxLayout" name="horizontalLayout_6">
                 <item>
                  <widget class="QLineEdit" name="edit_spray_nto_6">
+                  <property name="minimumSize">
+                   <size>
+                    <width>0</width>
+                    <height>24</height>
+                   </size>
+                  </property>
                   <property name="font">
                    <font>
                     <pointsize>10</pointsize>
@@ -3110,6 +3481,12 @@ QGroupBox::title {
                 </item>
                 <item>
                  <widget class="QLineEdit" name="edit_spray_nto_7">
+                  <property name="minimumSize">
+                   <size>
+                    <width>0</width>
+                    <height>24</height>
+                   </size>
+                  </property>
                   <property name="font">
                    <font>
                     <pointsize>10</pointsize>
@@ -3125,6 +3502,12 @@ QGroupBox::title {
                 </item>
                 <item>
                  <widget class="QLineEdit" name="edit_spray_nto_8">
+                  <property name="minimumSize">
+                   <size>
+                    <width>0</width>
+                    <height>24</height>
+                   </size>
+                  </property>
                   <property name="font">
                    <font>
                     <pointsize>10</pointsize>
@@ -3149,7 +3532,7 @@ QGroupBox::title {
                  </font>
                 </property>
                 <property name="text">
-                 <string>Position [m]</string>
+                 <string>Position (x,y,z) [m]</string>
                 </property>
                </widget>
               </item>
@@ -3175,12 +3558,18 @@ QGroupBox::title {
                  </font>
                 </property>
                 <property name="text">
-                 <string>Direction</string>
+                 <string>Direction (x,y,z)</string>
                 </property>
                </widget>
               </item>
               <item row="4" column="1">
                <widget class="QLineEdit" name="edit_spray_nto_13">
+                <property name="minimumSize">
+                 <size>
+                  <width>0</width>
+                  <height>24</height>
+                 </size>
+                </property>
                 <property name="font">
                  <font>
                   <pointsize>9</pointsize>
@@ -3212,6 +3601,12 @@ QGroupBox::title {
                <layout class="QHBoxLayout" name="horizontalLayout_7">
                 <item>
                  <widget class="QLineEdit" name="edit_spray_nto_9">
+                  <property name="minimumSize">
+                   <size>
+                    <width>0</width>
+                    <height>24</height>
+                   </size>
+                  </property>
                   <property name="font">
                    <font>
                     <pointsize>10</pointsize>
@@ -3227,6 +3622,12 @@ QGroupBox::title {
                 </item>
                 <item>
                  <widget class="QLineEdit" name="edit_spray_nto_10">
+                  <property name="minimumSize">
+                   <size>
+                    <width>0</width>
+                    <height>24</height>
+                   </size>
+                  </property>
                   <property name="font">
                    <font>
                     <pointsize>10</pointsize>
@@ -3242,6 +3643,12 @@ QGroupBox::title {
                 </item>
                 <item>
                  <widget class="QLineEdit" name="edit_spray_nto_11">
+                  <property name="minimumSize">
+                   <size>
+                    <width>0</width>
+                    <height>24</height>
+                   </size>
+                  </property>
                   <property name="font">
                    <font>
                     <pointsize>10</pointsize>
@@ -3259,6 +3666,12 @@ QGroupBox::title {
               </item>
               <item row="3" column="1">
                <widget class="QLineEdit" name="edit_spray_nto_12">
+                <property name="minimumSize">
+                 <size>
+                  <width>0</width>
+                  <height>24</height>
+                 </size>
+                </property>
                 <property name="font">
                  <font>
                   <pointsize>9</pointsize>
@@ -3340,8 +3753,99 @@ QGroupBox::title {
               <string>&lt; Discretization Schemes &gt;</string>
              </property>
              <layout class="QGridLayout" name="gridLayout_15" columnstretch="2,1">
-              <item row="2" column="1">
-               <widget class="QComboBox" name="combo_numerical_3">
+              <item row="3" column="1">
+               <widget class="QComboBox" name="combo_numerical_4">
+                <property name="minimumSize">
+                 <size>
+                  <width>0</width>
+                  <height>24</height>
+                 </size>
+                </property>
+                <property name="font">
+                 <font>
+                  <pointsize>9</pointsize>
+                 </font>
+                </property>
+                <item>
+                 <property name="text">
+                  <string>upwind</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Minmod</string>
+                 </property>
+                </item>
+               </widget>
+              </item>
+              <item row="3" column="0">
+               <widget class="QLabel" name="label_32">
+                <property name="font">
+                 <font>
+                  <pointsize>9</pointsize>
+                 </font>
+                </property>
+                <property name="text">
+                 <string>Turbulence</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="0">
+               <widget class="QLabel" name="label_29">
+                <property name="font">
+                 <font>
+                  <pointsize>9</pointsize>
+                 </font>
+                </property>
+                <property name="text">
+                 <string>Time</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="1">
+               <widget class="QComboBox" name="combo_numerical_2">
+                <property name="minimumSize">
+                 <size>
+                  <width>0</width>
+                  <height>24</height>
+                 </size>
+                </property>
+                <property name="font">
+                 <font>
+                  <pointsize>9</pointsize>
+                 </font>
+                </property>
+                <property name="acceptDrops">
+                 <bool>false</bool>
+                </property>
+                <property name="currentIndex">
+                 <number>1</number>
+                </property>
+                <item>
+                 <property name="text">
+                  <string>Minmod</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>MinmodV</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>vanLeer</string>
+                 </property>
+                </item>
+               </widget>
+              </item>
+              <item row="4" column="1">
+               <widget class="QComboBox" name="combo_numerical_5">
+                <property name="minimumSize">
+                 <size>
+                  <width>0</width>
+                  <height>24</height>
+                 </size>
+                </property>
                 <property name="font">
                  <font>
                   <pointsize>9</pointsize>
@@ -3364,30 +3868,18 @@ QGroupBox::title {
                 </item>
                </widget>
               </item>
-              <item row="0" column="0">
-               <widget class="QLabel" name="label_29">
+              <item row="2" column="1">
+               <widget class="QComboBox" name="combo_numerical_3">
+                <property name="minimumSize">
+                 <size>
+                  <width>0</width>
+                  <height>24</height>
+                 </size>
+                </property>
                 <property name="font">
                  <font>
                   <pointsize>9</pointsize>
                  </font>
-                </property>
-                <property name="text">
-                 <string>Time</string>
-                </property>
-               </widget>
-              </item>
-              <item row="1" column="1">
-               <widget class="QComboBox" name="combo_numerical_2">
-                <property name="font">
-                 <font>
-                  <pointsize>9</pointsize>
-                 </font>
-                </property>
-                <property name="acceptDrops">
-                 <bool>false</bool>
-                </property>
-                <property name="currentIndex">
-                 <number>1</number>
                 </property>
                 <item>
                  <property name="text">
@@ -3418,6 +3910,18 @@ QGroupBox::title {
                 </property>
                </widget>
               </item>
+              <item row="2" column="0">
+               <widget class="QLabel" name="label_31">
+                <property name="font">
+                 <font>
+                  <pointsize>9</pointsize>
+                 </font>
+                </property>
+                <property name="text">
+                 <string>Energy</string>
+                </property>
+               </widget>
+              </item>
               <item row="1" column="0">
                <widget class="QLabel" name="label_30">
                 <property name="font">
@@ -3430,51 +3934,14 @@ QGroupBox::title {
                 </property>
                </widget>
               </item>
-              <item row="4" column="1">
-               <widget class="QComboBox" name="combo_numerical_5">
-                <property name="font">
-                 <font>
-                  <pointsize>9</pointsize>
-                 </font>
-                </property>
-                <item>
-                 <property name="text">
-                  <string>Minmod</string>
-                 </property>
-                </item>
-                <item>
-                 <property name="text">
-                  <string>MinmodV</string>
-                 </property>
-                </item>
-                <item>
-                 <property name="text">
-                  <string>vanLeer</string>
-                 </property>
-                </item>
-               </widget>
-              </item>
-              <item row="3" column="1">
-               <widget class="QComboBox" name="combo_numerical_4">
-                <property name="font">
-                 <font>
-                  <pointsize>9</pointsize>
-                 </font>
-                </property>
-                <item>
-                 <property name="text">
-                  <string>upwind</string>
-                 </property>
-                </item>
-                <item>
-                 <property name="text">
-                  <string>Minmod</string>
-                 </property>
-                </item>
-               </widget>
-              </item>
               <item row="0" column="1">
                <widget class="QComboBox" name="combo_numerical_1">
+                <property name="minimumSize">
+                 <size>
+                  <width>0</width>
+                  <height>24</height>
+                 </size>
+                </property>
                 <property name="font">
                  <font>
                   <pointsize>9</pointsize>
@@ -3490,30 +3957,6 @@ QGroupBox::title {
                   <string>Steady</string>
                  </property>
                 </item>
-               </widget>
-              </item>
-              <item row="3" column="0">
-               <widget class="QLabel" name="label_32">
-                <property name="font">
-                 <font>
-                  <pointsize>9</pointsize>
-                 </font>
-                </property>
-                <property name="text">
-                 <string>Turbulence</string>
-                </property>
-               </widget>
-              </item>
-              <item row="2" column="0">
-               <widget class="QLabel" name="label_31">
-                <property name="font">
-                 <font>
-                  <pointsize>9</pointsize>
-                 </font>
-                </property>
-                <property name="text">
-                 <string>Energy</string>
-                </property>
                </widget>
               </item>
              </layout>
@@ -3545,22 +3988,15 @@ QGroupBox::title {
              <property name="title">
               <string>&lt; PIMPLE &gt;</string>
              </property>
-             <layout class="QGridLayout" name="gridLayout_5" columnstretch="1,0">
-              <item row="0" column="0">
-               <widget class="QLabel" name="label_34">
-                <property name="font">
-                 <font>
-                  <pointsize>9</pointsize>
-                  <bold>false</bold>
-                 </font>
-                </property>
-                <property name="text">
-                 <string>nCorrectors</string>
-                </property>
-               </widget>
-              </item>
+             <layout class="QGridLayout" name="gridLayout_5" columnstretch="2,1">
               <item row="3" column="1">
                <widget class="QComboBox" name="combo_numerical_6">
+                <property name="minimumSize">
+                 <size>
+                  <width>0</width>
+                  <height>24</height>
+                 </size>
+                </property>
                 <property name="font">
                  <font>
                   <pointsize>9</pointsize>
@@ -3617,6 +4053,19 @@ QGroupBox::title {
                 </property>
                </widget>
               </item>
+              <item row="0" column="0">
+               <widget class="QLabel" name="label_34">
+                <property name="font">
+                 <font>
+                  <pointsize>9</pointsize>
+                  <bold>false</bold>
+                 </font>
+                </property>
+                <property name="text">
+                 <string>nCorrectors</string>
+                </property>
+               </widget>
+              </item>
               <item row="0" column="1">
                <widget class="QLineEdit" name="edit_numerical_1">
                 <property name="sizePolicy">
@@ -3628,12 +4077,12 @@ QGroupBox::title {
                 <property name="minimumSize">
                  <size>
                   <width>0</width>
-                  <height>0</height>
+                  <height>24</height>
                  </size>
                 </property>
                 <property name="font">
                  <font>
-                  <family>Ubuntu</family>
+                  <family>맑은 고딕</family>
                   <pointsize>9</pointsize>
                   <bold>false</bold>
                  </font>
@@ -3657,12 +4106,12 @@ QGroupBox::title {
                 <property name="minimumSize">
                  <size>
                   <width>0</width>
-                  <height>0</height>
+                  <height>24</height>
                  </size>
                 </property>
                 <property name="font">
                  <font>
-                  <family>Ubuntu</family>
+                  <family>맑은 고딕</family>
                   <pointsize>9</pointsize>
                   <bold>false</bold>
                  </font>
@@ -3686,12 +4135,12 @@ QGroupBox::title {
                 <property name="minimumSize">
                  <size>
                   <width>0</width>
-                  <height>0</height>
+                  <height>24</height>
                  </size>
                 </property>
                 <property name="font">
                  <font>
-                  <family>Ubuntu</family>
+                  <family>맑은 고딕</family>
                   <pointsize>9</pointsize>
                   <bold>false</bold>
                  </font>
@@ -3782,6 +4231,12 @@ QGroupBox::title {
               </property>
               <item row="6" column="1">
                <widget class="QComboBox" name="combo_run_1">
+                <property name="minimumSize">
+                 <size>
+                  <width>0</width>
+                  <height>24</height>
+                 </size>
+                </property>
                 <property name="font">
                  <font>
                   <pointsize>10</pointsize>
@@ -3810,7 +4265,7 @@ QGroupBox::title {
                 <property name="minimumSize">
                  <size>
                   <width>0</width>
-                  <height>0</height>
+                  <height>24</height>
                  </size>
                 </property>
                 <property name="font">
@@ -3839,7 +4294,7 @@ QGroupBox::title {
                 <property name="minimumSize">
                  <size>
                   <width>0</width>
-                  <height>0</height>
+                  <height>24</height>
                  </size>
                 </property>
                 <property name="font">
@@ -3883,7 +4338,7 @@ QGroupBox::title {
                 <property name="minimumSize">
                  <size>
                   <width>0</width>
-                  <height>0</height>
+                  <height>24</height>
                  </size>
                 </property>
                 <property name="font">
@@ -3940,7 +4395,7 @@ QGroupBox::title {
                 <property name="minimumSize">
                  <size>
                   <width>0</width>
-                  <height>0</height>
+                  <height>24</height>
                  </size>
                 </property>
                 <property name="font">
@@ -3983,7 +4438,7 @@ QGroupBox::title {
                 <property name="minimumSize">
                  <size>
                   <width>0</width>
-                  <height>0</height>
+                  <height>24</height>
                  </size>
                 </property>
                 <property name="font">
@@ -4040,7 +4495,7 @@ QGroupBox::title {
                 <property name="minimumSize">
                  <size>
                   <width>0</width>
-                  <height>0</height>
+                  <height>24</height>
                  </size>
                 </property>
                 <property name="font">
@@ -4098,7 +4553,7 @@ QGroupBox::title {
                 <property name="minimumSize">
                  <size>
                   <width>0</width>
-                  <height>0</height>
+                  <height>24</height>
                  </size>
                 </property>
                 <property name="font">
@@ -4193,7 +4648,7 @@ QGroupBox::title {
                       <property name="minimumSize">
                        <size>
                         <width>0</width>
-                        <height>0</height>
+                        <height>24</height>
                        </size>
                       </property>
                       <property name="font">
@@ -4302,57 +4757,6 @@ QGroupBox::title {
               <property name="bottomMargin">
                <number>9</number>
               </property>
-              <item row="0" column="0">
-               <widget class="QLabel" name="label_73">
-                <property name="font">
-                 <font>
-                  <pointsize>9</pointsize>
-                  <bold>false</bold>
-                 </font>
-                </property>
-                <property name="text">
-                 <string>Number of Subdomains </string>
-                </property>
-               </widget>
-              </item>
-              <item row="1" column="0">
-               <widget class="QLabel" name="label_85">
-                <property name="font">
-                 <font>
-                  <pointsize>9</pointsize>
-                  <bold>false</bold>
-                 </font>
-                </property>
-                <property name="text">
-                 <string>Host Configuration</string>
-                </property>
-               </widget>
-              </item>
-              <item row="1" column="1">
-               <widget class="QPushButton" name="button_edit_hostfile_run">
-                <property name="sizePolicy">
-                 <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
-                  <horstretch>0</horstretch>
-                  <verstretch>0</verstretch>
-                 </sizepolicy>
-                </property>
-                <property name="minimumSize">
-                 <size>
-                  <width>0</width>
-                  <height>30</height>
-                 </size>
-                </property>
-                <property name="font">
-                 <font>
-                  <pointsize>9</pointsize>
-                  <bold>false</bold>
-                 </font>
-                </property>
-                <property name="text">
-                 <string>Edit host file</string>
-                </property>
-               </widget>
-              </item>
               <item row="0" column="1">
                <widget class="QLineEdit" name="edit_number_of_subdomains_2">
                 <property name="sizePolicy">
@@ -4364,7 +4768,7 @@ QGroupBox::title {
                 <property name="minimumSize">
                  <size>
                   <width>0</width>
-                  <height>0</height>
+                  <height>24</height>
                  </size>
                 </property>
                 <property name="font">
@@ -4380,6 +4784,89 @@ QGroupBox::title {
                 <property name="alignment">
                  <set>Qt::AlignmentFlag::AlignCenter</set>
                 </property>
+               </widget>
+              </item>
+              <item row="0" column="0">
+               <widget class="QLabel" name="label_73">
+                <property name="font">
+                 <font>
+                  <pointsize>9</pointsize>
+                  <bold>false</bold>
+                 </font>
+                </property>
+                <property name="text">
+                 <string>Number of Subdomains </string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="0" colspan="2">
+               <widget class="QGroupBox" name="groupBox_19">
+                <property name="font">
+                 <font>
+                  <pointsize>10</pointsize>
+                 </font>
+                </property>
+                <property name="styleSheet">
+                 <string notr="true">QGroupBox {
+    border: 1px solid;
+    border-radius: 6;
+    margin-top: 9;
+    border-color : #c8c8c8;
+	padding: 3;   
+}
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    left: 10;
+    padding: 2 3;
+}</string>
+                </property>
+                <property name="title">
+                 <string>&lt; Parallel Execution &gt;</string>
+                </property>
+                <property name="checkable">
+                 <bool>true</bool>
+                </property>
+                <layout class="QGridLayout" name="gridLayout_22" columnstretch="1,0">
+                 <item row="0" column="0">
+                  <widget class="QLabel" name="label_85">
+                   <property name="font">
+                    <font>
+                     <pointsize>9</pointsize>
+                     <bold>false</bold>
+                    </font>
+                   </property>
+                   <property name="text">
+                    <string>Host Configuration</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="0" column="1">
+                  <widget class="QPushButton" name="button_edit_hostfile_run">
+                   <property name="sizePolicy">
+                    <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                     <horstretch>0</horstretch>
+                     <verstretch>0</verstretch>
+                    </sizepolicy>
+                   </property>
+                   <property name="minimumSize">
+                    <size>
+                     <width>0</width>
+                     <height>28</height>
+                    </size>
+                   </property>
+                   <property name="font">
+                    <font>
+                     <pointsize>9</pointsize>
+                     <bold>false</bold>
+                    </font>
+                   </property>
+                   <property name="text">
+                    <string>Edit host file</string>
+                   </property>
+                  </widget>
+                 </item>
+                </layout>
                </widget>
               </item>
              </layout>
@@ -4415,12 +4902,87 @@ QGroupBox::title {
               <property name="topMargin">
                <number>9</number>
               </property>
-              <item row="3" column="1">
-               <widget class="QLabel" name="edit_run_status">
+              <item row="0" column="0">
+               <widget class="QLabel" name="label_17">
                 <property name="font">
                  <font>
                   <pointsize>10</pointsize>
                   <bold>false</bold>
+                 </font>
+                </property>
+                <property name="text">
+                 <string>Name</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="1">
+               <widget class="QLabel" name="edit_run_name">
+                <property name="minimumSize">
+                 <size>
+                  <width>0</width>
+                  <height>24</height>
+                 </size>
+                </property>
+                <property name="font">
+                 <font>
+                  <pointsize>10</pointsize>
+                  <bold>false</bold>
+                 </font>
+                </property>
+                <property name="frameShape">
+                 <enum>QFrame::Shape::NoFrame</enum>
+                </property>
+                <property name="frameShadow">
+                 <enum>QFrame::Shadow::Sunken</enum>
+                </property>
+                <property name="text">
+                 <string>-</string>
+                </property>
+                <property name="alignment">
+                 <set>Qt::AlignmentFlag::AlignCenter</set>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="1">
+               <widget class="QLabel" name="edit_run_id">
+                <property name="minimumSize">
+                 <size>
+                  <width>0</width>
+                  <height>24</height>
+                 </size>
+                </property>
+                <property name="font">
+                 <font>
+                  <pointsize>10</pointsize>
+                  <bold>false</bold>
+                 </font>
+                </property>
+                <property name="frameShape">
+                 <enum>QFrame::Shape::NoFrame</enum>
+                </property>
+                <property name="frameShadow">
+                 <enum>QFrame::Shadow::Sunken</enum>
+                </property>
+                <property name="text">
+                 <string>-</string>
+                </property>
+                <property name="alignment">
+                 <set>Qt::AlignmentFlag::AlignCenter</set>
+                </property>
+               </widget>
+              </item>
+              <item row="4" column="1">
+               <widget class="QLabel" name="edit_run_status">
+                <property name="minimumSize">
+                 <size>
+                  <width>0</width>
+                  <height>24</height>
+                 </size>
+                </property>
+                <property name="font">
+                 <font>
+                  <pointsize>10</pointsize>
+                  <bold>true</bold>
                  </font>
                 </property>
                 <property name="frameShape">
@@ -4437,21 +4999,14 @@ QGroupBox::title {
                 </property>
                </widget>
               </item>
-              <item row="3" column="0">
-               <widget class="QLabel" name="label_4">
-                <property name="font">
-                 <font>
-                  <pointsize>10</pointsize>
-                  <bold>false</bold>
-                 </font>
-                </property>
-                <property name="text">
-                 <string>Status</string>
-                </property>
-               </widget>
-              </item>
               <item row="2" column="1">
-               <widget class="QLabel" name="edit_ru_started">
+               <widget class="QLabel" name="edit_run_started">
+                <property name="minimumSize">
+                 <size>
+                  <width>0</width>
+                  <height>24</height>
+                 </size>
+                </property>
                 <property name="font">
                  <font>
                   <pointsize>10</pointsize>
@@ -4491,6 +5046,19 @@ QGroupBox::title {
                 </property>
                </widget>
               </item>
+              <item row="4" column="0">
+               <widget class="QLabel" name="label_4">
+                <property name="font">
+                 <font>
+                  <pointsize>10</pointsize>
+                  <bold>false</bold>
+                 </font>
+                </property>
+                <property name="text">
+                 <string>Status</string>
+                </property>
+               </widget>
+              </item>
               <item row="2" column="0">
                <widget class="QLabel" name="label_3">
                 <property name="font">
@@ -4504,30 +5072,8 @@ QGroupBox::title {
                 </property>
                </widget>
               </item>
-              <item row="1" column="1">
-               <widget class="QLabel" name="edit_run_id">
-                <property name="font">
-                 <font>
-                  <pointsize>10</pointsize>
-                  <bold>false</bold>
-                 </font>
-                </property>
-                <property name="frameShape">
-                 <enum>QFrame::Shape::NoFrame</enum>
-                </property>
-                <property name="frameShadow">
-                 <enum>QFrame::Shadow::Sunken</enum>
-                </property>
-                <property name="text">
-                 <string>-</string>
-                </property>
-                <property name="alignment">
-                 <set>Qt::AlignmentFlag::AlignCenter</set>
-                </property>
-               </widget>
-              </item>
-              <item row="0" column="0">
-               <widget class="QLabel" name="label_17">
+              <item row="3" column="0">
+               <widget class="QLabel" name="label_19">
                 <property name="font">
                  <font>
                   <pointsize>10</pointsize>
@@ -4535,12 +5081,18 @@ QGroupBox::title {
                  </font>
                 </property>
                 <property name="text">
-                 <string>Name</string>
+                 <string>Finished</string>
                 </property>
                </widget>
               </item>
-              <item row="0" column="1">
-               <widget class="QLabel" name="edit_run_name">
+              <item row="3" column="1">
+               <widget class="QLabel" name="edit_run_finished">
+                <property name="minimumSize">
+                 <size>
+                  <width>0</width>
+                  <height>24</height>
+                 </size>
+                </property>
                 <property name="font">
                  <font>
                   <pointsize>10</pointsize>
@@ -4584,7 +5136,7 @@ QGroupBox::title {
                <property name="minimumSize">
                 <size>
                  <width>0</width>
-                 <height>35</height>
+                 <height>36</height>
                 </size>
                </property>
                <property name="font">
@@ -4609,7 +5161,7 @@ QGroupBox::title {
                <property name="minimumSize">
                 <size>
                  <width>0</width>
-                 <height>35</height>
+                 <height>36</height>
                 </size>
                </property>
                <property name="font">
@@ -4628,7 +5180,7 @@ QGroupBox::title {
                <property name="minimumSize">
                 <size>
                  <width>0</width>
-                 <height>35</height>
+                 <height>36</height>
                 </size>
                </property>
                <property name="font">
