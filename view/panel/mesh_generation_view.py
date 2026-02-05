@@ -418,23 +418,89 @@ class MeshGenerationView:
         )
         of_wrapper.chmod(0o755)
 
-        # Build list of mesh generation commands
-        # OpenFOAM commands use of_cmd.sh wrapper to source environment
-        # Commands with glob patterns use shell_cmd.sh wrapper
-        commands = [
-            "./shell_cmd.sh rm -rf constant/polyMesh 'constant/*/polyMesh' 'log.*' 'processor*' VTK constant/extendedFeatureEdgeMesh constant/cellToRegion 0",
-            "./of_cmd.sh blockMesh",
-            "./of_cmd.sh surfaceFeatureExtract",
-            "./of_cmd.sh decomposePar",
-            f"./of_cmd.sh mpirun -np {n_procs} snappyHexMesh -overwrite -parallel",
-            "./of_cmd.sh reconstructParMesh -mergeTol 1e-12 -constant",
-            "./shell_cmd.sh rm -rf 'processor*'",
-            "./of_cmd.sh restore0Dir",
-            "./of_cmd.sh splitMeshRegions -cellZones -overwrite",
-        ]
+        # Parse Allclean/Allrun scripts to build command list
+        allclean = meshing_path / "Allclean"
+        allrun = meshing_path / "Allrun"
+
+        commands = []
+        if allclean.exists():
+            commands.extend(self._parse_script(allclean, n_procs))
+        if allrun.exists():
+            commands.extend(self._parse_script(allrun, n_procs))
+
+        if not commands:
+            QMessageBox.warning(
+                None, "Mesh Generation",
+                "Allclean/Allrun files not found in:\n"
+                f"{meshing_path}"
+            )
+            self._restore_ui()
+            return
 
         # Run mesh generation commands with progress bar
         self.exec_widget.run(commands)
+
+    def _parse_script(self, script_path: Path, n_procs: int) -> list:
+        """Allclean/Allrun 스크립트를 파싱하여 실행 명령어 리스트 반환.
+
+        Args:
+            script_path: Allclean 또는 Allrun 파일 경로
+            n_procs: 병렬 처리 프로세서 수
+
+        Returns:
+            래퍼(shell_cmd.sh/of_cmd.sh)가 붙은 명령어 리스트
+        """
+        SKIP_PREFIXES = (
+            '#!',                       # shebang
+            'cd "${0%/*}"',             # directory change
+            '. ${WM_PROJECT_DIR',       # source RunFunctions/CleanFunctions
+            'cp ../',                   # STL copy (GUI handles this)
+        )
+        SHELL_CMDS = {'rm', 'cp', 'mkdir', 'mv', 'ls', 'find', 'echo'}
+
+        commands = []
+        try:
+            lines = script_path.read_text(encoding='utf-8').splitlines()
+        except Exception:
+            return commands
+
+        for raw_line in lines:
+            line = raw_line.strip()
+
+            # 빈 줄/주석 건너뛰기
+            if not line or line.startswith('#'):
+                continue
+
+            # 보일러플레이트 건너뛰기
+            if any(line.startswith(p) for p in SKIP_PREFIXES):
+                continue
+
+            # 인라인 리다이렉션/주석 제거
+            line = re.sub(r'>\s*/dev/null.*', '', line).strip()
+            line = re.sub(r'#.*$', '', line).strip()
+            if not line:
+                continue
+
+            # runApplication 접두사 제거
+            if line.startswith('runApplication '):
+                line = line[len('runApplication '):]
+
+            # runParallel → mpirun 변환
+            if line.startswith('runParallel '):
+                line = f"mpirun -np {n_procs} " + line[len('runParallel '):]
+
+            # getNumberOfProcessors 치환
+            line = line.replace('`getNumberOfProcessors`', str(n_procs))
+            line = line.replace('$(getNumberOfProcessors)', str(n_procs))
+
+            # 래퍼 분류: 쉘 명령 vs OpenFOAM 명령
+            first_word = line.split()[0]
+            if first_word in SHELL_CMDS:
+                commands.append(f"./shell_cmd.sh {line}")
+            else:
+                commands.append(f"./of_cmd.sh {line}")
+
+        return commands
 
     def _on_preparation_error(self, error_msg: str):
         """Handle preparation error."""
