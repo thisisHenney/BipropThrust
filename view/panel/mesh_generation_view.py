@@ -14,7 +14,7 @@ from datetime import datetime
 from pathlib import Path
 
 import vtk
-from PySide6.QtCore import QThread, Qt, Signal
+from PySide6.QtCore import QThread, Qt, Signal, QTimer
 from PySide6.QtWidgets import (
     QToolBar,
     QLabel,
@@ -124,6 +124,12 @@ class MeshGenerationView:
         self.clip_actor = None
         self.clip_filter = None
 
+        # Debounce timer for slice updates (prevents laggy updates during rapid changes)
+        self._slice_update_timer = QTimer()
+        self._slice_update_timer.setSingleShot(True)
+        self._slice_update_timer.setInterval(150)  # 150ms debounce
+        self._slice_update_timer.timeout.connect(self.update_slice)
+
         # Create slice controls widget (will be shown/hidden by center_widget)
         self.slice_widget = self._create_slice_widget()
 
@@ -140,13 +146,13 @@ class MeshGenerationView:
         # Disable mesh stop button initially
         self.ui.button_mesh_stop.setEnabled(False)
 
-        # Slice toolbar signals
-        self.combo_dir.currentIndexChanged.connect(self.update_slice)
+        # Slice toolbar signals (debounced to prevent lag during rapid changes)
+        self.combo_dir.currentIndexChanged.connect(self._request_slice_update)
         self.slider_pos.valueChanged.connect(self._on_slider_changed)
-        self.chk_clip.toggled.connect(self.update_slice)
-        self.spin_nx.valueChanged.connect(self.update_slice)
-        self.spin_ny.valueChanged.connect(self.update_slice)
-        self.spin_nz.valueChanged.connect(self.update_slice)
+        self.chk_clip.toggled.connect(self._request_slice_update)
+        self.spin_nx.valueChanged.connect(self._request_slice_update)
+        self.spin_ny.valueChanged.connect(self._request_slice_update)
+        self.spin_nz.valueChanged.connect(self._request_slice_update)
 
     def _create_slice_widget(self):
         """
@@ -1039,6 +1045,7 @@ FoamFile
                 self.mesh_thread.reader if self.mesh_thread.success else None
             )
         )
+        self.mesh_thread.finished.connect(self.mesh_thread.deleteLater)
         self.mesh_thread.start()
 
     def _on_openfoam_case_loaded(self, reader):
@@ -1226,9 +1233,13 @@ FoamFile
         return origin, normal
 
     def _on_slider_changed(self, value: int):
-        """Handle slider value change."""
+        """Handle slider value change (debounced)."""
         self.lbl_pos_value.setText(f"{value}%")
-        self.update_slice()
+        self._request_slice_update()
+
+    def _request_slice_update(self):
+        """Request a debounced slice update (prevents lag during rapid UI changes)."""
+        self._slice_update_timer.start()
 
     def update_slice(self):
         """Update slice/clip visualization based on current settings."""
