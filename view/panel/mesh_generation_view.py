@@ -133,8 +133,12 @@ class MeshGenerationView:
     def _init_connect(self):
         """Initialize signal connections."""
         self.ui.button_mesh_generate.clicked.connect(self._on_generate_clicked)
+        self.ui.button_mesh_stop.clicked.connect(self._on_mesh_stop_clicked)
         self.ui.button_edit_hostfile_mesh.clicked.connect(self._on_edit_hostfile_clicked)
-        self.ui.groupBox_18.toggled.connect(self._on_parallel_mesh_toggled)
+        self.ui.checkBox_host_1.toggled.connect(self._on_hostfile_mesh_toggled)
+
+        # Disable mesh stop button initially
+        self.ui.button_mesh_stop.setEnabled(False)
 
         # Slice toolbar signals
         self.combo_dir.currentIndexChanged.connect(self.update_slice)
@@ -224,9 +228,68 @@ class MeshGenerationView:
 
         return slice_toolbar
 
-    def _on_parallel_mesh_toggled(self, checked: bool):
-        """Save parallel mesh checkbox state to app_data."""
+    def _on_hostfile_mesh_toggled(self, checked: bool):
+        """Save hostfile checkbox state to app_data and enable/disable Edit button."""
         self.app_data.parallel_mesh_enabled = checked
+        self.ui.button_edit_hostfile_mesh.setEnabled(checked)
+
+    def _on_mesh_stop_clicked(self):
+        """Handle Mesh Stop button click - stop the mesh generation process."""
+        if self.exec_widget:
+            self.exec_widget.stop_process()
+
+        # Restore UI state
+        self.ui.button_mesh_generate.setEnabled(True)
+        self.ui.button_mesh_generate.setText("Generate Mesh")
+        self.ui.button_mesh_stop.setEnabled(False)
+        self.ui.button_run.setEnabled(True)
+        self.ui.button_stop.setEnabled(False)
+        self.ui.edit_run_status.setText("Stopped")
+        self.ui.edit_run_finished.setText(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+
+    def _highlight_error_widget(self, widget):
+        """
+        Highlight widget with red border and scroll to it.
+
+        Args:
+            widget: QWidget to highlight (typically QLineEdit)
+        """
+        from PySide6.QtWidgets import QScrollArea
+
+        # Save original stylesheet and widget reference for later restoration
+        if not hasattr(self, '_error_highlighted_widget'):
+            self._error_highlighted_widget = None
+            self._error_original_style = ""
+
+        # Save state
+        self._error_highlighted_widget = widget
+        self._error_original_style = widget.styleSheet()
+
+        # Apply red border style
+        widget.setStyleSheet("border: 2px solid #ff4444; border-radius: 3px;")
+
+        # Find parent scroll area and scroll to widget
+        parent = widget.parent()
+        while parent is not None:
+            if isinstance(parent, QScrollArea):
+                parent.ensureWidgetVisible(widget, 50, 50)
+                break
+            parent = parent.parent()
+
+        # Set focus to the widget and select all text
+        widget.setFocus()
+        widget.selectAll()
+
+    def _clear_error_highlight(self):
+        """Clear error highlighting from previously highlighted widget."""
+        if hasattr(self, '_error_highlighted_widget') and self._error_highlighted_widget:
+            # Clear inline style and force update
+            self._error_highlighted_widget.setStyleSheet("")
+            self._error_highlighted_widget.style().unpolish(self._error_highlighted_widget)
+            self._error_highlighted_widget.style().polish(self._error_highlighted_widget)
+            self._error_highlighted_widget.update()
+            self._error_highlighted_widget = None
+            self._error_original_style = ""
 
     def _on_edit_hostfile_clicked(self):
         """Handle Edit host file button click - open hosts file in text editor."""
@@ -253,12 +316,16 @@ class MeshGenerationView:
         """Handle Generate button click - prepare files in background then run mesh generation."""
         import os
 
+        # Clear any previous error highlighting first
+        self._clear_error_highlight()
+
         # Validate number of subdomains vs CPU count
         try:
             n_procs = int(self.ui.edit_number_of_subdomains.text())
             cpu_count = os.cpu_count() or 1
 
             if n_procs > cpu_count:
+                self._highlight_error_widget(self.ui.edit_number_of_subdomains)
                 QMessageBox.critical(
                     self.parent,
                     "Error",
@@ -378,9 +445,11 @@ class MeshGenerationView:
         """Handle successful preparation - start mesh generation."""
         if not self.exec_widget:
             self.ui.button_mesh_generate.setEnabled(True)
-            self.ui.button_mesh_generate.setText("Mesh generate")
+            self.ui.button_mesh_generate.setText("Generate Mesh")
+            self.ui.button_mesh_stop.setEnabled(False)
             self.ui.button_run.setEnabled(True)  # Re-enable Run button
-            self.ui.edit_run_name.setText("-")  # Reset task name
+            self.ui.button_stop.setEnabled(False)
+            self.ui.button_pause.setEnabled(False)
             self.ui.edit_run_status.setText("Ready")  # Reset status
             return
 
@@ -395,6 +464,10 @@ class MeshGenerationView:
         # Update button text and status to show generating
         self.ui.button_mesh_generate.setText("Generating...")
         self.ui.edit_run_status.setText("Running...")
+
+        # Enable Stop buttons during mesh generation
+        self.ui.button_mesh_stop.setEnabled(True)
+        self.ui.button_stop.setEnabled(True)
 
         # Get number of processors from UI and update decomposeParDict
         n_procs = 4  # default
@@ -453,7 +526,7 @@ class MeshGenerationView:
         allclean = meshing_path / "Allclean"
         allrun = meshing_path / "Allrun"
 
-        use_hostfile = self.ui.groupBox_18.isChecked()
+        use_hostfile = self.ui.checkBox_host_1.isChecked()
         commands = []
         if allclean.exists():
             commands.extend(self._parse_script(allclean, n_procs, use_hostfile))
@@ -557,18 +630,22 @@ class MeshGenerationView:
     def _on_preparation_error(self, error_msg: str):
         """Handle preparation error."""
         self.ui.button_mesh_generate.setEnabled(True)
-        self.ui.button_mesh_generate.setText("Mesh generate")
+        self.ui.button_mesh_generate.setText("Generate Mesh")
+        self.ui.button_mesh_stop.setEnabled(False)
         self.ui.button_run.setEnabled(True)  # Re-enable Run button
-        self.ui.edit_run_name.setText("-")  # Reset task name
+        self.ui.button_stop.setEnabled(False)
+        self.ui.button_pause.setEnabled(False)
         self.ui.edit_run_status.setText("Error")  # Show error status
         self.ui.edit_run_finished.setText(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
     def _restore_ui(self):
         """Restore UI state after command execution (success, error, or cancel)."""
         self.ui.button_mesh_generate.setEnabled(True)
-        self.ui.button_mesh_generate.setText("Mesh generate")
+        self.ui.button_mesh_generate.setText("Generate Mesh")
+        self.ui.button_mesh_stop.setEnabled(False)
         self.ui.button_run.setEnabled(True)  # Re-enable Run button
-        self.ui.edit_run_name.setText("-")  # Reset task name
+        self.ui.button_stop.setEnabled(False)
+        self.ui.button_pause.setEnabled(False)
         self.ui.edit_run_status.setText("Complete")  # Show completion status
         self.ui.edit_run_finished.setText(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
@@ -1337,8 +1414,9 @@ FoamFile
     def load_data(self):
         """Load mesh settings from blockMeshDict."""
 
-        # Restore parallel execution checkbox from app_data
-        self.ui.groupBox_18.setChecked(self.app_data.parallel_mesh_enabled)
+        # Restore hostfile checkbox from app_data and sync Edit button
+        self.ui.checkBox_host_1.setChecked(self.app_data.parallel_mesh_enabled)
+        self.ui.button_edit_hostfile_mesh.setEnabled(self.app_data.parallel_mesh_enabled)
 
         # Default values
         default_cells = ["100", "100", "100"]

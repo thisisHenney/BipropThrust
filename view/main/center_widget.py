@@ -104,6 +104,8 @@ class CenterWidget(QWidget):
     def _connect_signals(self) -> None:
         """Connect tree selection signals."""
         self.ui.treeWidget.itemSelectionChanged.connect(self._on_tree_selection_changed)
+        # Mouse click on parent auto-expands to first child
+        self.ui.treeWidget.itemClicked.connect(self._on_tree_item_clicked)
 
     def select_default_tab(self) -> None:
         """Select the default tab (Geometry) on startup."""
@@ -113,6 +115,13 @@ class CenterWidget(QWidget):
             self.ui.treeWidget.setCurrentItem(geometry_item)
             # This will trigger _on_tree_selection_changed which handles visibility
 
+    def _on_tree_item_clicked(self, item, column) -> None:
+        """Handle mouse click on tree item - auto-expand parent to first child."""
+        if item.childCount() > 0:
+            self.ui.treeWidget.expandItem(item)
+            first_child = item.child(0)
+            self.ui.treeWidget.setCurrentItem(first_child)
+
     def _on_tree_selection_changed(self) -> None:
         """Handle tree item selection change."""
         selected_items = self.ui.treeWidget.selectedItems()
@@ -121,12 +130,10 @@ class CenterWidget(QWidget):
 
         item = selected_items[0]
 
-        # If a parent item with children is clicked, expand and select first child
+        # For parent items, just expand (keyboard navigation stays on parent)
         if item.childCount() > 0:
             self.ui.treeWidget.expandItem(item)
-            first_child = item.child(0)
-            self.ui.treeWidget.setCurrentItem(first_child)
-            return  # setCurrentItem triggers this method again with the child
+            return  # Parent items don't have pages
 
         # Get item text to determine which page to show
         item_text = item.text(0)
@@ -145,7 +152,7 @@ class CenterWidget(QWidget):
         setup_pages = {
             "Models": self.ui.page_models,
             "Initial Conditions": self.ui.page_initial_conditions,
-            "Spray - NMH": self.ui.page_mmh,
+            "Spray - MMH": self.ui.page_mmh,
             "Spray - NTO": self.ui.page_nto,
         }
 
@@ -235,6 +242,9 @@ class CenterWidget(QWidget):
         self.vtk_pre.show_clip_actors_for_group("geometry")
         self.vtk_pre.hide_clip_actors_for_group("mesh")
 
+        # Show ground plane for geometry tab
+        self.vtk_pre.show_ground_plane(scale=1.4, offset_ratio=0.05)
+
         self.vtk_pre.vtk_widget.GetRenderWindow().Render()
 
     def _show_mesh_objects(self):
@@ -263,6 +273,9 @@ class CenterWidget(QWidget):
         self.vtk_pre.hide_clip_actors_for_group("geometry")
         self.vtk_pre.show_clip_actors_for_group("mesh")
 
+        # Hide ground plane for mesh tab
+        self.vtk_pre.hide_ground_plane()
+
         self.vtk_pre.vtk_widget.GetRenderWindow().Render()
 
     def _show_mesh_objects_only(self):
@@ -289,6 +302,9 @@ class CenterWidget(QWidget):
 
         # Hide geometry clip actors (no geometry on Run and other tabs)
         self.vtk_pre.hide_clip_actors_for_group("geometry")
+
+        # Hide ground plane for Run and other tabs
+        self.vtk_pre.hide_ground_plane()
 
         self.vtk_pre.vtk_widget.GetRenderWindow().Render()
 

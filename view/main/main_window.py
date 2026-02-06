@@ -12,7 +12,7 @@ from pathlib import Path
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QLabel, QMessageBox,
     QGroupBox, QPushButton, QCheckBox, QComboBox, QProgressBar,
-    QToolButton
+    QToolButton, QTextEdit
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction
@@ -157,10 +157,13 @@ class MainWindow(QMainWindow):
         self.context.register("exec", self.exec_widget)
 
         # Clear hardcoded light-theme styles from exec_widget UI
-        for cls in (QGroupBox, QPushButton, QCheckBox, QComboBox, QProgressBar):
-            for w in self.exec_widget.findChildren(cls):
-                if w.styleSheet():
-                    w.setStyleSheet("")
+        # Clear main widget stylesheet first
+        if self.exec_widget.styleSheet():
+            self.exec_widget.setStyleSheet("")
+        # Clear all child widgets with hardcoded styles
+        for w in self.exec_widget.findChildren(QWidget):
+            if w.styleSheet():
+                w.setStyleSheet("")
 
         # Connect to statusbar
         self.exec_widget.connect_to_statusbar(self.statusBar())

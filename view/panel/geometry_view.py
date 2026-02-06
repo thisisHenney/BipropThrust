@@ -8,9 +8,62 @@ and implements geometry file management functionality.
 import traceback
 from pathlib import Path
 from PySide6.QtWidgets import (
-    QProgressDialog, QApplication, QToolBar, QLabel, QComboBox, QSlider, QCheckBox, QPushButton
+    QApplication, QToolBar, QLabel, QComboBox, QSlider, QCheckBox, QPushButton,
+    QProgressDialog
 )
 from PySide6.QtCore import Qt
+
+
+def _get_progress_color(progress: float) -> str:
+    """진행률(0~100)에 따라 색상 반환: Blue→Green→Yellow→Orange
+
+    Gradient stops:
+    - 0%:   #3b82f6 (Blue)   = rgb(59, 130, 246)
+    - 33%:  #22c55e (Green)  = rgb(34, 197, 94)
+    - 66%:  #eab308 (Yellow) = rgb(234, 179, 8)
+    - 100%: #f97316 (Orange) = rgb(249, 115, 22)
+    """
+    # Gradient color stops (Blue → Green → Yellow → Orange)
+    GRAD = [
+        (0,   (59, 130, 246)),   # Blue
+        (33,  (34, 197, 94)),    # Green
+        (66,  (234, 179, 8)),    # Yellow
+        (100, (249, 115, 22)),   # Orange
+    ]
+
+    # Find the two stops to interpolate between
+    for i in range(len(GRAD) - 1):
+        p1, c1 = GRAD[i]
+        p2, c2 = GRAD[i + 1]
+        if p1 <= progress <= p2:
+            t = (progress - p1) / (p2 - p1) if p2 != p1 else 0
+            r = int(c1[0] + (c2[0] - c1[0]) * t)
+            g = int(c1[1] + (c2[1] - c1[1]) * t)
+            b = int(c1[2] + (c2[2] - c1[2]) * t)
+            return f"rgb({r}, {g}, {b})"
+
+    # Fallback to last color
+    return f"rgb({GRAD[-1][1][0]}, {GRAD[-1][1][1]}, {GRAD[-1][1][2]})"
+
+
+def _get_progress_stylesheet(progress: float) -> str:
+    """진행률에 따른 QProgressBar 스타일시트 반환"""
+    color = _get_progress_color(progress)
+    return f"""
+        QProgressBar {{
+            border: 1px solid #888;
+            border-radius: 5px;
+            background-color: #d0d0dd;
+            text-align: center;
+            color: #333;
+            font-weight: bold;
+            font-size: 12px;
+        }}
+        QProgressBar::chunk {{
+            background-color: {color};
+            border-radius: 4px;
+        }}
+    """
 
 from nextlib.dialogbox.dialogbox import FileDialogBox
 from nextlib.widgets.tree import TreeWidget
@@ -52,7 +105,7 @@ class GeometryView:
         # Initialize mesh loader for async loading
         self.mesh_loader = MeshLoader()
         self._loading_signals_connected = False
-        self._progress_dialog = None
+        self._loading_total = 0
 
         # Disable individual outlines in VTK (show only combined bbox)
         if self.vtk_pre:
@@ -211,12 +264,17 @@ class GeometryView:
 
     def _start_async_loading(self, files: list):
         """Start async loading of STL files."""
-        # Show progress dialog
+        self._loading_total = len(files)
+
+        # Create QProgressDialog
         self._progress_dialog = QProgressDialog(
-            "Loading STL files...", "Cancel", 0, len(files), self.parent
+            "Loading geometry files...", "Cancel", 0, len(files), self.parent
         )
+        self._progress_dialog.setWindowTitle("Loading")
         self._progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
         self._progress_dialog.setMinimumDuration(0)
+        self._progress_dialog.setValue(0)
+        self._progress_dialog.setStyleSheet(_get_progress_stylesheet(0))
         self._progress_dialog.canceled.connect(self._on_loading_canceled)
         self._progress_dialog.show()
 
@@ -245,8 +303,16 @@ class GeometryView:
 
     def _on_loading_progress(self, current: int, total: int):
         """Handle loading progress update."""
-        if hasattr(self, '_progress_dialog') and self._progress_dialog:
-            self._progress_dialog.setValue(current)
+        try:
+            dialog = getattr(self, '_progress_dialog', None)
+            if dialog is not None:
+                progress_pct = (current / total) * 100 if total > 0 else 0
+                dialog.setValue(current)
+                dialog.setLabelText(f"Loading geometry files... ({current}/{total})")
+                dialog.setStyleSheet(_get_progress_stylesheet(progress_pct))
+        except (RuntimeError, AttributeError):
+            # Dialog may have been closed during progress update
+            pass
 
     def _on_loading_error(self, file_path: str, error_msg: str):
         """Handle loading error."""
@@ -255,6 +321,9 @@ class GeometryView:
         """Handle loading canceled by user."""
         self.mesh_loader.cancel_async()
         self._cleanup_loading_signals()
+        if hasattr(self, '_progress_dialog') and self._progress_dialog:
+            self._progress_dialog.close()
+            self._progress_dialog = None
 
     def _on_loading_finished(self):
         """Handle all files loaded."""
@@ -286,6 +355,10 @@ class GeometryView:
                 self.vtk_pre.show_clip_actors_for_group("geometry")
             else:
                 self.vtk_pre.hide_clip_actors_for_group("geometry")
+
+            # Show ground plane (X-Y plane below geometry)
+            if is_geometry_tab:
+                self.vtk_pre.show_ground_plane(scale=1.4, offset_ratio=0.05)
 
             # Update VTK view after all files loaded
             # Only fit camera if we're on Geometry tab
@@ -335,38 +408,55 @@ class GeometryView:
         self.mesh_loader.error.disconnect(self._on_loading_error)
 
     def _on_remove_clicked(self):
-        """Handle Remove button click - remove selected geometry from tree, VTK, and model directory."""
-        pos = self.tree.get_current_pos()
-        if pos is None:
+        """Handle Remove button click - remove all selected geometries from tree, VTK, and model directory."""
+        # Get all selected items
+        selected_items = self.tree.widget.selectedItems()
+        if not selected_items:
             return
 
-        obj_name = self.tree.get_text(pos)
+        # Collect names to remove (excluding "fluid")
+        names_to_remove = []
+        for item in selected_items:
+            name = item.text(0)
+            if name != "fluid":
+                names_to_remove.append(name)
 
-        # Prevent removing "fluid" (fixed item)
-        if obj_name == "fluid":
+        if not names_to_remove:
             return
 
-        self.tree.remove_item(pos)
+        model_path = Path(self.case_data.path) / "1.model_Mhead" / "scale0"
 
-        # Remove from VTK
+        # Remove each item
+        for obj_name in names_to_remove:
+            # Remove from tree (find item by name since positions change after each removal)
+            for i in range(self.tree.widget.topLevelItemCount()):
+                item = self.tree.widget.topLevelItem(i)
+                if item and item.text(0) == obj_name:
+                    self.tree.widget.takeTopLevelItem(i)
+                    break
+
+            # Remove from VTK
+            if self.vtk_pre:
+                obj = self.vtk_pre.obj_manager.find_by_name(obj_name)
+                if obj:
+                    self.vtk_pre.obj_manager.remove(obj.id)
+
+            # Remove STL file from model directory
+            stl_file = model_path / f"{obj_name}.stl"
+            if stl_file.exists():
+                try:
+                    stl_file.unlink()
+                except Exception:
+                    traceback.print_exc()
+
+            # Remove from case_data
+            self.case_data.remove_geometry(obj_name)
+
+        # Refresh VTK view once after all removals
         if self.vtk_pre:
-            obj = self.vtk_pre.obj_manager.find_by_name(obj_name)
-            if obj:
-                self.vtk_pre.obj_manager.remove(obj.id)
-            # Refresh view
             self.vtk_pre.vtk_widget.GetRenderWindow().Render()
 
-        # Remove STL file from model directory
-        model_path = Path(self.case_data.path) / "1.model_Mhead" / "scale0"
-        stl_file = model_path / f"{obj_name}.stl"
-
-        if stl_file.exists():
-            try:
-                stl_file.unlink()
-            except Exception:
-                traceback.print_exc()
-
-        self.case_data.remove_geometry(obj_name)
+        # Save case_data once after all removals
         self.case_data.save()
 
     def _on_set_apply_clicked(self):

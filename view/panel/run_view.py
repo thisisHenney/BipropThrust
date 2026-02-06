@@ -75,7 +75,7 @@ class RunView:
         self.ui.button_stop.setEnabled(False)
         self.ui.button_pause.setEnabled(False)
 
-        self.ui.groupBox_19.toggled.connect(self._on_parallel_run_toggled)
+        self.ui.checkBox_host_2.toggled.connect(self._on_hostfile_run_toggled)
 
         # Connect comboBox_7 to enable/disable comboBox_10
         self.ui.comboBox_7.currentIndexChanged.connect(self._on_combustion_changed)
@@ -84,9 +84,54 @@ class RunView:
         if self.exec_widget:
             self.exec_widget.sig_proc_status.connect(self._on_proc_status_changed)
 
-    def _on_parallel_run_toggled(self, checked: bool):
-        """Save parallel run checkbox state to app_data."""
+    def _on_hostfile_run_toggled(self, checked: bool):
+        """Save hostfile checkbox state to app_data and enable/disable Edit button."""
         self.app_data.parallel_run_enabled = checked
+        self.ui.button_edit_hostfile_run.setEnabled(checked)
+
+    def _highlight_error_widget(self, widget):
+        """
+        Highlight widget with red border and scroll to it.
+
+        Args:
+            widget: QWidget to highlight (typically QLineEdit)
+        """
+        from PySide6.QtWidgets import QScrollArea
+
+        # Save original stylesheet and widget reference for later restoration
+        if not hasattr(self, '_error_highlighted_widget'):
+            self._error_highlighted_widget = None
+            self._error_original_style = ""
+
+        # Save state
+        self._error_highlighted_widget = widget
+        self._error_original_style = widget.styleSheet()
+
+        # Apply red border style
+        widget.setStyleSheet("border: 2px solid #ff4444; border-radius: 3px;")
+
+        # Find parent scroll area and scroll to widget
+        parent = widget.parent()
+        while parent is not None:
+            if isinstance(parent, QScrollArea):
+                parent.ensureWidgetVisible(widget, 50, 50)
+                break
+            parent = parent.parent()
+
+        # Set focus to the widget and select all text
+        widget.setFocus()
+        widget.selectAll()
+
+    def _clear_error_highlight(self):
+        """Clear error highlighting from previously highlighted widget."""
+        if hasattr(self, '_error_highlighted_widget') and self._error_highlighted_widget:
+            # Clear inline style and force update
+            self._error_highlighted_widget.setStyleSheet("")
+            self._error_highlighted_widget.style().unpolish(self._error_highlighted_widget)
+            self._error_highlighted_widget.style().polish(self._error_highlighted_widget)
+            self._error_highlighted_widget.update()
+            self._error_highlighted_widget = None
+            self._error_original_style = ""
 
     def _load_number_of_subdomains(self):
         """Load numberOfSubdomains from 5.CHTFCase/system/decomposeParDict."""
@@ -165,11 +210,11 @@ class RunView:
 
         self._is_running = False
         self.ui.button_run.setEnabled(True)
-        self.ui.button_run.setText("Run")
+        self.ui.button_run.setText("Run Solver")
         self.ui.button_stop.setEnabled(False)
         self.ui.button_pause.setEnabled(False)
         self.ui.button_mesh_generate.setEnabled(True)  # Re-enable Mesh Generate
-        self.ui.edit_run_name.setText("-")  # Reset task name
+        self.ui.button_mesh_stop.setEnabled(False)  # Disable Mesh Stop
         self.ui.edit_run_status.setText("Stopped")
         self.ui.edit_run_finished.setText(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
         self._stop_log_monitoring()
@@ -223,7 +268,7 @@ class RunView:
             self.exec_widget.set_function_restore_ui(self._restore_ui_after_run)
 
             # Create modified Allrun based on hostfile checkbox
-            use_hostfile = self.ui.groupBox_19.isChecked()
+            use_hostfile = self.ui.checkBox_host_2.isChecked()
             allrun_content = allrun_path.read_text(encoding='utf-8')
 
             if use_hostfile:
@@ -287,7 +332,6 @@ source /usr/lib/openfoam/openfoam2212/etc/bashrc
 
         except Exception:
             self._restore_ui_after_run()
-            self.ui.edit_run_name.setText("-")
             self.ui.edit_run_status.setText("Error")
 
     def _start_log_monitoring(self):
@@ -337,11 +381,10 @@ source /usr/lib/openfoam/openfoam2212/etc/bashrc
         self._stop_log_monitoring()
         self._update_residual_graph()
         self.ui.button_run.setEnabled(True)
-        self.ui.button_run.setText("Run")
+        self.ui.button_run.setText("Run Solver")
         self.ui.button_stop.setEnabled(False)
         self.ui.button_pause.setEnabled(False)
         self.ui.button_mesh_generate.setEnabled(True)  # Re-enable Mesh Generate
-        self.ui.edit_run_name.setText("-")  # Reset task name
         self.ui.edit_run_status.setText("Finished")
         self.ui.edit_run_finished.setText(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
@@ -350,11 +393,10 @@ source /usr/lib/openfoam/openfoam2212/etc/bashrc
         self._is_running = False
         self._stop_log_monitoring()
         self.ui.button_run.setEnabled(True)
-        self.ui.button_run.setText("Run")
+        self.ui.button_run.setText("Run Solver")
         self.ui.button_stop.setEnabled(False)
         self.ui.button_pause.setEnabled(False)
         self.ui.button_mesh_generate.setEnabled(True)  # Re-enable Mesh Generate
-        self.ui.edit_run_name.setText("-")  # Reset task name
         self.ui.edit_run_status.setText("Error")
         self.ui.edit_run_finished.setText(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
@@ -362,11 +404,10 @@ source /usr/lib/openfoam/openfoam2212/etc/bashrc
         """Restore UI after simulation ends."""
         self._is_running = False
         self.ui.button_run.setEnabled(True)
-        self.ui.button_run.setText("Run")
+        self.ui.button_run.setText("Run Solver")
         self.ui.button_stop.setEnabled(False)
         self.ui.button_pause.setEnabled(False)
         self.ui.button_mesh_generate.setEnabled(True)  # Re-enable Mesh Generate
-        self.ui.edit_run_name.setText("-")  # Reset task name
 
         # Update status to show completion
         self.ui.edit_run_status.setText("Ready")
@@ -382,11 +423,15 @@ source /usr/lib/openfoam/openfoam2212/etc/bashrc
         if self._is_running:
             return
 
+        # Clear any previous error highlighting first
+        self._clear_error_highlight()
+
         # Validate CPU count
         try:
             n_procs = int(self.ui.edit_number_of_subdomains_2.text())
             cpu_count = os.cpu_count() or 1
             if n_procs > cpu_count:
+                self._highlight_error_widget(self.ui.edit_number_of_subdomains_2)
                 QMessageBox.critical(
                     self.parent,
                     "Error",
@@ -561,8 +606,9 @@ source /usr/lib/openfoam/openfoam2212/etc/bashrc
     def load_data(self):
         """Load run settings and parameters."""
 
-        # Restore parallel execution checkbox from app_data
-        self.ui.groupBox_19.setChecked(self.app_data.parallel_run_enabled)
+        # Restore hostfile checkbox from app_data and sync Edit button
+        self.ui.checkBox_host_2.setChecked(self.app_data.parallel_run_enabled)
+        self.ui.button_edit_hostfile_run.setEnabled(self.app_data.parallel_run_enabled)
 
         # Load numberOfSubdomains from decomposeParDict
         self._load_number_of_subdomains()

@@ -76,43 +76,43 @@ _DARK = {
     "window":         "#2d2d30",
     "base":           "#1e1e1e",
     "alt_base":       "#2d2d30",
-    "text":           "#cccccc",
-    "text_dim":       "#808080",
+    "text":           "#d0d0d0",
+    "text_dim":       "#909090",
     "text_disabled":  "#707070",
     "button":         "#3c3c3c",
-    "button_hover":   "#505050",
+    "button_hover":   "#4a5565",
     "border":         "#555555",
     "border_light":   "#666666",
-    "accent":         "#3574c4",
-    "accent_hover":   "#4a8ad4",
-    "highlight":      "#264f78",
+    "accent":         "#4a90d9",
+    "accent_hover":   "#5ca8f0",
+    "highlight":      "#3a6ea5",
     "highlight_text": "#ffffff",
-    "link":           "#4a9cd6",
-    "status_bg":      "#3574c4",
+    "link":           "#5cb3f5",
+    "status_bg":      "#4a90d9",
     "light":          "#505050",
     "midlight":       "#404040",
     "mid":            "#353535",
     "dark":           "#1a1a1a",
     "shadow":         "#141414",
     "tooltip_bg":     "#2d2d30",
-    "tree_hover":       "#505050",
-    "tree_sel_start":   "#264f78",
-    "tree_sel_end":     "#264f78",
-    "tree_sel2_start":  "#264f78",
-    "tree_sel2_end":    "#264f78",
+    "tree_hover":       "#3d4a5a",
+    "tree_sel_start":   "#3a6ea5",
+    "tree_sel_end":     "#2d5a8a",
+    "tree_sel2_start":  "#3a6ea5",
+    "tree_sel2_end":    "#2d5a8a",
     "btn_grad_top":     "#444444",
     "btn_grad_bot":     "#3c3c3c",
-    "btn_hover_top":    "#505050",
-    "btn_hover_bot":    "#484848",
+    "btn_hover_top":    "#4a5565",
+    "btn_hover_bot":    "#3d4550",
     "btn_disabled_bg":  "#333333",
     "btn_disabled_text":"#707070",
-    "btn_pressed_bg":   "#264f78",
-    "prog_start":       "#3574c4",
-    "prog_end":         "#5ba3d9",
+    "btn_pressed_bg":   "#3a6ea5",
+    "prog_start":       "#4a90d9",
+    "prog_end":         "#7ac0f5",
     "scroll_handle":    "#555555",
     "scroll_hover":     "#777777",
-    "tool_pressed":     "#264f78",
-    "tool_checked":     "#264f78",
+    "tool_pressed":     "#3a6ea5",
+    "tool_checked":     "#3a6ea5",
     "panel_bg":         "#252528",
     "base_disabled":    "#282828",
     "btn_disabled_base":"#333333",
@@ -204,8 +204,121 @@ def _generate_combo_arrows(c: dict) -> dict:
     return arrows
 
 
+def _generate_spin_arrows(c: dict) -> dict:
+    """Generate spinbox up/down arrow PNGs for the current theme."""
+    tmp = Path(tempfile.gettempdir()) / "bipropthrust_theme"
+    tmp.mkdir(exist_ok=True)
+    arrows = {}
+    sz = 8
+
+    for key, color in [("normal", c["text"]), ("disabled", c["text_disabled"])]:
+        # Up arrow
+        pixmap_up = QPixmap(sz, sz)
+        pixmap_up.fill(QColor(0, 0, 0, 0))
+        painter = QPainter(pixmap_up)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(QPen(Qt.PenStyle.NoPen))
+        painter.setBrush(QColor(color))
+        painter.drawPolygon(QPolygonF([
+            QPointF(sz / 2, 2), QPointF(sz - 1, sz - 2), QPointF(1, sz - 2)
+        ]))
+        painter.end()
+        path_up = tmp / f"spin_up_{key}.png"
+        pixmap_up.save(str(path_up))
+        arrows[f"up_{key}"] = str(path_up).replace('\\', '/')
+
+        # Down arrow
+        pixmap_down = QPixmap(sz, sz)
+        pixmap_down.fill(QColor(0, 0, 0, 0))
+        painter = QPainter(pixmap_down)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(QPen(Qt.PenStyle.NoPen))
+        painter.setBrush(QColor(color))
+        painter.drawPolygon(QPolygonF([
+            QPointF(1, 2), QPointF(sz - 1, 2), QPointF(sz / 2, sz - 2)
+        ]))
+        painter.end()
+        path_down = tmp / f"spin_down_{key}.png"
+        pixmap_down.save(str(path_down))
+        arrows[f"down_{key}"] = str(path_down).replace('\\', '/')
+
+    return arrows
+
+
+def _generate_tree_indicators(c: dict) -> dict:
+    """Generate tree branch expand/collapse indicator PNGs (+/-) and branch lines."""
+    tmp = Path(tempfile.gettempdir()) / "bipropthrust_theme"
+    tmp.mkdir(exist_ok=True)
+    indicators = {}
+    sz = 18  # Match tree item font size
+    line_color = QColor(c["accent"])  # Blue color for tree branches
+
+    # Generate +/- indicators
+    for key, symbol in [("closed", "+"), ("open", "-")]:
+        pixmap = QPixmap(sz, sz)
+        pixmap.fill(QColor(0, 0, 0, 0))
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        # Draw border square
+        painter.setPen(QPen(QColor(c["text"]), 1))
+        painter.setBrush(QColor(0, 0, 0, 0))
+        painter.drawRect(2, 2, sz - 5, sz - 5)
+
+        # Draw +/- symbol
+        font = painter.font()
+        font.setPixelSize(14)
+        font.setBold(True)
+        painter.setFont(font)
+        painter.drawText(0, 0, sz, sz, Qt.AlignmentFlag.AlignCenter, symbol)
+        painter.end()
+
+        path = tmp / f"tree_{key}.png"
+        pixmap.save(str(path))
+        indicators[key] = str(path).replace('\\', '/')
+
+    # Vertical line (│) - for items with siblings below
+    pixmap = QPixmap(sz, sz)
+    pixmap.fill(QColor(0, 0, 0, 0))
+    painter = QPainter(pixmap)
+    painter.setPen(QPen(line_color, 1, Qt.PenStyle.DotLine))
+    painter.drawLine(sz // 2, 0, sz // 2, sz)
+    painter.end()
+    path = tmp / "tree_vline.png"
+    pixmap.save(str(path))
+    indicators["vline"] = str(path).replace('\\', '/')
+
+    # Branch more (├) - item with more siblings below
+    pixmap = QPixmap(sz, sz)
+    pixmap.fill(QColor(0, 0, 0, 0))
+    painter = QPainter(pixmap)
+    painter.setPen(QPen(line_color, 1, Qt.PenStyle.DotLine))
+    painter.drawLine(sz // 2, 0, sz // 2, sz)  # vertical
+    painter.drawLine(sz // 2, sz // 2, sz, sz // 2)  # horizontal to right
+    painter.end()
+    path = tmp / "tree_branch_more.png"
+    pixmap.save(str(path))
+    indicators["branch_more"] = str(path).replace('\\', '/')
+
+    # Branch end (└) - last item, no siblings below
+    pixmap = QPixmap(sz, sz)
+    pixmap.fill(QColor(0, 0, 0, 0))
+    painter = QPainter(pixmap)
+    painter.setPen(QPen(line_color, 1, Qt.PenStyle.DotLine))
+    painter.drawLine(sz // 2, 0, sz // 2, sz // 2)  # vertical to middle
+    painter.drawLine(sz // 2, sz // 2, sz, sz // 2)  # horizontal to right
+    painter.end()
+    path = tmp / "tree_branch_end.png"
+    pixmap.save(str(path))
+    indicators["branch_end"] = str(path).replace('\\', '/')
+
+    return indicators
+
+
 def _build_stylesheet(c: dict) -> str:
     arrows = _generate_combo_arrows(c)
+    spin_arrows = _generate_spin_arrows(c)
+    tree_indicators = _generate_tree_indicators(c)
     return f"""
         /* ===== QGroupBox ===== */
         QGroupBox {{
@@ -237,19 +350,50 @@ def _build_stylesheet(c: dict) -> str:
         }}
         QTreeWidget::item:hover {{
             background-color: {c["tree_hover"]};
-            border-radius: 4px;
+            border-top-right-radius: 4px;
+            border-bottom-right-radius: 4px;
+            border-top-left-radius: 0px;
+            border-bottom-left-radius: 0px;
         }}
         QTreeWidget::item:selected:active {{
             background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
                 stop:0 {c["tree_sel_start"]}, stop:1 {c["tree_sel_end"]});
-            border-radius: 4px;
+            border-top-right-radius: 4px;
+            border-bottom-right-radius: 4px;
+            border-top-left-radius: 0px;
+            border-bottom-left-radius: 0px;
             color: {c["highlight_text"]};
         }}
         QTreeWidget::item:selected:!active {{
             background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
                 stop:0 {c["tree_sel2_start"]}, stop:1 {c["tree_sel2_end"]});
-            border-radius: 4px;
+            border-top-right-radius: 4px;
+            border-bottom-right-radius: 4px;
+            border-top-left-radius: 0px;
+            border-bottom-left-radius: 0px;
             color: {c["highlight_text"]};
+        }}
+        QTreeWidget::branch {{
+            background: transparent;
+        }}
+        QTreeWidget::branch:has-siblings:!adjoins-item {{
+            border-image: url({tree_indicators["vline"]}) 0;
+        }}
+        QTreeWidget::branch:has-siblings:adjoins-item {{
+            border-image: url({tree_indicators["branch_more"]}) 0;
+        }}
+        QTreeWidget::branch:!has-children:!has-siblings:adjoins-item {{
+            border-image: url({tree_indicators["branch_end"]}) 0;
+        }}
+        QTreeWidget::branch:has-children:!has-siblings:closed,
+        QTreeWidget::branch:closed:has-children:has-siblings {{
+            border-image: none;
+            image: url({tree_indicators["closed"]});
+        }}
+        QTreeWidget::branch:open:has-children:!has-siblings,
+        QTreeWidget::branch:open:has-children:has-siblings {{
+            border-image: none;
+            image: url({tree_indicators["open"]});
         }}
 
         /* ===== QLineEdit ===== */
@@ -261,6 +405,9 @@ def _build_stylesheet(c: dict) -> str:
             color: {c["text"]};
             selection-background-color: {c["highlight"]};
             selection-color: {c["highlight_text"]};
+        }}
+        QLineEdit:hover {{
+            border: 1px solid {c["accent"]};
         }}
         QLineEdit:focus {{
             border: 1px solid {c["accent"]};
@@ -593,9 +740,61 @@ def _build_stylesheet(c: dict) -> str:
             border: 1px solid {c["border"]};
             border-radius: 3px;
             padding: 3px 6px;
+            padding-right: 18px;
             color: {c["text"]};
+        }}
+        QSpinBox:hover, QDoubleSpinBox:hover {{
+            border: 1px solid {c["accent"]};
         }}
         QSpinBox:focus, QDoubleSpinBox:focus {{
             border: 1px solid {c["accent"]};
+        }}
+        QSpinBox::up-button, QDoubleSpinBox::up-button {{
+            subcontrol-origin: border;
+            subcontrol-position: top right;
+            width: 16px;
+            border: none;
+            border-left: 1px solid {c["border"]};
+            border-top-right-radius: 3px;
+            background-color: {c["button"]};
+        }}
+        QSpinBox::up-button:hover, QDoubleSpinBox::up-button:hover {{
+            background-color: {c["button_hover"]};
+        }}
+        QSpinBox::down-button, QDoubleSpinBox::down-button {{
+            subcontrol-origin: border;
+            subcontrol-position: bottom right;
+            width: 16px;
+            border: none;
+            border-left: 1px solid {c["border"]};
+            border-bottom-right-radius: 3px;
+            background-color: {c["button"]};
+        }}
+        QSpinBox::down-button:hover, QDoubleSpinBox::down-button:hover {{
+            background-color: {c["button_hover"]};
+        }}
+        QSpinBox::up-arrow, QDoubleSpinBox::up-arrow {{
+            image: url({spin_arrows["up_normal"]});
+            width: 8px;
+            height: 8px;
+        }}
+        QSpinBox::up-arrow:disabled, QDoubleSpinBox::up-arrow:disabled {{
+            image: url({spin_arrows["up_disabled"]});
+        }}
+        QSpinBox::down-arrow, QDoubleSpinBox::down-arrow {{
+            image: url({spin_arrows["down_normal"]});
+            width: 8px;
+            height: 8px;
+        }}
+        QSpinBox::down-arrow:disabled, QDoubleSpinBox::down-arrow:disabled {{
+            image: url({spin_arrows["down_disabled"]});
+        }}
+
+        /* ===== Geometry Buttons ===== */
+        QPushButton#button_geometry_add {{
+            min-width: 80px;
+        }}
+        QPushButton#button_geometry_remove {{
+            min-width: 60px;
         }}
     """
