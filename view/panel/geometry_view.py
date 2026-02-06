@@ -356,10 +356,6 @@ class GeometryView:
             else:
                 self.vtk_pre.hide_clip_actors_for_group("geometry")
 
-            # Show ground plane (X-Y plane below geometry)
-            if is_geometry_tab:
-                self.vtk_pre.show_ground_plane(scale=1.4, offset_ratio=0.05)
-
             # Update VTK view after all files loaded
             # Only fit camera if we're on Geometry tab
             if is_geometry_tab:

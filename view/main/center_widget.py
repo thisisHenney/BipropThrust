@@ -248,9 +248,6 @@ class CenterWidget(QWidget):
         self.vtk_pre.show_clip_actors_for_group("geometry")
         self.vtk_pre.hide_clip_actors_for_group("mesh")
 
-        # Show ground plane for geometry tab
-        self.vtk_pre.show_ground_plane(scale=1.4, offset_ratio=0.05)
-
         self.vtk_pre.vtk_widget.GetRenderWindow().Render()
 
     def _show_mesh_objects(self):
@@ -279,9 +276,6 @@ class CenterWidget(QWidget):
         self.vtk_pre.hide_clip_actors_for_group("geometry")
         self.vtk_pre.show_clip_actors_for_group("mesh")
 
-        # Hide ground plane for mesh tab
-        self.vtk_pre.hide_ground_plane()
-
         self.vtk_pre.vtk_widget.GetRenderWindow().Render()
 
     def _show_mesh_objects_only(self):
@@ -308,9 +302,6 @@ class CenterWidget(QWidget):
 
         # Hide geometry clip actors (no geometry on Run and other tabs)
         self.vtk_pre.hide_clip_actors_for_group("geometry")
-
-        # Hide ground plane for Run and other tabs
-        self.vtk_pre.hide_ground_plane()
 
         self.vtk_pre.vtk_widget.GetRenderWindow().Render()
 
