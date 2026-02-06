@@ -188,6 +188,8 @@ class CenterWidget(QWidget):
                 if self.vtk_pre:
                     self._show_mesh_objects()
                     self._show_slice_toolbar("mesh")
+                    # Sync toolbar visibility buttons
+                    self.vtk_pre.set_visibility_mode("mesh")
                 return
         else:
             # Top-level item
@@ -208,10 +210,14 @@ class CenterWidget(QWidget):
                     # Show geometry STL, hide mesh, show geometry clip toolbar
                     self._show_geometry_objects()
                     self._show_slice_toolbar("geometry")
+                    # Sync toolbar visibility buttons
+                    self.vtk_pre.set_visibility_mode("geometry")
                 else:
                     # All other tabs - show mesh with slice
                     self._show_mesh_objects()
                     self._show_slice_toolbar("mesh")
+                    # Sync toolbar visibility buttons
+                    self.vtk_pre.set_visibility_mode("mesh")
 
     def _show_geometry_objects(self):
         """Show geometry group objects, hide mesh group objects."""
