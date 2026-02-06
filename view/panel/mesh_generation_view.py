@@ -118,11 +118,20 @@ class MeshGenerationView:
         self.diagonal_length = None
         self.surface_actor = None
 
-        # Slice pipeline objects
+        # Slice pipeline objects (cached for performance)
         self.slice_plane = None
         self.slice_actor = None
         self.clip_actor = None
         self.clip_filter = None
+        # Cached pipeline components (expensive to create)
+        self._slice_geom_filter = None
+        self._slice_cd2pd = None
+        self._slice_clean1 = None
+        self._slice_cutter = None
+        self._slice_clean2 = None
+        self._slice_tri = None
+        self._clip_clip_filter = None
+        self._clip_geom_filter = None
 
         # Debounce timer for slice updates (prevents laggy updates during rapid changes)
         self._slice_update_timer = QTimer()
@@ -1131,7 +1140,7 @@ FoamFile
             traceback.print_exc()
 
     def _clear_slice_clip(self):
-        """Clear slice/clip pipeline actors from renderer."""
+        """Clear slice/clip pipeline actors and cached filters from renderer."""
         if not self.vtk_pre:
             return
 
@@ -1151,6 +1160,16 @@ FoamFile
         # Reset pipeline objects
         self.slice_plane = None
         self.clip_filter = None
+
+        # Clear cached pipeline components to free memory
+        self._slice_geom_filter = None
+        self._slice_cd2pd = None
+        self._slice_clean1 = None
+        self._slice_cutter = None
+        self._slice_clean2 = None
+        self._slice_tri = None
+        self._clip_clip_filter = None
+        self._clip_geom_filter = None
 
     def _hide_slice_clip_actors(self):
         """Hide slice/clip actors without removing them (for tab switching)."""
@@ -1242,7 +1261,11 @@ FoamFile
         self._slice_update_timer.start()
 
     def update_slice(self):
-        """Update slice/clip visualization based on current settings."""
+        """Update slice/clip visualization based on current settings.
+
+        Uses cached pipeline components to avoid recreating expensive VTK filters
+        on every update, which was causing memory leaks and performance issues.
+        """
         if self.foam_reader is None or self.geom_output is None or not self.vtk_pre:
             return
 
@@ -1267,54 +1290,48 @@ FoamFile
         self.slice_plane.SetNormal(*normal)
 
         # ==================================================================
-        # 1) ParaView-style Slice pipeline
+        # 1) ParaView-style Slice pipeline (cached for performance)
         # ==================================================================
 
-        # Remove previous slice actor
-        if self.slice_actor is not None:
-            renderer.RemoveActor(self.slice_actor)
-            self.slice_actor = None
+        # Initialize cached pipeline components once
+        if self._slice_geom_filter is None:
+            # 1. MultiBlock → PolyData flatten
+            self._slice_geom_filter = vtk.vtkCompositeDataGeometryFilter()
+            self._slice_geom_filter.SetInputConnection(self.foam_reader.GetOutputPort())
 
-        # 1. MultiBlock → PolyData flatten
-        geom_all = vtk.vtkCompositeDataGeometryFilter()
-        geom_all.SetInputConnection(self.foam_reader.GetOutputPort())
-        geom_all.Update()
+            # 2. Cell → Point interpolation (ParaView style)
+            self._slice_cd2pd = vtk.vtkCellDataToPointData()
+            self._slice_cd2pd.SetInputConnection(self._slice_geom_filter.GetOutputPort())
 
-        # 2. Cell → Point interpolation (ParaView style)
-        cd2pd = vtk.vtkCellDataToPointData()
-        cd2pd.SetInputConnection(geom_all.GetOutputPort())
-        cd2pd.Update()
+            # 3. Clean polydata
+            self._slice_clean1 = vtk.vtkCleanPolyData()
+            self._slice_clean1.SetInputConnection(self._slice_cd2pd.GetOutputPort())
 
-        # 3. Clean polydata
-        clean1 = vtk.vtkCleanPolyData()
-        clean1.SetInputConnection(cd2pd.GetOutputPort())
+            # 4. Cutter (slice)
+            self._slice_cutter = vtk.vtkCutter()
+            self._slice_cutter.SetInputConnection(self._slice_clean1.GetOutputPort())
 
-        # 4. Slice
-        cutter = vtk.vtkCutter()
-        cutter.SetCutFunction(self.slice_plane)
-        cutter.SetInputConnection(clean1.GetOutputPort())
-        cutter.Update()
+            # 5. Clean slice result
+            self._slice_clean2 = vtk.vtkCleanPolyData()
+            self._slice_clean2.SetInputConnection(self._slice_cutter.GetOutputPort())
 
-        # 5. Clean slice result
-        clean2 = vtk.vtkCleanPolyData()
-        clean2.SetInputConnection(cutter.GetOutputPort())
+            # 6. Triangulate slice
+            self._slice_tri = vtk.vtkTriangleFilter()
+            self._slice_tri.SetInputConnection(self._slice_clean2.GetOutputPort())
 
-        # 6. Triangulate slice
-        tri = vtk.vtkTriangleFilter()
-        tri.SetInputConnection(clean2.GetOutputPort())
+        # Update plane function (this is the only thing that changes)
+        self._slice_cutter.SetCutFunction(self.slice_plane)
 
-        # 7. Mapper & Actor
-        slice_mapper = vtk.vtkPolyDataMapper()
-        slice_mapper.SetInputConnection(tri.GetOutputPort())
+        # Create actor if needed (only once)
+        if self.slice_actor is None:
+            slice_mapper = vtk.vtkPolyDataMapper()
+            slice_mapper.SetInputConnection(self._slice_tri.GetOutputPort())
 
-        slice_actor = vtk.vtkActor()
-        slice_actor.SetMapper(slice_mapper)
-        slice_actor.GetProperty().SetColor(1.0, 0.1, 0.1)
-        slice_actor.GetProperty().SetLineWidth(2)
-
-        # Store and add to renderer
-        self.slice_actor = slice_actor
-        renderer.AddActor(slice_actor)
+            self.slice_actor = vtk.vtkActor()
+            self.slice_actor.SetMapper(slice_mapper)
+            self.slice_actor.GetProperty().SetColor(1.0, 0.1, 0.1)
+            self.slice_actor.GetProperty().SetLineWidth(2)
+            renderer.AddActor(self.slice_actor)
 
         # ==================================================================
         # 2) Clip (optional) - ParaView-style Slice + Clip
@@ -1324,56 +1341,50 @@ FoamFile
             if self.surface_actor is not None:
                 self.surface_actor.SetVisibility(False)
 
-            # Remove previous clip actor
-            if self.clip_actor is not None:
-                renderer.RemoveActor(self.clip_actor)
+            # Initialize clip pipeline once
+            if self._clip_clip_filter is None:
+                self._clip_clip_filter = vtk.vtkClipDataSet()
+                self._clip_clip_filter.SetInputConnection(self.foam_reader.GetOutputPort())
+                self._clip_clip_filter.InsideOutOn()
 
-            # Create clip pipeline
-            clip_filter = vtk.vtkClipDataSet()
-            clip_filter.SetInputConnection(self.foam_reader.GetOutputPort())
-            clip_filter.SetClipFunction(self.slice_plane)
-            clip_filter.InsideOutOn()
+                self._clip_geom_filter = vtk.vtkCompositeDataGeometryFilter()
+                self._clip_geom_filter.SetInputConnection(self._clip_clip_filter.GetOutputPort())
 
-            clip_geom = vtk.vtkCompositeDataGeometryFilter()
-            clip_geom.SetInputConnection(clip_filter.GetOutputPort())
+            # Update clip function
+            self._clip_clip_filter.SetClipFunction(self.slice_plane)
 
-            clip_mapper = vtk.vtkPolyDataMapper()
-            clip_mapper.SetInputConnection(clip_geom.GetOutputPort())
+            # Create actor if needed (only once)
+            if self.clip_actor is None:
+                clip_mapper = vtk.vtkPolyDataMapper()
+                clip_mapper.SetInputConnection(self._clip_geom_filter.GetOutputPort())
 
-            clip_actor = vtk.vtkActor()
-            clip_actor.SetMapper(clip_mapper)
+                self.clip_actor = vtk.vtkActor()
+                self.clip_actor.SetMapper(clip_mapper)
 
-            prop = clip_actor.GetProperty()
-            prop.SetRepresentationToSurface()
-            prop.EdgeVisibilityOn()
-            prop.SetColor(0.80, 0.80, 0.90)
-            prop.SetEdgeColor(0.0, 0.0, 0.0)
-            prop.SetLineWidth(1.0)
+                prop = self.clip_actor.GetProperty()
+                prop.SetRepresentationToSurface()
+                prop.EdgeVisibilityOn()
+                prop.SetColor(0.80, 0.80, 0.90)
+                prop.SetEdgeColor(0.0, 0.0, 0.0)
+                prop.SetLineWidth(1.0)
 
-            # Store and add to renderer
-            self.clip_filter = clip_filter
-            self.clip_actor = clip_actor
-            renderer.AddActor(clip_actor)
+                renderer.AddActor(self.clip_actor)
+
+            self.clip_actor.SetVisibility(True)
 
         else:
-            # No clip - remove clip actor and show surface
+            # No clip - hide clip actor and show surface
             if self.clip_actor is not None:
-                renderer.RemoveActor(self.clip_actor)
-                self.clip_actor = None
-                self.clip_filter = None
+                self.clip_actor.SetVisibility(False)
 
             if self.surface_actor is not None:
                 self.surface_actor.SetVisibility(True)
 
         # Ensure geometry objects remain hidden before rendering
-        # Also remove from renderer to prevent any visibility issues
         all_objs = self.vtk_pre.obj_manager.get_all()
         for obj in all_objs:
             if hasattr(obj, 'group') and obj.group == "geometry":
                 obj.actor.SetVisibility(False)
-                # Remove from renderer if clip is active (prevents rendering artifacts)
-                if self.chk_clip.isChecked():
-                    renderer.RemoveActor(obj.actor)
 
         # Render
         self.vtk_pre.vtk_widget.GetRenderWindow().Render()
