@@ -117,16 +117,36 @@ class MainWindow(QMainWindow):
         view_menu = menubar.addMenu("&View")
 
         self.action_view_mesh = QAction("&Mesh", self)
+        self.action_view_mesh.setCheckable(True)
+        self.action_view_mesh.setChecked(True)
+        self.action_view_mesh.triggered.connect(lambda checked: self._on_view_dock_toggled(2, checked))
         view_menu.addAction(self.action_view_mesh)
 
         self.action_view_post = QAction("&Post", self)
+        self.action_view_post.setCheckable(True)
+        self.action_view_post.setChecked(True)
+        self.action_view_post.triggered.connect(lambda checked: self._on_view_dock_toggled(3, checked))
         view_menu.addAction(self.action_view_post)
 
         self.action_view_residuals = QAction("&Residuals", self)
+        self.action_view_residuals.setCheckable(True)
+        self.action_view_residuals.setChecked(True)
+        self.action_view_residuals.triggered.connect(lambda checked: self._on_view_dock_toggled(4, checked))
         view_menu.addAction(self.action_view_residuals)
 
         self.action_view_log = QAction("&Log", self)
+        self.action_view_log.setCheckable(True)
+        self.action_view_log.setChecked(True)
+        self.action_view_log.triggered.connect(lambda checked: self._on_view_dock_toggled(1, checked))
         view_menu.addAction(self.action_view_log)
+
+        # Map dock numbers to view actions for syncing
+        self._dock_view_actions = {
+            1: self.action_view_log,
+            2: self.action_view_mesh,
+            3: self.action_view_post,
+            4: self.action_view_residuals,
+        }
 
         # Tools menu
         tools_menu = menubar.addMenu("&Tools")
@@ -297,6 +317,23 @@ class MainWindow(QMainWindow):
             if probe_tool:
                 probe_tool.set_center(x, y, z)
 
+    def _on_view_dock_toggled(self, dock_num: int, checked: bool) -> None:
+        """Handle View menu dock toggle."""
+        if not self.dock_manager:
+            return
+        if checked:
+            self.dock_manager.show_dock(dock_num)
+        else:
+            self.dock_manager.hide_dock(dock_num)
+
+    def _on_dock_visibility_changed(self, dock_num: int, visible: bool) -> None:
+        """Sync View menu check state with dock visibility."""
+        action = self._dock_view_actions.get(dock_num)
+        if action:
+            action.blockSignals(True)
+            action.setChecked(visible)
+            action.blockSignals(False)
+
     def _setup_dock(self) -> None:
         """Setup dock widget layout."""
         # Create central widget container for dock manager
@@ -315,6 +352,9 @@ class MainWindow(QMainWindow):
         dock_layout_file = str(Path(self.app_data.user_path) / "dock_layout.dat")
         self.dock_manager = DockWidget(self, layout_file=dock_layout_file)
         self.context.register("dock", self.dock_manager)
+
+        # Connect dock visibility signal to sync View menu
+        self.dock_manager.visibility_changed.connect(self._on_dock_visibility_changed)
 
         # Create center widget with navigation tree and panels
         self.center_widget = CenterWidget(self, self.context)
@@ -344,8 +384,18 @@ class MainWindow(QMainWindow):
         # Restore dock layout
         self.dock_manager.restore_layout()
 
+        # Sync View menu check states with actual dock visibility
+        self._sync_view_menu_states()
+
         # Setup statusbar
         self.statusBar().showMessage("Ready", 3000)
+
+    def _sync_view_menu_states(self) -> None:
+        """Sync View menu check states with actual dock visibility."""
+        for dock_num, action in self._dock_view_actions.items():
+            dock_info = self.dock_manager.docks.get(dock_num)
+            if dock_info:
+                action.setChecked(dock_info.show_state)
 
     def _update_window_title(self) -> None:
         """Update window title with current case path."""

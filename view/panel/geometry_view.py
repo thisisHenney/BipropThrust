@@ -9,9 +9,10 @@ import traceback
 from pathlib import Path
 from PySide6.QtWidgets import (
     QApplication, QToolBar, QLabel, QComboBox, QSlider, QCheckBox, QPushButton,
-    QProgressDialog
+    QProgressDialog, QHeaderView
 )
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QFont
 
 
 def _get_progress_color(progress: float) -> str:
@@ -80,6 +81,10 @@ class GeometryView:
     Manages STL file loading, VTK visualization, and geometry tree.
     """
 
+    # Visibility icons (Unicode)
+    ICON_VISIBLE = "\U0001F441"  # 👁
+    ICON_HIDDEN = "\u25CB"  # ○ (empty circle)
+
     def __init__(self, parent):
         """
         Initialize geometry view.
@@ -102,6 +107,9 @@ class GeometryView:
         # Wrap tree widget with TreeWidget helper
         self.tree = TreeWidget(self.parent, self.ui.tree_geometry)
 
+        # Track visibility state per object
+        self._visibility_state = {}  # {name: bool}
+
         # Initialize mesh loader for async loading
         self.mesh_loader = MeshLoader()
         self._loading_signals_connected = False
@@ -111,11 +119,32 @@ class GeometryView:
         if self.vtk_pre:
             self.vtk_pre.obj_manager.show_individual_outlines = False
 
+        # Setup tree for visibility column
+        self._setup_visibility_tree()
+
         # Create slice controls widget (will be shown/hidden by center_widget)
         self.slice_widget = self._create_slice_widget()
 
         # Connect signals
         self._init_connect()
+
+    def _setup_visibility_tree(self):
+        """Setup tree widget with 2 columns (name, visibility)."""
+        tree_widget = self.tree.widget
+
+        # Set 2 columns
+        tree_widget.setColumnCount(2)
+        tree_widget.setHeaderHidden(True)
+
+        # Configure column sizes
+        header = tree_widget.header()
+        header.setStretchLastSection(False)
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
+        tree_widget.setColumnWidth(1, 30)
+
+        # Connect item click for visibility toggle
+        tree_widget.itemClicked.connect(self._on_tree_item_clicked)
 
     def _create_slice_widget(self):
         """
@@ -221,6 +250,57 @@ class GeometryView:
             if probe_tool:
                 probe_tool.visibility_changed.connect(self._on_probe_visibility_changed)
 
+    def _on_tree_item_clicked(self, item, column):
+        """Handle tree item click - toggle visibility if clicked on column 1."""
+        if column != 1:
+            return
+
+        name = item.text(0)
+        current_visible = self._visibility_state.get(name, True)
+        new_visible = not current_visible
+
+        self._set_object_visibility(name, new_visible)
+
+    def _set_object_visibility(self, name: str, visible: bool):
+        """Set visibility for a geometry object."""
+        self._visibility_state[name] = visible
+
+        # Update tree icon
+        for i in range(self.tree.widget.topLevelItemCount()):
+            item = self.tree.widget.topLevelItem(i)
+            if item and item.text(0) == name:
+                item.setText(1, self.ICON_VISIBLE if visible else self.ICON_HIDDEN)
+                break
+
+        # Update VTK actor visibility
+        if self.vtk_pre:
+            obj = self.vtk_pre.obj_manager.find_by_name(name)
+            if obj:
+                obj.actor.SetVisibility(visible)
+                self.vtk_pre.vtk_widget.GetRenderWindow().Render()
+
+    def set_all_visible(self, visible: bool):
+        """Set visibility for all geometry objects."""
+        for i in range(self.tree.widget.topLevelItemCount()):
+            item = self.tree.widget.topLevelItem(i)
+            if item:
+                name = item.text(0)
+                self._set_object_visibility(name, visible)
+
+    def _add_tree_item_with_visibility(self, name: str, visible: bool = True):
+        """Add item to tree with visibility icon."""
+        self.tree.insert([], name)
+        self._visibility_state[name] = visible
+
+        # Find the newly added item and set visibility icon
+        for i in range(self.tree.widget.topLevelItemCount()):
+            item = self.tree.widget.topLevelItem(i)
+            if item and item.text(0) == name:
+                item.setText(1, self.ICON_VISIBLE if visible else self.ICON_HIDDEN)
+                # Center align the visibility icon
+                item.setTextAlignment(1, Qt.AlignmentFlag.AlignCenter)
+                break
+
     def _on_add_clicked(self):
         """Handle Add button click - open file dialog and copy STL files to model directory."""
         add_files = FileDialogBox.open_files(
@@ -253,7 +333,7 @@ class GeometryView:
             # Add to case_data and tree
             self.case_data.add_geometry(dst_file)
             name = dst_file.stem
-            self.tree.insert([], name)
+            self._add_tree_item_with_visibility(name, visible=True)
             copied_files.append(str(dst_file))
 
         # Load STL files asynchronously to prevent GUI lock
@@ -445,8 +525,10 @@ class GeometryView:
                 except Exception:
                     traceback.print_exc()
 
-            # Remove from case_data
+            # Remove from case_data and visibility state
             self.case_data.remove_geometry(obj_name)
+            if obj_name in self._visibility_state:
+                del self._visibility_state[obj_name]
 
         # Refresh VTK view once after all removals
         if self.vtk_pre:
@@ -1020,9 +1102,10 @@ class GeometryView:
     def load_data(self):
         """Load geometry data from model folder."""
         self.tree.clear_all()
+        self._visibility_state.clear()
 
         # Add "fluid" as fixed first item (cannot be removed)
-        self.tree.insert([], "fluid")
+        self._add_tree_item_with_visibility("fluid", visible=True)
 
         # Get model directory path
         model_path = Path(self.case_data.path) / "1.model_Mhead" / "scale0"
@@ -1043,7 +1126,7 @@ class GeometryView:
         for stl_file in stl_files:
             name = stl_file.stem
             if name != "fluid":  # Skip if fluid (already added)
-                self.tree.insert([], name)
+                self._add_tree_item_with_visibility(name, visible=True)
             # Add to case_data if not already there
             if not self.case_data.get_geometry(name):
                 self.case_data.add_geometry(stl_file)
