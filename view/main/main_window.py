@@ -544,8 +544,12 @@ class MainWindow(QMainWindow):
                 event.ignore()
                 return
 
-        # Cleanup
+        # Cleanup (stop processes first, then save layout)
         self._cleanup()
+
+        # Delete temp case after processes are stopped
+        if self.case_path and "temp" in self.case_path:
+            self._delete_temp_case()
 
         # Accept close
         event.accept()
@@ -575,8 +579,7 @@ class MainWindow(QMainWindow):
             return self._save_temp_case_as()
 
         elif reply == QMessageBox.StandardButton.No:
-            # Delete temporary case
-            self._delete_temp_case()
+            # Temp case will be deleted in closeEvent after cleanup
             return True
 
         else:  # Cancel

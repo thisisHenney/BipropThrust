@@ -557,6 +557,9 @@ class MeshGenerationView:
             self._restore_ui()
             return
 
+        # Lock VTK toolbars during execution to prevent freeze
+        self._lock_vtk_toolbars(True)
+
         # Run mesh generation commands with progress bar
         self.exec_widget.run(commands)
 
@@ -663,6 +666,17 @@ class MeshGenerationView:
         self.ui.button_pause.setEnabled(False)
         self.ui.edit_run_status.setText("Complete")  # Show completion status
         self.ui.edit_run_finished.setText(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+
+        # Unlock VTK toolbars after execution
+        self._lock_vtk_toolbars(False)
+
+    def _lock_vtk_toolbars(self, lock: bool):
+        """Lock or unlock all VTK toolbars to prevent freeze during execution."""
+        if not self.vtk_pre:
+            return
+        for toolbar in self.vtk_pre.findChildren(QToolBar):
+            toolbar.setFloatable(not lock)
+            toolbar.setMovable(not lock)
 
     def _update_blockmesh_dict(self, cells_x: str, cells_y: str, cells_z: str, bounds=None) -> bool:
         """
