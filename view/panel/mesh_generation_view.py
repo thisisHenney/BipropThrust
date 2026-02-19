@@ -1138,9 +1138,8 @@ FoamFile
                 # Hide mesh if we're not on Mesh Generation tab
                 actor.SetVisibility(False)
 
-            # Fit camera only if mesh is visible
-            if actor.GetVisibility():
-                self.vtk_pre.camera.fit()
+            # Fit camera to visible objects (geometry or mesh depending on active tab)
+            self.vtk_pre.camera.fit()
 
             # Refresh view
             self.vtk_pre.vtk_widget.GetRenderWindow().Render()

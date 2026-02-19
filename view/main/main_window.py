@@ -503,8 +503,10 @@ class MainWindow(QMainWindow):
         if not path:
             return
 
+        self._reset_all_state()
         self.case_path = path
         self._load_case(path)
+        self._reload_panels()
         self._update_window_title()
 
     def create_new_case(self, user_select: bool = True) -> None:
@@ -524,10 +526,61 @@ class MainWindow(QMainWindow):
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             path = str(Path(self.app_data.user_path) / "temp" / f"temp_{timestamp}")
 
+        self._reset_all_state()
         self.case_path = path
         self._create_case_from_template(path)
         self._load_case(path)
+        self._reload_panels()
         self._update_window_title()
+
+    def _reset_all_state(self) -> None:
+        """Reset all UI and visualization state when switching cases."""
+        # 1) Stop running processes
+        if self.exec_widget and self.exec_widget.is_running():
+            self.exec_widget.stop_process()
+
+        # 2) VTK pre - remove all objects
+        if self.vtk_pre:
+            for obj in list(self.vtk_pre.obj_manager.get_all()):
+                self.vtk_pre.obj_manager.remove(obj.id)
+            # Clear mesh slice/clip actors
+            mesh_panel = self.center_widget.panel_views.get("mesh")
+            if mesh_panel:
+                mesh_panel._clear_existing_mesh()
+            self.vtk_pre.vtk_widget.GetRenderWindow().Render()
+
+        # 3) VTK post - clear renderer
+        if self.vtk_post:
+            self.vtk_post.renderer.RemoveAllViewProps()
+            self.vtk_post.vtk_widget.GetRenderWindow().Render()
+
+        # 4) Exec widget - clear log/output
+        if self.exec_widget:
+            self.exec_widget._log_view.clear()
+            self.exec_widget._output_view.clear()
+            self.exec_widget._log_msg = ''
+            self.exec_widget._all_msgs = []
+            self.exec_widget._output_buffer = {}
+
+        # 5) Residual graph - clear plot
+        if self.residual_graph:
+            self.residual_graph.plot_widget.clear()
+
+        # 6) Run view - reset status fields
+        run_panel = self.center_widget.panel_views.get("run")
+        if run_panel:
+            run_panel.ui.edit_run_status.setText("Ready")
+            run_panel.ui.edit_run_started.setText("-")
+            run_panel.ui.edit_run_finished.setText("-")
+
+    def _reload_panels(self) -> None:
+        """Reload all panel data for the new case."""
+        for key in ("geometry", "mesh", "run"):
+            panel = self.center_widget.panel_views.get(key)
+            if panel:
+                panel.load_data()
+        self.center_widget.select_default_tab()
+        self.exec_widget.add_log_ready()
 
     def closeEvent(self, event):
         """

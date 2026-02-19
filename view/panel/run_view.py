@@ -157,27 +157,28 @@ class RunView:
         self.ui.edit_number_of_subdomains_2.setText(str(default_value))
 
     def _update_decompose_par_dict(self, case_path: Path):
-        """Update numberOfSubdomains in decomposeParDict with UI value."""
+        """Update numberOfSubdomains in all decomposeParDict files (main + regions)."""
         try:
             n_procs = int(self.ui.edit_number_of_subdomains_2.text())
         except (ValueError, AttributeError):
             return
 
-        decompose_dict_path = case_path / "system" / "decomposeParDict"
-        if not decompose_dict_path.exists():
+        # Find all decomposeParDict files (system/ and system/*/decomposeParDict)
+        system_path = case_path / "system"
+        if not system_path.exists():
             return
 
-        try:
-            content = decompose_dict_path.read_text()
-            # Replace numberOfSubdomains value
-            new_content = re.sub(
-                r'(numberOfSubdomains\s+)\d+',
-                rf'\g<1>{n_procs}',
-                content
-            )
-            decompose_dict_path.write_text(new_content)
-        except Exception:
-            traceback.print_exc()
+        for dict_path in system_path.rglob("decomposeParDict"):
+            try:
+                content = dict_path.read_text()
+                new_content = re.sub(
+                    r'(numberOfSubdomains\s+)\d+',
+                    rf'\g<1>{n_procs}',
+                    content
+                )
+                dict_path.write_text(new_content)
+            except Exception:
+                traceback.print_exc()
 
     def _on_edit_hostfile_clicked(self):
         """Handle Edit host file button click - open hosts file in text editor."""
@@ -241,9 +242,10 @@ class RunView:
         self.ui.edit_run_status.setText(status)
 
     def _run_simulation(self):
-        """Execute the Allrun script in 5.CHTFCase folder."""
+        """Execute the Allclean/Allrun scripts in 5.CHTFCase folder."""
         try:
             case_path = Path(self.case_data.path) / "5.CHTFCase"
+            allclean_path = case_path / "Allclean"
             allrun_path = case_path / "Allrun"
 
             if not allrun_path.exists():
@@ -262,52 +264,51 @@ class RunView:
             # Set working directory for exec_widget
             self.exec_widget.set_working_path(str(case_path))
 
-            # Set callbacks
+            # Register callbacks
             self.exec_widget.set_function_after_finished(self._on_simulation_finished)
             self.exec_widget.set_function_after_error(self._on_simulation_error)
             self.exec_widget.set_function_restore_ui(self._restore_ui_after_run)
 
-            # Create modified Allrun based on hostfile checkbox
+            # Create shell wrappers
+            shell_wrapper = case_path / "shell_cmd.sh"
+            shell_wrapper.write_text('#!/bin/bash\neval "$@"\n', encoding='utf-8')
+            shell_wrapper.chmod(0o755)
+
+            of_wrapper = case_path / "of_cmd.sh"
+            of_wrapper.write_text(
+                '#!/bin/bash\n'
+                'source /usr/lib/openfoam/openfoam2212/etc/bashrc\n'
+                '. ${WM_PROJECT_DIR}/bin/tools/RunFunctions\n'
+                '. ${WM_PROJECT_DIR}/bin/tools/CleanFunctions\n'
+                '"$@"\n',
+                encoding='utf-8'
+            )
+            of_wrapper.chmod(0o755)
+
+            # Get parameters
+            n_procs = 4
+            try:
+                n_procs = int(self.ui.edit_number_of_subdomains_2.text())
+            except (ValueError, AttributeError):
+                pass
+
             use_hostfile = self.ui.checkBox_host_2.isChecked()
-            allrun_content = allrun_path.read_text(encoding='utf-8')
+            application = self._get_application(case_path)
 
-            if use_hostfile:
-                # Ensure --hostfile is used (replace localhost fallback if present)
-                allrun_content = allrun_content.replace(
-                    '--host localhost --oversubscribe',
-                    '--hostfile system/hosts'
+            # Parse Allclean/Allrun scripts to build command list
+            commands = []
+            if allclean_path.exists():
+                commands.extend(self._parse_script(allclean_path, n_procs, use_hostfile, application))
+            if allrun_path.exists():
+                commands.extend(self._parse_script(allrun_path, n_procs, use_hostfile, application))
+
+            if not commands:
+                QMessageBox.warning(
+                    None, "Run Solver",
+                    "Allclean/Allrun files not found or empty in:\n"
+                    f"{case_path}"
                 )
-            else:
-                # Replace --hostfile with localhost execution
-                allrun_content = allrun_content.replace(
-                    '--hostfile system/hosts',
-                    '--host localhost --oversubscribe'
-                )
-
-            # Write modified Allrun as temporary file
-            temp_allrun = case_path / "_Allrun_gui"
-            temp_allrun.write_text(allrun_content, encoding='utf-8')
-            temp_allrun.chmod(0o755)
-
-            # Create temporary run script
-            script_content = """#!/bin/bash
-source /usr/lib/openfoam/openfoam2212/etc/bashrc
-./Allclean
-./_Allrun_gui
-"""
-            script_path = case_path / "run_simulation.sh"
-            script_path.write_text(script_content, encoding='utf-8')
-            script_path.chmod(0o755)
-
-            # Run the temporary script
-            command = "./run_simulation.sh"
-
-            # Set working directory for exec_widget
-            self.exec_widget.set_working_path(str(case_path))
-
-            # Register callbacks
-            self.exec_widget.set_function_after_finished(self._on_simulation_finished)
-            self.exec_widget.set_function_restore_ui(self._restore_ui_after_run)
+                return
 
             # Start simulation
             self._is_running = True
@@ -315,10 +316,10 @@ source /usr/lib/openfoam/openfoam2212/etc/bashrc
             self.ui.button_run.setText("Running...")
             self.ui.button_stop.setEnabled(True)
             self.ui.button_pause.setEnabled(True)
-            self.ui.button_mesh_generate.setEnabled(False)  # Disable Mesh Generate during simulation
+            self.ui.button_mesh_generate.setEnabled(False)
 
             # Update process info display
-            self.ui.edit_run_name.setText("Solver")  # Show task name
+            self.ui.edit_run_name.setText("Solver")
             self.ui.edit_run_id.setText("-")
             self.ui.edit_run_started.setText(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
             self.ui.edit_run_finished.setText("-")
@@ -327,12 +328,115 @@ source /usr/lib/openfoam/openfoam2212/etc/bashrc
             # Start log monitoring
             self._start_log_monitoring()
 
-            # Execute solver
-            self.exec_widget.run([command])
+            # Execute commands
+            self.exec_widget.run(commands)
 
         except Exception:
             self._restore_ui_after_run()
             self.ui.edit_run_status.setText("Error")
+
+    def _get_application(self, case_path: Path) -> str:
+        """Read application name from controlDict."""
+        try:
+            control_dict = case_path / "system" / "controlDict"
+            if control_dict.exists():
+                foam_file = FoamFile(str(control_dict))
+                if foam_file.load():
+                    app = foam_file.get_value("application")
+                    if app:
+                        return str(app)
+        except Exception:
+            traceback.print_exc()
+        return "chtMultiRegionFoam"
+
+    def _parse_script(self, script_path: Path, n_procs: int,
+                      use_hostfile: bool = False, application: str = "") -> list:
+        """Parse Allclean/Allrun script into individual wrapped commands.
+
+        Args:
+            script_path: Path to Allclean or Allrun file
+            n_procs: Number of parallel processors
+            use_hostfile: True to use --hostfile, False for --host localhost
+            application: Application name from controlDict
+
+        Returns:
+            List of commands wrapped with shell_cmd.sh or of_cmd.sh
+        """
+        SKIP_PREFIXES = (
+            '#!',
+            'cd "${0%/*}"',
+            '. ${WM_PROJECT_DIR',
+        )
+        SHELL_CMDS = {'rm', 'cp', 'mkdir', 'mv', 'ls', 'find', 'echo', 'sed'}
+
+        commands = []
+        try:
+            lines = script_path.read_text(encoding='utf-8').splitlines()
+        except Exception:
+            return commands
+
+        for raw_line in lines:
+            line = raw_line.strip()
+
+            # Skip empty/comment lines
+            if not line or line.startswith('#'):
+                continue
+
+            # Skip boilerplate
+            if any(line.startswith(p) for p in SKIP_PREFIXES):
+                continue
+
+            # Remove inline redirection/comments
+            line = re.sub(r'>\s*/dev/null.*', '', line).strip()
+            line = re.sub(r'#.*$', '', line).strip()
+            if not line:
+                continue
+
+            # Strip runApplication prefix (handle -s suffix flag)
+            if line.startswith('runApplication '):
+                line = line[len('runApplication '):]
+                # Handle -s suffix flag: runApplication -s suffix command args
+                if line.startswith('-s '):
+                    parts = line.split(None, 2)  # ['-s', 'suffix', 'command args...']
+                    if len(parts) >= 3:
+                        line = parts[2]
+                    else:
+                        continue
+
+            # Convert runParallel to mpirun
+            if line.startswith('runParallel '):
+                app_and_args = line[len('runParallel '):]
+                if use_hostfile:
+                    line = f"mpirun -np {n_procs} --hostfile system/hosts {app_and_args} -parallel"
+                else:
+                    line = f"mpirun -np {n_procs} --host localhost --oversubscribe {app_and_args} -parallel"
+
+            # Substitute getNumberOfProcessors
+            line = line.replace('`getNumberOfProcessors`', str(n_procs))
+            line = line.replace('$(getNumberOfProcessors)', str(n_procs))
+
+            # Substitute getApplication
+            if application:
+                line = line.replace('`getApplication`', application)
+                line = line.replace('$(getApplication)', application)
+
+            # Handle mpirun hostfile options
+            if 'mpirun' in line:
+                if use_hostfile:
+                    if '--host localhost' in line:
+                        line = line.replace('--host localhost --oversubscribe', '--hostfile system/hosts')
+                else:
+                    if '--hostfile system/hosts' in line:
+                        line = line.replace('--hostfile system/hosts', '--host localhost --oversubscribe')
+
+            # Classify: shell command vs OpenFOAM command
+            first_word = line.split()[0]
+            if first_word in SHELL_CMDS:
+                commands.append(f"./shell_cmd.sh {line}")
+            else:
+                commands.append(f"./of_cmd.sh {line}")
+
+        return commands
 
     def _start_log_monitoring(self):
         """Start monitoring log.solver file for residuals."""
