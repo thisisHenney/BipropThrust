@@ -277,7 +277,7 @@ class RunView:
             of_wrapper = case_path / "of_cmd.sh"
             of_wrapper.write_text(
                 '#!/bin/bash\n'
-                'source /usr/lib/openfoam/openfoam2212/etc/bashrc\n'
+                'source /usr/lib/openfoam/openfoam2312/etc/bashrc\n'
                 '. ${WM_PROJECT_DIR}/bin/tools/RunFunctions\n'
                 '. ${WM_PROJECT_DIR}/bin/tools/CleanFunctions\n'
                 '"$@"\n',
