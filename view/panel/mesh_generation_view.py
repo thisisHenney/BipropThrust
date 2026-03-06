@@ -1,9 +1,3 @@
-"""
-Mesh Generation View - Handles mesh generation logic
-
-This view connects to UI widgets defined in center_form_ui.py
-and implements OpenFOAM mesh generation functionality.
-"""
 
 import sys
 import subprocess
@@ -20,7 +14,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QComboBox,
     QSlider,
-    QCheckBox,
+    QPushButton,
     QDoubleSpinBox,
     QMessageBox,
 )
@@ -32,7 +26,6 @@ from common.case_data import case_data
 
 
 class PrepareMeshThread(QThread):
-    """Background thread for mesh preparation (file updates)."""
     finished_success = Signal()
     finished_error = Signal(str)
 
@@ -45,7 +38,6 @@ class PrepareMeshThread(QThread):
         self.bounds = bounds  # Pre-computed VTK bounding box (main thread)
 
     def run(self):
-        """Run all file update operations in background thread."""
         try:
             # Update blockMeshDict (pass pre-computed bounds to avoid VTK access from thread)
             if not self.view._update_blockmesh_dict(self.cells_x, self.cells_y, self.cells_z, bounds=self.bounds):
@@ -85,19 +77,8 @@ class PrepareMeshThread(QThread):
 
 
 class MeshGenerationView:
-    """
-    Mesh generation view.
-
-    Manages blockMeshDict and mesh generation process.
-    """
 
     def __init__(self, parent):
-        """
-        Initialize mesh generation view.
-
-        Args:
-            parent: CenterWidget instance (contains ui and context)
-        """
         self.parent = parent
         self.ui = self.parent.ui
         self.ctx = self.parent.context
@@ -110,7 +91,7 @@ class MeshGenerationView:
         self.app_data = app_data
         self.case_data = case_data
 
-        # VTK pipeline objects for OpenFOAM mesh and slice
+        # VTK pipeline objects for OpenFOAM mesh and clip
         self.foam_reader = None
         self.geom_output = None  # Full surface polydata
         self.bounds = None  # (xmin, xmax, ymin, ymax, zmin, zmax)
@@ -118,35 +99,26 @@ class MeshGenerationView:
         self.diagonal_length = None
         self.surface_actor = None
 
-        # Slice pipeline objects (cached for performance)
-        self.slice_plane = None
-        self.slice_actor = None
+        # Clip pipeline objects (cached for performance)
+        self.clip_plane = None
         self.clip_actor = None
-        self.clip_filter = None
-        # Cached pipeline components (expensive to create)
-        self._slice_geom_filter = None
-        self._slice_cd2pd = None
-        self._slice_clean1 = None
-        self._slice_cutter = None
-        self._slice_clean2 = None
-        self._slice_tri = None
+        self._clip_flip = False
         self._clip_clip_filter = None
         self._clip_geom_filter = None
 
-        # Debounce timer for slice updates (prevents laggy updates during rapid changes)
+        # Debounce timer for clip updates (prevents laggy updates during rapid changes)
         self._slice_update_timer = QTimer()
         self._slice_update_timer.setSingleShot(True)
         self._slice_update_timer.setInterval(150)  # 150ms debounce
         self._slice_update_timer.timeout.connect(self.update_slice)
 
-        # Create slice controls widget (will be shown/hidden by center_widget)
+        # Create clip controls widget (will be shown/hidden by center_widget)
         self.slice_widget = self._create_slice_widget()
 
         # Connect signals
         self._init_connect()
 
     def _init_connect(self):
-        """Initialize signal connections."""
         self.ui.button_mesh_generate.clicked.connect(self._on_generate_clicked)
         self.ui.button_mesh_stop.clicked.connect(self._on_mesh_stop_clicked)
         self.ui.button_edit_hostfile_mesh.clicked.connect(self._on_edit_hostfile_clicked)
@@ -155,103 +127,109 @@ class MeshGenerationView:
         # Disable mesh stop button initially
         self.ui.button_mesh_stop.setEnabled(False)
 
-        # Slice toolbar signals (debounced to prevent lag during rapid changes)
-        self.combo_dir.currentIndexChanged.connect(self._request_slice_update)
+        # Clip toolbar signals (debounced to prevent lag during rapid changes)
+        self.combo_dir.currentTextChanged.connect(self._on_clip_dir_changed)
         self.slider_pos.valueChanged.connect(self._on_slider_changed)
-        self.chk_clip.toggled.connect(self._request_slice_update)
+        self.clip_flip_btn.toggled.connect(self._on_clip_flip_toggled)
+        self.clip_reset_btn.clicked.connect(self._on_clip_reset_clicked)
         self.spin_nx.valueChanged.connect(self._request_slice_update)
         self.spin_ny.valueChanged.connect(self._request_slice_update)
         self.spin_nz.valueChanged.connect(self._request_slice_update)
 
     def _create_slice_widget(self):
-        """
-        Create slice controls as a QToolBar to be added to VTK viewer (bottom area).
-        QToolBar supports floating/docking within the QMainWindow-based VTK widget.
-
-        Returns:
-            QToolBar containing slice controls
-        """
         if not self.vtk_pre:
             return None
 
         # Create toolbar
-        slice_toolbar = QToolBar("Slice Controls", self.vtk_pre)
-        slice_toolbar.setObjectName("vtkBottomBar")
-        slice_toolbar.setFloatable(True)
-        slice_toolbar.setMovable(True)
+        clip_toolbar = QToolBar("Clip Controls", self.vtk_pre)
+        clip_toolbar.setObjectName("vtkBottomBar")
+        clip_toolbar.setFloatable(True)
+        clip_toolbar.setMovable(True)
 
         # Direction selection
-        slice_toolbar.addWidget(QLabel("Slice:"))
+        clip_toolbar.addWidget(QLabel("Clip:"))
 
         self.combo_dir = QComboBox()
-        self.combo_dir.addItems(["X", "Y", "Z", "Custom"])
-        slice_toolbar.addWidget(self.combo_dir)
+        self.combo_dir.addItems(["Off", "X", "Y", "Z", "Custom"])
+        self.combo_dir.setCurrentText("Off")
+        self.combo_dir.setFixedWidth(70)
+        clip_toolbar.addWidget(self.combo_dir)
 
-        # Custom normal controls
-        slice_toolbar.addWidget(QLabel(" n=("))
+        # Normal vector controls
+        clip_toolbar.addWidget(QLabel(" n=("))
 
         self.spin_nx = QDoubleSpinBox()
         self.spin_nx.setRange(-1.0, 1.0)
         self.spin_nx.setSingleStep(0.1)
-        self.spin_nx.setValue(0.0)
+        self.spin_nx.setValue(1.0)
         self.spin_nx.setMaximumWidth(60)
-        slice_toolbar.addWidget(self.spin_nx)
+        self.spin_nx.setEnabled(False)
+        clip_toolbar.addWidget(self.spin_nx)
 
-        slice_toolbar.addWidget(QLabel(","))
+        clip_toolbar.addWidget(QLabel(","))
 
         self.spin_ny = QDoubleSpinBox()
         self.spin_ny.setRange(-1.0, 1.0)
         self.spin_ny.setSingleStep(0.1)
         self.spin_ny.setValue(0.0)
         self.spin_ny.setMaximumWidth(60)
-        slice_toolbar.addWidget(self.spin_ny)
+        self.spin_ny.setEnabled(False)
+        clip_toolbar.addWidget(self.spin_ny)
 
-        slice_toolbar.addWidget(QLabel(","))
+        clip_toolbar.addWidget(QLabel(","))
 
         self.spin_nz = QDoubleSpinBox()
         self.spin_nz.setRange(-1.0, 1.0)
         self.spin_nz.setSingleStep(0.1)
-        self.spin_nz.setValue(1.0)
+        self.spin_nz.setValue(0.0)
         self.spin_nz.setMaximumWidth(60)
-        slice_toolbar.addWidget(self.spin_nz)
+        self.spin_nz.setEnabled(False)
+        clip_toolbar.addWidget(self.spin_nz)
 
-        slice_toolbar.addWidget(QLabel(")"))
+        clip_toolbar.addWidget(QLabel(")"))
 
         # Position slider
-        slice_toolbar.addWidget(QLabel(" Pos:"))
+        clip_toolbar.addWidget(QLabel(" Pos:"))
 
         self.slider_pos = QSlider(Qt.Horizontal)
         self.slider_pos.setRange(0, 100)
         self.slider_pos.setValue(50)
         self.slider_pos.setMinimumWidth(200)
-        slice_toolbar.addWidget(self.slider_pos)
+        self.slider_pos.setEnabled(False)
+        clip_toolbar.addWidget(self.slider_pos)
 
         self.lbl_pos_value = QLabel("50%")
         self.lbl_pos_value.setMinimumWidth(40)
-        slice_toolbar.addWidget(self.lbl_pos_value)
+        clip_toolbar.addWidget(self.lbl_pos_value)
 
-        # Clip checkbox
-        self.chk_clip = QCheckBox("Clip")
-        self.chk_clip.setChecked(False)
-        slice_toolbar.addWidget(self.chk_clip)
+        # Flip button
+        self.clip_flip_btn = QPushButton("Flip")
+        self.clip_flip_btn.setFixedWidth(50)
+        self.clip_flip_btn.setCheckable(True)
+        self.clip_flip_btn.setEnabled(False)
+        clip_toolbar.addWidget(self.clip_flip_btn)
+
+        # Reset button
+        self.clip_reset_btn = QPushButton("Reset")
+        self.clip_reset_btn.setFixedWidth(60)
+        self.clip_reset_btn.setEnabled(False)
+        clip_toolbar.addWidget(self.clip_reset_btn)
 
         # Hide toolbar initially
-        slice_toolbar.hide()
+        clip_toolbar.hide()
 
         # Add to VTK widget as bottom toolbar (QMainWindow 기반)
-        self.vtk_pre.addToolBar(Qt.BottomToolBarArea, slice_toolbar)
+        self.vtk_pre.addToolBar(Qt.BottomToolBarArea, clip_toolbar)
 
-        return slice_toolbar
+        return clip_toolbar
 
     def _on_hostfile_mesh_toggled(self, checked: bool):
-        """Save hostfile checkbox state to app_data and enable/disable Edit button."""
         self.app_data.parallel_mesh_enabled = checked
         self.ui.button_edit_hostfile_mesh.setEnabled(checked)
 
     def _on_mesh_stop_clicked(self):
-        """Handle Mesh Stop button click - stop the mesh generation process."""
         if self.exec_widget:
-            self.exec_widget.stop_process()
+            self.exec_widget.stop_process(kill=True)
 
         # Restore UI state
         self.ui.button_mesh_generate.setEnabled(True)
@@ -263,12 +241,6 @@ class MeshGenerationView:
         self.ui.edit_run_finished.setText(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
     def _highlight_error_widget(self, widget):
-        """
-        Highlight widget with red border and scroll to it.
-
-        Args:
-            widget: QWidget to highlight (typically QLineEdit)
-        """
         from PySide6.QtWidgets import QScrollArea
 
         # Save original stylesheet and widget reference for later restoration
@@ -296,7 +268,6 @@ class MeshGenerationView:
         widget.selectAll()
 
     def _clear_error_highlight(self):
-        """Clear error highlighting from previously highlighted widget."""
         if hasattr(self, '_error_highlighted_widget') and self._error_highlighted_widget:
             # Clear inline style and force update
             self._error_highlighted_widget.setStyleSheet("")
@@ -307,7 +278,6 @@ class MeshGenerationView:
             self._error_original_style = ""
 
     def _on_edit_hostfile_clicked(self):
-        """Handle Edit host file button click - open hosts file in text editor."""
         # Path to hosts file in 2.meshing_MheadBL/system/
         hosts_path = Path(self.case_data.path) / "2.meshing_MheadBL" / "system" / "hosts"
 
@@ -316,19 +286,17 @@ class MeshGenerationView:
             hosts_path.parent.mkdir(parents=True, exist_ok=True)
             hosts_path.touch()
 
-        # Open with appropriate text editor based on platform
+        # Open with system default text editor
         try:
             if sys.platform == "win32":
-                # Windows - use notepad
-                subprocess.Popen(["notepad", str(hosts_path)])
+                import os
+                os.startfile(str(hosts_path))
             else:
-                # Linux - use gedit
-                subprocess.Popen(["gedit", str(hosts_path)])
+                subprocess.Popen(["xdg-open", str(hosts_path)])
         except Exception:
             traceback.print_exc()
 
     def _on_generate_clicked(self):
-        """Handle Generate button click - prepare files in background then run mesh generation."""
         import os
 
         # Clear any previous error highlighting first
@@ -372,6 +340,7 @@ class MeshGenerationView:
         z = self.ui.lineEdit_basegrid_z.text() or "100"
 
         # Compute geometry bounding box on main thread (VTK is NOT thread-safe)
+        # Flat geometries are detected by GeometryView at load time
         geom_bounds = None
         if self.vtk_pre:
             all_objs = self.vtk_pre.obj_manager.get_all()
@@ -390,6 +359,10 @@ class MeshGenerationView:
                     raw[5] = max(raw[5], ob[5])
                 geom_bounds = tuple(raw)
 
+        # Get flat geometries from GeometryView (detected at load time)
+        geom_view = self.parent.panel_views.get("geometry")
+        self._flat_geometries = geom_view._flat_geometries if geom_view else set()
+
         # Start background thread for file preparation
         self.prepare_thread = PrepareMeshThread(self, x, y, z, bounds=geom_bounds)
         self.prepare_thread.finished_success.connect(self._on_preparation_finished)
@@ -397,7 +370,6 @@ class MeshGenerationView:
         self.prepare_thread.start()
 
     def _clear_existing_mesh(self):
-        """Clear existing mesh from VTK widget."""
         if not self.vtk_pre:
             return
 
@@ -421,7 +393,6 @@ class MeshGenerationView:
         self.vtk_pre.vtk_widget.GetRenderWindow().Render()
 
     def _clear_mesh_files(self):
-        """Clear existing mesh files from case folder."""
         import shutil
 
         meshing_path = Path(self.case_data.path) / "2.meshing_MheadBL"
@@ -457,7 +428,6 @@ class MeshGenerationView:
                     pass
 
     def _on_preparation_finished(self):
-        """Handle successful preparation - start mesh generation."""
         if not self.exec_widget:
             self.ui.button_mesh_generate.setEnabled(True)
             self.ui.button_mesh_generate.setText("Generate Mesh")
@@ -529,13 +499,32 @@ class MeshGenerationView:
         of_wrapper = meshing_path / "of_cmd.sh"
         of_wrapper.write_text(
             '#!/bin/bash\n'
-            'source /usr/lib/openfoam/openfoam2312/etc/bashrc\n'
+            'source /usr/lib/openfoam/openfoam2212/etc/bashrc\n'
             '. ${WM_PROJECT_DIR}/bin/tools/RunFunctions\n'
             '. ${WM_PROJECT_DIR}/bin/tools/CleanFunctions\n'
             '"$@"\n',
             encoding='utf-8'
         )
         of_wrapper.chmod(0o755)
+
+        # Create log wrapper script (tees output to log file while preserving exit code)
+        # trap ensures all child processes (tee, command) are killed on SIGTERM/SIGINT
+        # stdbuf -oL on tee forces line-buffered output to QProcess
+        log_wrapper = meshing_path / "log_cmd.sh"
+        log_wrapper.write_text(
+            '#!/bin/bash\n'
+            'set -o pipefail\n'
+            'trap "kill 0" SIGTERM SIGINT\n'
+            'LOG_FILE="$1"\n'
+            'shift\n'
+            '"$@" 2>&1 | stdbuf -oL tee "$LOG_FILE"\n',
+            encoding='utf-8'
+        )
+        log_wrapper.chmod(0o755)
+
+        # Create log directory for this execution
+        self._log_dir = Path(self.case_data.path) / "log" / "GenerateMesh" / datetime.now().strftime("%Y%m%d_%H%M%S")
+        self._log_dir.mkdir(parents=True, exist_ok=True)
 
         # Parse Allclean/Allrun scripts to build command list
         allclean = meshing_path / "Allclean"
@@ -557,23 +546,66 @@ class MeshGenerationView:
             self._restore_ui()
             return
 
+        # Wrap commands with log wrapper for per-command log files
+        commands = self._wrap_commands_with_logging(commands)
+
         # Lock VTK toolbars during execution to prevent freeze
         self._lock_vtk_toolbars(True)
 
         # Run mesh generation commands with progress bar
         self.exec_widget.run(commands)
 
+    def _wrap_commands_with_logging(self, commands: list) -> list:
+        logged_commands = []
+        for i, cmd in enumerate(commands, 1):
+            display = self._get_display_cmd(cmd)
+            if cmd.startswith("./shell_cmd.sh"):
+                logged_commands.append((cmd, display))
+            else:
+                cmd_name = self._extract_command_name(cmd)
+                log_file = self._log_dir / f"{i:02d}_{cmd_name}.log"
+                logged_commands.append((f"./log_cmd.sh {log_file} {cmd}", display))
+        return logged_commands
+
+    @staticmethod
+    def _get_display_cmd(cmd: str) -> str:
+        if cmd.startswith("./shell_cmd.sh "):
+            return cmd[len("./shell_cmd.sh "):]
+        if cmd.startswith("./log_cmd.sh "):
+            rest = cmd[len("./log_cmd.sh "):]
+            parts = rest.split(" ", 1)
+            rest = parts[1] if len(parts) == 2 else rest
+            if rest.startswith("./of_cmd.sh "):
+                return rest[len("./of_cmd.sh "):]
+            return rest
+        if cmd.startswith("./of_cmd.sh "):
+            return cmd[len("./of_cmd.sh "):]
+        return cmd
+
+    @staticmethod
+    def _extract_command_name(cmd: str) -> str:
+        # Strip wrapper prefix: ./of_cmd.sh or ./shell_cmd.sh
+        stripped = cmd
+        for prefix in ("./of_cmd.sh ", "./shell_cmd.sh "):
+            if stripped.startswith(prefix):
+                stripped = stripped[len(prefix):]
+                break
+
+        parts = stripped.split()
+        if not parts:
+            return "unknown"
+
+        # Skip mpirun/mpiexec and their arguments to find the actual command
+        i = 0
+        if parts[0] in ("mpirun", "mpiexec"):
+            i = 1
+            while i < len(parts) and parts[i].startswith("-"):
+                i += 1
+                if i < len(parts) and not parts[i - 1].startswith("--"):
+                    i += 1  # skip value of -np, --host, etc.
+        return parts[i] if i < len(parts) else parts[0]
+
     def _parse_script(self, script_path: Path, n_procs: int, use_hostfile: bool = False) -> list:
-        """Allclean/Allrun 스크립트를 파싱하여 실행 명령어 리스트 반환.
-
-        Args:
-            script_path: Allclean 또는 Allrun 파일 경로
-            n_procs: 병렬 처리 프로세서 수
-            use_hostfile: True면 --hostfile system/hosts 사용, False면 --host localhost 사용
-
-        Returns:
-            래퍼(shell_cmd.sh/of_cmd.sh)가 붙은 명령어 리스트
-        """
         SKIP_PREFIXES = (
             '#!',                       # shebang
             'cd "${0%/*}"',             # directory change
@@ -646,7 +678,6 @@ class MeshGenerationView:
         return commands
 
     def _on_preparation_error(self, error_msg: str):
-        """Handle preparation error."""
         self.ui.button_mesh_generate.setEnabled(True)
         self.ui.button_mesh_generate.setText("Generate Mesh")
         self.ui.button_mesh_stop.setEnabled(False)
@@ -657,7 +688,6 @@ class MeshGenerationView:
         self.ui.edit_run_finished.setText(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
     def _restore_ui(self):
-        """Restore UI state after command execution (success, error, or cancel)."""
         self.ui.button_mesh_generate.setEnabled(True)
         self.ui.button_mesh_generate.setText("Generate Mesh")
         self.ui.button_mesh_stop.setEnabled(False)
@@ -671,7 +701,6 @@ class MeshGenerationView:
         self._lock_vtk_toolbars(False)
 
     def _lock_vtk_toolbars(self, lock: bool):
-        """Lock or unlock all VTK toolbars to prevent freeze during execution."""
         if not self.vtk_pre:
             return
         for toolbar in self.vtk_pre.findChildren(QToolBar):
@@ -679,19 +708,6 @@ class MeshGenerationView:
             toolbar.setMovable(not lock)
 
     def _update_blockmesh_dict(self, cells_x: str, cells_y: str, cells_z: str, bounds=None) -> bool:
-        """
-        Update blockMeshDict with geometry bounding box vertices and base grid cells.
-
-        Args:
-            cells_x: Number of cells in x direction
-            cells_y: Number of cells in y direction
-            cells_z: Number of cells in z direction
-            bounds: Pre-computed bounding box (xmin, xmax, ymin, ymax, zmin, zmax)
-                    from main thread. Required to avoid VTK access from background thread.
-
-        Returns:
-            True if successful, False otherwise
-        """
         if bounds is None:
             return False
 
@@ -766,19 +782,6 @@ class MeshGenerationView:
             return False
 
     def _update_snappyhex_dict(self) -> bool:
-        """
-        Update snappyHexMeshDict with geometry entries from geometry view.
-        Uses regex for all sections since FoamFile API doesn't handle nested structures well.
-
-        Updates:
-        - geometry: STL file definitions
-        - features: eMesh file definitions
-        - refinementSurfaces: refinement levels (outlet gets patchInfo)
-        - locationsInMesh: probe positions for each geometry
-
-        Returns:
-            True if successful, False otherwise
-        """
         try:
             # Path to snappyHexMeshDict
             case_path = Path(self.case_data.path) / "2.meshing_MheadBL"
@@ -798,10 +801,12 @@ class MeshGenerationView:
                 content = f.read()
 
             # ============================================================
-            # 1) Update geometry section
+            # 1) Update geometry section (skip fluid - no STL file)
             # ============================================================
             geometry_entries = []
             for geom_name in geometries:
+                if geom_name == "fluid":
+                    continue
                 entry = f'''    {geom_name}.stl
     {{
         type triSurfaceMesh;
@@ -819,10 +824,12 @@ class MeshGenerationView:
                 content = re.sub(geometry_pattern, new_geometry_block, content, flags=re.DOTALL)
 
             # ============================================================
-            # 2) Update features section (inside castellatedMeshControls)
+            # 2) Update features section (skip fluid - no eMesh file)
             # ============================================================
             feature_lines = []
             for geom_name in geometries:
+                if geom_name == "fluid":
+                    continue
                 feature_line = f'        {{ file "{geom_name}.eMesh"; level 0; }}'
                 feature_lines.append(feature_line)
 
@@ -837,10 +844,12 @@ class MeshGenerationView:
                 content = re.sub(features_pattern, r'\1' + new_features_block, content, flags=re.DOTALL | re.MULTILINE)
 
             # ============================================================
-            # 3) Update refinementSurfaces section
+            # 3) Update refinementSurfaces section (skip fluid - no surface)
             # ============================================================
             refinement_entries = []
             for geom_name in geometries:
+                if geom_name == "fluid":
+                    continue
                 if geom_name == "outlet":
                     entry = f'''        {geom_name}
         {{
@@ -868,9 +877,18 @@ class MeshGenerationView:
 
             # ============================================================
             # 4) Update locationsInMesh section
+            #    - fluid is always included
+            #    - Skip flat/planar geometries (e.g. outlet)
             # ============================================================
+            # Always read from geometry_view so Ctrl+S and Mesh Generate are consistent
+            geom_view = self.parent.panel_views.get("geometry")
+            flat_geoms = geom_view._flat_geometries if geom_view else getattr(self, '_flat_geometries', set())
             location_lines = []
             for geom_name in geometries:
+                # Skip flat geometries (but always include fluid)
+                if geom_name != "fluid" and geom_name in flat_geoms:
+                    continue
+
                 probe_pos = self.case_data.get_geometry_probe_position(geom_name)
 
                 # Use (0, 0, 0) if no probe position is set
@@ -878,16 +896,17 @@ class MeshGenerationView:
                     probe_pos = (0.0, 0.0, 0.0)
 
                 x, y, z = probe_pos
-                location_line = f"        (( {x:<9.4f} {y:<9.4f} {z:<9.4f}) {geom_name})"
+                location_line = f"        (( {x:.4f}  {y:.4f}  {z:.4f} ) {geom_name})"
                 location_lines.append(location_line)
 
-            new_locations_block = "locationsInMesh\n    (\n"
+            new_locations_block = "    locationsInMesh\n    (\n"
             new_locations_block += "\n".join(location_lines)
             new_locations_block += "\n    );"
 
-            locations_pattern = r'locationsInMesh\s*\(\s*(?:.*?)\s*\);'
-            if re.search(locations_pattern, content, re.DOTALL):
-                content = re.sub(locations_pattern, new_locations_block, content, flags=re.DOTALL)
+            # Match indented "locationsInMesh ( ... );" — replace entirely with new entries
+            locations_pattern = r'[ \t]*locationsInMesh\s*\([\s\S]*?\);'
+            if re.search(locations_pattern, content):
+                content = re.sub(locations_pattern, new_locations_block, content)
 
             # Write back to file
             with open(snappy_path, 'w', encoding='utf-8') as f:
@@ -900,13 +919,6 @@ class MeshGenerationView:
             return False
 
     def _update_surface_feature_extract_dict(self) -> bool:
-        """
-        Update surfaceFeatureExtractDict with geometry entries.
-        Only registered STL files will be included.
-
-        Returns:
-            True if successful, False otherwise
-        """
         try:
             case_path = Path(self.case_data.path) / "2.meshing_MheadBL"
             dict_path = case_path / "system" / "surfaceFeatureExtractDict"
@@ -939,6 +951,8 @@ FoamFile
 '''
             entries = []
             for geom_name in geometries:
+                if geom_name == "fluid":
+                    continue
                 entry = f'''{geom_name}.stl
 {{
     extractionMethod    extractFromSurface;
@@ -961,7 +975,6 @@ FoamFile
             return False
 
     def _on_mesh_generated(self):
-        """Handle mesh generation completion - load and display generated mesh."""
 
         if not self.vtk_pre:
             return
@@ -984,7 +997,6 @@ FoamFile
         self.load_mesh_async()
 
     def _switch_to_mesh_tab(self):
-        """Switch to Mesh Generation tab in the navigation."""
         # Switch stacked widget to mesh generation page
         self.ui.stackedWidget.setCurrentWidget(self.ui.page_mesh_generation)
 
@@ -1008,7 +1020,6 @@ FoamFile
                 geom_view.slice_widget.hide()
 
     def load_mesh_async(self):
-        """Load existing mesh asynchronously from OpenFOAM case folder."""
 
         mesh_case_path = Path(self.case_data.path) / "2.meshing_MheadBL"
 
@@ -1029,7 +1040,6 @@ FoamFile
                 self.success = False
 
             def run(self):
-                """Load OpenFOAM case in background thread."""
                 try:
                     # Create case.foam file if it doesn't exist
                     foam_file = self.case_path / "case.foam"
@@ -1072,7 +1082,6 @@ FoamFile
         self.mesh_thread.start()
 
     def _on_openfoam_case_loaded(self, reader):
-        """Handle OpenFOAM case loaded in background thread."""
         if not reader or not self.vtk_pre:
             return
 
@@ -1153,17 +1162,11 @@ FoamFile
             traceback.print_exc()
 
     def _clear_slice_clip(self):
-        """Clear slice/clip pipeline actors and cached filters from renderer."""
         if not self.vtk_pre:
             return
 
         # Get renderer
         renderer = self.vtk_pre.vtk_widget.GetRenderWindow().GetRenderers().GetFirstRenderer()
-
-        # Remove slice actor
-        if self.slice_actor is not None:
-            renderer.RemoveActor(self.slice_actor)
-            self.slice_actor = None
 
         # Remove clip actor
         if self.clip_actor is not None:
@@ -1171,61 +1174,36 @@ FoamFile
             self.clip_actor = None
 
         # Reset pipeline objects
-        self.slice_plane = None
-        self.clip_filter = None
-
-        # Clear cached pipeline components to free memory
-        self._slice_geom_filter = None
-        self._slice_cd2pd = None
-        self._slice_clean1 = None
-        self._slice_cutter = None
-        self._slice_clean2 = None
-        self._slice_tri = None
+        self.clip_plane = None
         self._clip_clip_filter = None
         self._clip_geom_filter = None
 
     def _hide_slice_clip_actors(self):
-        """Hide slice/clip actors without removing them (for tab switching)."""
         if not self.vtk_pre:
             return
 
-        # Hide slice actor
-        if self.slice_actor is not None:
-            self.slice_actor.SetVisibility(False)
-
-        # Hide clip actor
         if self.clip_actor is not None:
             self.clip_actor.SetVisibility(False)
 
     def _show_slice_clip_actors(self):
-        """Show slice/clip actors (for tab switching back to Mesh Generation)."""
         if not self.vtk_pre:
             return
 
-        # Show slice actor
-        if self.slice_actor is not None:
-            self.slice_actor.SetVisibility(True)
-
-        # Show clip actor only if clip is enabled
-        if self.clip_actor is not None and self.chk_clip.isChecked():
+        if self.clip_actor is not None and self.combo_dir.currentText() != "Off":
             self.clip_actor.SetVisibility(True)
 
     def _get_plane_params(self):
-        """
-        Calculate slice plane origin and normal based on current UI settings.
-
-        Returns:
-            Tuple of (origin, normal) or (None, None) if bounds not available
-        """
         if self.bounds is None or self.center is None:
+            return None, None
+
+        dir_text = self.combo_dir.currentText()
+        if dir_text == "Off":
             return None, None
 
         xmin, xmax, ymin, ymax, zmin, zmax = self.bounds
         cx, cy, cz = self.center
 
         t = self.slider_pos.value() / 100.0  # 0.0 ~ 1.0
-
-        dir_text = self.combo_dir.currentText()
 
         # Calculate normal and origin based on direction
         if dir_text == "X":
@@ -1264,26 +1242,75 @@ FoamFile
 
         return origin, normal
 
+    def _on_clip_dir_changed(self, direction: str):
+        is_clipping = (direction != "Off")
+        is_custom = (direction == "Custom")
+
+        self.slider_pos.setEnabled(is_clipping)
+        self.clip_flip_btn.setEnabled(is_clipping)
+        self.clip_reset_btn.setEnabled(is_clipping)
+        self.spin_nx.setEnabled(is_custom)
+        self.spin_ny.setEnabled(is_custom)
+        self.spin_nz.setEnabled(is_custom)
+
+        # Set normal spinbox display values for fixed axes
+        normals = {"X": (1, 0, 0), "Y": (0, 1, 0), "Z": (0, 0, 1)}
+        if direction in normals:
+            for spin, val in zip([self.spin_nx, self.spin_ny, self.spin_nz], normals[direction]):
+                spin.blockSignals(True)
+                spin.setValue(val)
+                spin.blockSignals(False)
+
+        if not is_clipping:
+            self.clip_flip_btn.blockSignals(True)
+            self.clip_flip_btn.setChecked(False)
+            self.clip_flip_btn.blockSignals(False)
+            self._clip_flip = False
+            self.slider_pos.blockSignals(True)
+            self.slider_pos.setValue(50)
+            self.slider_pos.blockSignals(False)
+            self.lbl_pos_value.setText("50%")
+
+        self._request_slice_update()
+
+    def _on_clip_flip_toggled(self, checked: bool):
+        self._clip_flip = checked
+        self._request_slice_update()
+
+    def _on_clip_reset_clicked(self):
+        self.clip_flip_btn.blockSignals(True)
+        self.clip_flip_btn.setChecked(False)
+        self.clip_flip_btn.blockSignals(False)
+        self._clip_flip = False
+        self.slider_pos.blockSignals(True)
+        self.slider_pos.setValue(50)
+        self.slider_pos.blockSignals(False)
+        self.lbl_pos_value.setText("50%")
+        self._request_slice_update()
+
     def _on_slider_changed(self, value: int):
-        """Handle slider value change (debounced)."""
         self.lbl_pos_value.setText(f"{value}%")
         self._request_slice_update()
 
     def _request_slice_update(self):
-        """Request a debounced slice update (prevents lag during rapid UI changes)."""
         self._slice_update_timer.start()
 
     def update_slice(self):
-        """Update slice/clip visualization based on current settings.
-
-        Uses cached pipeline components to avoid recreating expensive VTK filters
-        on every update, which was causing memory leaks and performance issues.
-        """
         if self.foam_reader is None or self.geom_output is None or not self.vtk_pre:
             return
 
+        # Get renderer
+        renderer = self.vtk_pre.vtk_widget.GetRenderWindow().GetRenderers().GetFirstRenderer()
+
         origin, normal = self._get_plane_params()
+
         if origin is None or normal is None:
+            # Off — hide clip actor, show surface
+            if self.clip_actor is not None:
+                self.clip_actor.SetVisibility(False)
+            if self.surface_actor is not None:
+                self.surface_actor.SetVisibility(True)
+            self.vtk_pre.vtk_widget.GetRenderWindow().Render()
             return
 
         # Ensure geometry objects remain hidden (clip reveals inside of mesh)
@@ -1292,106 +1319,50 @@ FoamFile
             if hasattr(obj, 'group') and obj.group == "geometry":
                 obj.actor.SetVisibility(False)
 
-        # Get renderer
-        renderer = self.vtk_pre.vtk_widget.GetRenderWindow().GetRenderers().GetFirstRenderer()
+        # Create or update clip plane
+        if self.clip_plane is None:
+            self.clip_plane = vtk.vtkPlane()
 
-        # Create or update slice plane
-        if self.slice_plane is None:
-            self.slice_plane = vtk.vtkPlane()
+        self.clip_plane.SetOrigin(*origin)
+        self.clip_plane.SetNormal(*normal)
 
-        self.slice_plane.SetOrigin(*origin)
-        self.slice_plane.SetNormal(*normal)
+        # Hide surface, show clipped volume
+        if self.surface_actor is not None:
+            self.surface_actor.SetVisibility(False)
 
-        # ==================================================================
-        # 1) ParaView-style Slice pipeline (cached for performance)
-        # ==================================================================
+        # Initialize clip pipeline once
+        if self._clip_clip_filter is None:
+            self._clip_clip_filter = vtk.vtkClipDataSet()
+            self._clip_clip_filter.SetInputConnection(self.foam_reader.GetOutputPort())
 
-        # Initialize cached pipeline components once
-        if self._slice_geom_filter is None:
-            # 1. MultiBlock → PolyData flatten
-            self._slice_geom_filter = vtk.vtkCompositeDataGeometryFilter()
-            self._slice_geom_filter.SetInputConnection(self.foam_reader.GetOutputPort())
+            self._clip_geom_filter = vtk.vtkCompositeDataGeometryFilter()
+            self._clip_geom_filter.SetInputConnection(self._clip_clip_filter.GetOutputPort())
 
-            # 2. Cell → Point interpolation (ParaView style)
-            self._slice_cd2pd = vtk.vtkCellDataToPointData()
-            self._slice_cd2pd.SetInputConnection(self._slice_geom_filter.GetOutputPort())
-
-            # 3. Clean polydata
-            self._slice_clean1 = vtk.vtkCleanPolyData()
-            self._slice_clean1.SetInputConnection(self._slice_cd2pd.GetOutputPort())
-
-            # 4. Cutter (slice)
-            self._slice_cutter = vtk.vtkCutter()
-            self._slice_cutter.SetInputConnection(self._slice_clean1.GetOutputPort())
-
-            # 5. Clean slice result
-            self._slice_clean2 = vtk.vtkCleanPolyData()
-            self._slice_clean2.SetInputConnection(self._slice_cutter.GetOutputPort())
-
-            # 6. Triangulate slice
-            self._slice_tri = vtk.vtkTriangleFilter()
-            self._slice_tri.SetInputConnection(self._slice_clean2.GetOutputPort())
-
-        # Update plane function (this is the only thing that changes)
-        self._slice_cutter.SetCutFunction(self.slice_plane)
+        # Update clip function and flip
+        self._clip_clip_filter.SetClipFunction(self.clip_plane)
+        if self._clip_flip:
+            self._clip_clip_filter.InsideOutOn()
+        else:
+            self._clip_clip_filter.InsideOutOff()
 
         # Create actor if needed (only once)
-        if self.slice_actor is None:
-            slice_mapper = vtk.vtkPolyDataMapper()
-            slice_mapper.SetInputConnection(self._slice_tri.GetOutputPort())
+        if self.clip_actor is None:
+            clip_mapper = vtk.vtkPolyDataMapper()
+            clip_mapper.SetInputConnection(self._clip_geom_filter.GetOutputPort())
 
-            self.slice_actor = vtk.vtkActor()
-            self.slice_actor.SetMapper(slice_mapper)
-            self.slice_actor.GetProperty().SetColor(1.0, 0.1, 0.1)
-            self.slice_actor.GetProperty().SetLineWidth(2)
-            renderer.AddActor(self.slice_actor)
+            self.clip_actor = vtk.vtkActor()
+            self.clip_actor.SetMapper(clip_mapper)
 
-        # ==================================================================
-        # 2) Clip (optional) - ParaView-style Slice + Clip
-        # ==================================================================
-        if self.chk_clip.isChecked():
-            # Hide surface actor, show clipped volume
-            if self.surface_actor is not None:
-                self.surface_actor.SetVisibility(False)
+            prop = self.clip_actor.GetProperty()
+            prop.SetRepresentationToSurface()
+            prop.EdgeVisibilityOn()
+            prop.SetColor(0.80, 0.80, 0.90)
+            prop.SetEdgeColor(0.0, 0.0, 0.0)
+            prop.SetLineWidth(1.0)
 
-            # Initialize clip pipeline once
-            if self._clip_clip_filter is None:
-                self._clip_clip_filter = vtk.vtkClipDataSet()
-                self._clip_clip_filter.SetInputConnection(self.foam_reader.GetOutputPort())
-                self._clip_clip_filter.InsideOutOn()
+            renderer.AddActor(self.clip_actor)
 
-                self._clip_geom_filter = vtk.vtkCompositeDataGeometryFilter()
-                self._clip_geom_filter.SetInputConnection(self._clip_clip_filter.GetOutputPort())
-
-            # Update clip function
-            self._clip_clip_filter.SetClipFunction(self.slice_plane)
-
-            # Create actor if needed (only once)
-            if self.clip_actor is None:
-                clip_mapper = vtk.vtkPolyDataMapper()
-                clip_mapper.SetInputConnection(self._clip_geom_filter.GetOutputPort())
-
-                self.clip_actor = vtk.vtkActor()
-                self.clip_actor.SetMapper(clip_mapper)
-
-                prop = self.clip_actor.GetProperty()
-                prop.SetRepresentationToSurface()
-                prop.EdgeVisibilityOn()
-                prop.SetColor(0.80, 0.80, 0.90)
-                prop.SetEdgeColor(0.0, 0.0, 0.0)
-                prop.SetLineWidth(1.0)
-
-                renderer.AddActor(self.clip_actor)
-
-            self.clip_actor.SetVisibility(True)
-
-        else:
-            # No clip - hide clip actor and show surface
-            if self.clip_actor is not None:
-                self.clip_actor.SetVisibility(False)
-
-            if self.surface_actor is not None:
-                self.surface_actor.SetVisibility(True)
+        self.clip_actor.SetVisibility(True)
 
         # Ensure geometry objects remain hidden before rendering
         all_objs = self.vtk_pre.obj_manager.get_all()
@@ -1403,9 +1374,6 @@ FoamFile
         self.vtk_pre.vtk_widget.GetRenderWindow().Render()
 
     def _load_locations_from_snappyhex(self):
-        """
-        Load probe positions from snappyHexMeshDict locationsInMesh and update case_data.
-        """
         try:
             case_path = Path(self.case_data.path) / "2.meshing_MheadBL"
             snappy_path = case_path / "system" / "snappyHexMeshDict"
@@ -1447,7 +1415,6 @@ FoamFile
             traceback.print_exc()
 
     def load_data(self):
-        """Load mesh settings from blockMeshDict."""
 
         # Restore hostfile checkbox from app_data and sync Edit button
         self.ui.checkBox_host_1.setChecked(self.app_data.parallel_mesh_enabled)
@@ -1459,8 +1426,9 @@ FoamFile
         # Load numberOfSubdomains from decomposeParDict
         self._load_number_of_subdomains()
 
-        # Load probe positions from snappyHexMeshDict
-        self._load_locations_from_snappyhex()
+        # NOTE: Probe positions are authoritative in case_data JSON (loaded by case_data.load()).
+        # Do NOT call _load_locations_from_snappyhex() here — it would overwrite the
+        # correctly restored JSON values with potentially outdated snappyHexMeshDict values.
 
         # Load castellation settings from snappyHexMeshDict
         self._load_castellation_settings()
@@ -1522,7 +1490,6 @@ FoamFile
             self.ui.lineEdit_basegrid_z.setText(default_cells[2])
 
     def _load_number_of_subdomains(self):
-        """Load numberOfSubdomains from 2.meshing_MheadBL/system/decomposeParDict."""
         import os
 
         # Default value: CPU count / 2
@@ -1545,7 +1512,6 @@ FoamFile
         self.ui.edit_number_of_subdomains.setText(str(default_value))
 
     def _load_castellation_settings(self):
-        """Load castellation settings from snappyHexMeshDict to UI."""
         try:
             case_path = Path(self.case_data.path) / "2.meshing_MheadBL"
             snappy_path = case_path / "system" / "snappyHexMeshDict"
@@ -1567,9 +1533,9 @@ FoamFile
             if angle is not None:
                 self.ui.edit_castellation_2.setText(str(angle))
 
-            # Load refinementSurfaces level from first geometry
+            # Load refinementSurfaces level from first non-fluid geometry
             # All geometries should have the same level, so read from first one
-            geometries = self.case_data.list_geometries()
+            geometries = [g for g in self.case_data.list_geometries() if g != "fluid"]
             if geometries:
                 first_geom = geometries[0]
                 level = foam_file.get_value(
@@ -1587,17 +1553,6 @@ FoamFile
             traceback.print_exc()
 
     def _update_castellation_settings(self) -> bool:
-        """
-        Update snappyHexMeshDict with castellation settings from UI.
-
-        Updates:
-        - castellatedMeshControls.nCellsBetweenLevels (edit_castellation_1)
-        - castellatedMeshControls.resolveFeatureAngle (edit_castellation_2)
-        - castellatedMeshControls.refinementSurfaces.{객체}.level (edit_castellation_3, edit_castellation_4)
-
-        Returns:
-            True if successful, False otherwise
-        """
         try:
             case_path = Path(self.case_data.path) / "2.meshing_MheadBL"
             snappy_path = case_path / "system" / "snappyHexMeshDict"
@@ -1642,16 +1597,6 @@ FoamFile
             return False
 
     def _update_refinement_surfaces_level(self, snappy_path: Path, min_level: int, max_level: int):
-        """
-        Update refinementSurfaces level for all geometries using regex.
-
-        This preserves other settings like patchInfo while updating only the level values.
-
-        Args:
-            snappy_path: Path to snappyHexMeshDict
-            min_level: Minimum refinement level (edit_castellation_3)
-            max_level: Maximum refinement level (edit_castellation_4)
-        """
         try:
             # Read file content
             with open(snappy_path, 'r', encoding='utf-8') as f:
@@ -1673,7 +1618,6 @@ FoamFile
             traceback.print_exc()
 
     def _load_snap_settings(self):
-        """Load snap settings from snappyHexMeshDict to UI."""
         try:
             case_path = Path(self.case_data.path) / "2.meshing_MheadBL"
             snappy_path = case_path / "system" / "snappyHexMeshDict"
@@ -1709,12 +1653,6 @@ FoamFile
             traceback.print_exc()
 
     def _update_snap_settings(self) -> bool:
-        """
-        Update snappyHexMeshDict with snap settings from UI.
-
-        Returns:
-            True if successful, False otherwise
-        """
         try:
             case_path = Path(self.case_data.path) / "2.meshing_MheadBL"
             snappy_path = case_path / "system" / "snappyHexMeshDict"
@@ -1747,7 +1685,6 @@ FoamFile
             return False
 
     def _load_boundary_layer_settings(self):
-        """Load boundary layer (addLayersControls) settings from snappyHexMeshDict to UI."""
         try:
             case_path = Path(self.case_data.path) / "2.meshing_MheadBL"
             snappy_path = case_path / "system" / "snappyHexMeshDict"
@@ -1791,7 +1728,6 @@ FoamFile
             traceback.print_exc()
 
     def _load_n_surface_layers(self, snappy_path: Path):
-        """Load nSurfaceLayers from layers section using regex."""
         try:
             with open(snappy_path, 'r', encoding='utf-8') as f:
                 content = f.read()
@@ -1808,12 +1744,6 @@ FoamFile
             traceback.print_exc()
 
     def _update_boundary_layer_settings(self) -> bool:
-        """
-        Update snappyHexMeshDict with boundary layer settings from UI.
-
-        Returns:
-            True if successful, False otherwise
-        """
         try:
             case_path = Path(self.case_data.path) / "2.meshing_MheadBL"
             snappy_path = case_path / "system" / "snappyHexMeshDict"
@@ -1857,7 +1787,6 @@ FoamFile
             return False
 
     def _update_n_surface_layers(self, snappy_path: Path):
-        """Update nSurfaceLayers in layers section using regex."""
         try:
             n_surface_layers = int(self.ui.edit_boundary_layer_1.text() or "3")
 

@@ -19,11 +19,11 @@ libs
     "libmyLiquids8.so"
 );
 
-application     twoSprayChtMultiRegionCentralFoam; //chtMultiRegionFoam;
+application     chtMultiRegionTwoSprayCentralFoam; //chtMultiRegionFoam;
 
 startFrom       startTime;
 
-startTime       0.013;
+startTime       0.0;
 
 stopAt          endTime;
 

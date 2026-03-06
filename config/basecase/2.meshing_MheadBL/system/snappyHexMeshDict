@@ -171,9 +171,9 @@ castellatedMeshControls
     // after refinement.
     locationsInMesh
     (
-        (( 0.004907  0.0       0.0) fluid)
-        (( 0.000583  0.005     0.0) header)
-        (( 0.024608  0.003     0.0) thruster)        
+        (( 0.0164  0.0000  0.0000 ) fluid)
+        (( 0.0001  0.0000  0.0000 ) header)
+        (( 0.0171  0.0000  0.0000 ) thruster)
     );
 
 

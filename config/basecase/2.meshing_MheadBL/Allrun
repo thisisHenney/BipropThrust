@@ -18,10 +18,6 @@ runApplication blockMesh
     #paraFoam -builtin -touch    
     rm -rf processor* > /dev/null 2>&1
 
-#runApplication surfaceFeatureExtract
-
-runApplication snappyHexMesh -overwrite
-
 # Restore initial fields
 restore0Dir
 

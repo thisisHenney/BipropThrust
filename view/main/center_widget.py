@@ -1,10 +1,3 @@
-"""
-Center Widget - Main Content Area with Navigation Tree and Panel Stack
-
-This module provides the central widget containing navigation tree
-and stacked panels for different settings.
-Uses Qt Designer generated UI file (center_form_ui.py).
-"""
 
 from pathlib import Path
 
@@ -21,27 +14,8 @@ from view.panel.post_view import PostView
 
 
 class CenterWidget(QWidget):
-    """
-    Central widget with navigation tree and stacked panels.
-    Uses Qt Designer generated UI.
-
-    Layout:
-    +------------------+---------------------------+
-    |                  |                           |
-    |  Navigation      |   Stacked Panel Area      |
-    |  Tree            |   (Geometry, Mesh, etc.)  |
-    |                  |                           |
-    +------------------+---------------------------+
-    """
 
     def __init__(self, parent=None, context: AppContext = None):
-        """
-        Initialize center widget.
-
-        Args:
-            parent: Parent widget (MainWindow)
-            context: Application context for service access
-        """
         super().__init__(parent)
 
         self.main_window = parent
@@ -70,7 +44,6 @@ class CenterWidget(QWidget):
         self._connect_signals()
 
     def _setup_panels(self) -> None:
-        """Setup panel view instances."""
         # Geometry View
         self.panel_views["geometry"] = GeometryView(self)
 
@@ -95,20 +68,17 @@ class CenterWidget(QWidget):
         # self.panel_views["spray_nto"] = SprayNTOView(self)
 
     def _clear_designer_styles(self) -> None:
-        """Clear hardcoded light-theme styles from Qt Designer generated UI."""
         for tree in self.findChildren(QTreeWidget):
             tree.setStyleSheet("")
         for gb in self.findChildren(QGroupBox):
             gb.setStyleSheet("")
 
     def _connect_signals(self) -> None:
-        """Connect tree selection signals."""
         self.ui.treeWidget.itemSelectionChanged.connect(self._on_tree_selection_changed)
         # Mouse click on parent auto-expands to first child
         self.ui.treeWidget.itemClicked.connect(self._on_tree_item_clicked)
 
     def select_default_tab(self) -> None:
-        """Select the default tab (Geometry) on startup."""
         # Select the first top-level item (Geometry)
         geometry_item = self.ui.treeWidget.topLevelItem(0)
         if geometry_item:
@@ -116,14 +86,12 @@ class CenterWidget(QWidget):
             # This will trigger _on_tree_selection_changed which handles visibility
 
     def _on_tree_item_clicked(self, item, column) -> None:
-        """Handle mouse click on tree item - auto-expand parent to first child."""
         if item.childCount() > 0:
             self.ui.treeWidget.expandItem(item)
             first_child = item.child(0)
             self.ui.treeWidget.setCurrentItem(first_child)
 
     def _on_tree_selection_changed(self) -> None:
-        """Handle tree item selection change."""
         selected_items = self.ui.treeWidget.selectedItems()
         if not selected_items:
             return
@@ -220,7 +188,6 @@ class CenterWidget(QWidget):
                     self.vtk_pre.set_visibility_mode("mesh")
 
     def _show_geometry_objects(self):
-        """Show geometry group objects, hide mesh group objects."""
         all_objs = self.vtk_pre.obj_manager.get_all()
         renderer = self.vtk_pre.vtk_widget.GetRenderWindow().GetRenderers().GetFirstRenderer()
 
@@ -251,7 +218,6 @@ class CenterWidget(QWidget):
         self.vtk_pre.vtk_widget.GetRenderWindow().Render()
 
     def _show_mesh_objects(self):
-        """Show mesh group objects, hide geometry group objects."""
         all_objs = self.vtk_pre.obj_manager.get_all()
 
         geom_count = 0
@@ -279,7 +245,6 @@ class CenterWidget(QWidget):
         self.vtk_pre.vtk_widget.GetRenderWindow().Render()
 
     def _show_mesh_objects_only(self):
-        """Show mesh objects, hide geometry and slice/clip actors (for Run and other tabs)."""
         all_objs = self.vtk_pre.obj_manager.get_all()
 
         geom_count = 0
@@ -306,11 +271,6 @@ class CenterWidget(QWidget):
         self.vtk_pre.vtk_widget.GetRenderWindow().Render()
 
     def _show_slice_toolbar(self, mode: str = "mesh"):
-        """Show slice controls widget for specified mode.
-
-        Args:
-            mode: "geometry" or "mesh"
-        """
         geometry_view = self.panel_views.get("geometry")
         mesh_view = self.panel_views.get("mesh")
 
@@ -328,7 +288,6 @@ class CenterWidget(QWidget):
                 geometry_view.slice_widget.hide()
 
     def _hide_slice_toolbar(self):
-        """Hide all slice controls widgets."""
         geometry_view = self.panel_views.get("geometry")
         mesh_view = self.panel_views.get("mesh")
 
@@ -338,7 +297,6 @@ class CenterWidget(QWidget):
             mesh_view.slice_widget.hide()
 
     def _load_residual_log(self):
-        """Load residual log file from 5.CHTFCase folder."""
         if not self.residual_graph:
             return
 
@@ -353,13 +311,4 @@ class CenterWidget(QWidget):
             self.residual_graph.load_file(str(log_file))
 
     def get_panel(self, panel_id: str):
-        """
-        Get a panel view by ID.
-
-        Args:
-            panel_id: Panel identifier
-
-        Returns:
-            Panel view instance or None
-        """
         return self.panel_views.get(panel_id)

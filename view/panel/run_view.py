@@ -1,9 +1,3 @@
-"""
-Run View - Handles simulation run logic
-
-This view connects to UI widgets defined in center_form_ui.py
-and implements OpenFOAM simulation execution functionality.
-"""
 
 import re
 import sys
@@ -21,19 +15,8 @@ from common.app_data import app_data
 from common.case_data import case_data
 
 class RunView:
-    """
-    Run view.
-
-    Manages simulation execution and monitoring.
-    """
 
     def __init__(self, parent):
-        """
-        Initialize run view.
-
-        Args:
-            parent: CenterWidget instance (contains ui and context)
-        """
         self.parent = parent
         self.ui = self.parent.ui
         self.ctx = self.parent.context
@@ -57,15 +40,27 @@ class RunView:
         self._log_timer.timeout.connect(self._check_log_file)
         self._log_check_interval = 2000  # 2 seconds
 
+        # Debounce timer for residual graph updates (prevents rapid re-parsing)
+        self._graph_update_timer = QTimer(self.parent)
+        self._graph_update_timer.setSingleShot(True)
+        self._graph_update_timer.timeout.connect(self._do_update_residual_graph)
+        self._graph_update_interval = 3000  # 3 seconds min between updates
+
         # Simulation state
         self._is_running = False
         self._log_file_path = None
+        self._append_solver_log = False  # True when resuming (appends to log.Solver)
+
+        # Resume tracking state
+        self._allclean_commands = []   # commands parsed from Allclean
+        self._allrun_commands = []     # commands parsed from Allrun
+        self._step_tracker = 0         # incremented on each 'Starting' signal
+        self._last_run_completed = False  # True when run finishes without error
 
         # Connect signals
         self._init_connect()
 
     def _init_connect(self):
-        """Initialize signal connections."""
         self.ui.button_edit_hostfile_run.clicked.connect(self._on_edit_hostfile_clicked)
         self.ui.button_run.clicked.connect(self._on_run_clicked)
         self.ui.button_stop.clicked.connect(self._on_stop_clicked)
@@ -85,17 +80,10 @@ class RunView:
             self.exec_widget.sig_proc_status.connect(self._on_proc_status_changed)
 
     def _on_hostfile_run_toggled(self, checked: bool):
-        """Save hostfile checkbox state to app_data and enable/disable Edit button."""
         self.app_data.parallel_run_enabled = checked
         self.ui.button_edit_hostfile_run.setEnabled(checked)
 
     def _highlight_error_widget(self, widget):
-        """
-        Highlight widget with red border and scroll to it.
-
-        Args:
-            widget: QWidget to highlight (typically QLineEdit)
-        """
         from PySide6.QtWidgets import QScrollArea
 
         # Save original stylesheet and widget reference for later restoration
@@ -123,7 +111,6 @@ class RunView:
         widget.selectAll()
 
     def _clear_error_highlight(self):
-        """Clear error highlighting from previously highlighted widget."""
         if hasattr(self, '_error_highlighted_widget') and self._error_highlighted_widget:
             # Clear inline style and force update
             self._error_highlighted_widget.setStyleSheet("")
@@ -134,7 +121,6 @@ class RunView:
             self._error_original_style = ""
 
     def _load_number_of_subdomains(self):
-        """Load numberOfSubdomains from 5.CHTFCase/system/decomposeParDict."""
         import os
 
         # Default value: CPU count / 2
@@ -157,7 +143,6 @@ class RunView:
         self.ui.edit_number_of_subdomains_2.setText(str(default_value))
 
     def _update_decompose_par_dict(self, case_path: Path):
-        """Update numberOfSubdomains in all decomposeParDict files (main + regions)."""
         try:
             n_procs = int(self.ui.edit_number_of_subdomains_2.text())
         except (ValueError, AttributeError):
@@ -181,7 +166,6 @@ class RunView:
                 traceback.print_exc()
 
     def _on_edit_hostfile_clicked(self):
-        """Handle Edit host file button click - open hosts file in text editor."""
         # Path to hosts file in 5.CHTFCase/system/
         hosts_path = Path(self.case_data.path) / "5.CHTFCase" / "system" / "hosts"
 
@@ -190,24 +174,23 @@ class RunView:
             hosts_path.parent.mkdir(parents=True, exist_ok=True)
             hosts_path.touch()
 
-        # Open with appropriate text editor based on platform
+        # Open with system default text editor
         try:
             if sys.platform == "win32":
-                subprocess.Popen(["notepad", str(hosts_path)])
+                import os
+                os.startfile(str(hosts_path))
             else:
-                subprocess.Popen(["gedit", str(hosts_path)])
+                subprocess.Popen(["xdg-open", str(hosts_path)])
         except Exception:
             traceback.print_exc()
 
     def _on_combustion_changed(self, index):
-        """Handle combustion comboBox_7 change - enable/disable comboBox_10."""
         is_on = (index == 0)
         self.ui.comboBox_10.setEnabled(is_on)
 
     def _on_stop_clicked(self):
-        """Handle Stop button click - stop the running simulation."""
         if self.exec_widget:
-            self.exec_widget.stop_process()
+            self.exec_widget.stop_process(kill=True)
 
         self._is_running = False
         self.ui.button_run.setEnabled(True)
@@ -221,19 +204,10 @@ class RunView:
         self._stop_log_monitoring()
 
     def _on_pause_clicked(self):
-        """Handle Pause button click - pause/resume the running simulation."""
         if self.exec_widget:
             self.exec_widget.pause_process()
 
     def _on_proc_status_changed(self, proc_idx: int, cpu_id: int, pid: int, status: str):
-        """Handle process status change from exec_widget.
-
-        Args:
-            proc_idx: Process index
-            cpu_id: CPU ID assigned to process
-            pid: Process ID
-            status: Status string (e.g., 'Starting', 'Running', 'Waiting')
-        """
         # Update process ID display
         if pid > 0:
             self.ui.edit_run_id.setText(str(pid))
@@ -241,8 +215,11 @@ class RunView:
         # Update status display
         self.ui.edit_run_status.setText(status)
 
+        # Track step progress for resume feature
+        if status == 'Starting':
+            self._step_tracker += 1
+
     def _run_simulation(self):
-        """Execute the Allclean/Allrun scripts in 5.CHTFCase folder."""
         try:
             case_path = Path(self.case_data.path) / "5.CHTFCase"
             allclean_path = case_path / "Allclean"
@@ -251,39 +228,7 @@ class RunView:
             if not allrun_path.exists():
                 return
 
-            # Update decomposeParDict with UI value
             self._update_decompose_par_dict(case_path)
-
-            # Set log file path
-            self._log_file_path = case_path / "log.solver"
-
-            # Remove old log file if exists
-            if self._log_file_path.exists():
-                self._log_file_path.unlink()
-
-            # Set working directory for exec_widget
-            self.exec_widget.set_working_path(str(case_path))
-
-            # Register callbacks
-            self.exec_widget.set_function_after_finished(self._on_simulation_finished)
-            self.exec_widget.set_function_after_error(self._on_simulation_error)
-            self.exec_widget.set_function_restore_ui(self._restore_ui_after_run)
-
-            # Create shell wrappers
-            shell_wrapper = case_path / "shell_cmd.sh"
-            shell_wrapper.write_text('#!/bin/bash\neval "$@"\n', encoding='utf-8')
-            shell_wrapper.chmod(0o755)
-
-            of_wrapper = case_path / "of_cmd.sh"
-            of_wrapper.write_text(
-                '#!/bin/bash\n'
-                'source /usr/lib/openfoam/openfoam2312/etc/bashrc\n'
-                '. ${WM_PROJECT_DIR}/bin/tools/RunFunctions\n'
-                '. ${WM_PROJECT_DIR}/bin/tools/CleanFunctions\n'
-                '"$@"\n',
-                encoding='utf-8'
-            )
-            of_wrapper.chmod(0o755)
 
             # Get parameters
             n_procs = 4
@@ -291,17 +236,16 @@ class RunView:
                 n_procs = int(self.ui.edit_number_of_subdomains_2.text())
             except (ValueError, AttributeError):
                 pass
-
             use_hostfile = self.ui.checkBox_host_2.isChecked()
             application = self._get_application(case_path)
 
-            # Parse Allclean/Allrun scripts to build command list
-            commands = []
+            # Parse Allclean/Allrun scripts separately (needed for resume tracking)
+            self._allclean_commands = []
             if allclean_path.exists():
-                commands.extend(self._parse_script(allclean_path, n_procs, use_hostfile, application))
-            if allrun_path.exists():
-                commands.extend(self._parse_script(allrun_path, n_procs, use_hostfile, application))
+                self._allclean_commands = self._parse_script(allclean_path, n_procs, use_hostfile, application)
+            self._allrun_commands = self._parse_script(allrun_path, n_procs, use_hostfile, application)
 
+            commands = self._allclean_commands + self._allrun_commands
             if not commands:
                 QMessageBox.warning(
                     None, "Run Solver",
@@ -310,33 +254,124 @@ class RunView:
                 )
                 return
 
-            # Start simulation
-            self._is_running = True
-            self.ui.button_run.setEnabled(False)
-            self.ui.button_run.setText("Running...")
-            self.ui.button_stop.setEnabled(True)
-            self.ui.button_pause.setEnabled(True)
-            self.ui.button_mesh_generate.setEnabled(False)
+            # Reset resume tracking state
+            self._step_tracker = 0
+            self._last_run_completed = False
+            self._append_solver_log = False  # Fresh run: overwrite log.Solver
 
-            # Update process info display
-            self.ui.edit_run_name.setText("Solver")
-            self.ui.edit_run_id.setText("-")
-            self.ui.edit_run_started.setText(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-            self.ui.edit_run_finished.setText("-")
-            self.ui.edit_run_status.setText("Running...")
-
-            # Start log monitoring
-            self._start_log_monitoring()
-
-            # Execute commands
-            self.exec_widget.run(commands)
+            self._execute_commands(case_path, commands)
 
         except Exception:
             self._restore_ui_after_run()
             self.ui.edit_run_status.setText("Error")
 
+    def _run_simulation_resume(self, allrun_start: int):
+        try:
+            case_path = Path(self.case_data.path) / "5.CHTFCase"
+            commands = self._allrun_commands[allrun_start:]
+            if not commands:
+                return
+
+            self._update_decompose_par_dict(case_path)
+
+            # Initialize step_tracker to reflect already-completed steps
+            self._step_tracker = len(self._allclean_commands) + allrun_start
+            self._last_run_completed = False
+            self._append_solver_log = True  # Resume: append to existing log.Solver
+
+            self._execute_commands(case_path, commands)
+
+        except Exception:
+            self._restore_ui_after_run()
+            self.ui.edit_run_status.setText("Error")
+
+    def _execute_commands(self, case_path: Path, commands: list):
+        # Set solver log file (5.CHTFCase/log.Solver)
+        self._log_file_path = case_path / "log.Solver"
+        # Fresh run: delete existing log; Resume: keep it (append mode)
+        if not self._append_solver_log and self._log_file_path.exists():
+            self._log_file_path.unlink()
+
+        # Set working directory and callbacks
+        self.exec_widget.set_working_path(str(case_path))
+        self.exec_widget.set_function_after_finished(self._on_simulation_finished)
+        self.exec_widget.set_function_after_error(self._on_simulation_error)
+        self.exec_widget.set_function_restore_ui(self._restore_ui_after_run)
+
+        # Create shell wrappers
+        shell_wrapper = case_path / "shell_cmd.sh"
+        shell_wrapper.write_text('#!/bin/bash\neval "$@"\n', encoding='utf-8')
+        shell_wrapper.chmod(0o755)
+
+        of_wrapper = case_path / "of_cmd.sh"
+        of_wrapper.write_text(
+            '#!/bin/bash\n'
+            'source /usr/lib/openfoam/openfoam2212/etc/bashrc\n'
+            '. ${WM_PROJECT_DIR}/bin/tools/RunFunctions\n'
+            '. ${WM_PROJECT_DIR}/bin/tools/CleanFunctions\n'
+            '"$@"\n',
+            encoding='utf-8'
+        )
+        of_wrapper.chmod(0o755)
+
+        # Create log wrapper script (tees output to log file while preserving exit code)
+        # trap ensures all child processes (tee, command) are killed on SIGTERM/SIGINT
+        # stdbuf -oL on tee forces line-buffered output to QProcess
+        log_wrapper = case_path / "log_cmd.sh"
+        log_wrapper.write_text(
+            '#!/bin/bash\n'
+            'set -o pipefail\n'
+            'trap "kill 0" SIGTERM SIGINT\n'
+            'LOG_FILE="$1"\n'
+            'shift\n'
+            '"$@" 2>&1 | stdbuf -oL tee "$LOG_FILE"\n',
+            encoding='utf-8'
+        )
+        log_wrapper.chmod(0o755)
+
+        # Create solver log wrapper: tees output to both numbered log AND log.Solver
+        # $1=numbered log, $2=log.Solver path, $3=append flag (0/1)
+        solver_log_wrapper = case_path / "solver_log_cmd.sh"
+        solver_log_wrapper.write_text(
+            '#!/bin/bash\n'
+            'set -o pipefail\n'
+            'trap "kill 0" SIGTERM SIGINT\n'
+            'NUMBERED_LOG="$1"\n'
+            'SOLVER_LOG="$2"\n'
+            'APPEND="$3"\n'
+            'shift 3\n'
+            'if [ "$APPEND" = "1" ]; then\n'
+            '    "$@" 2>&1 | stdbuf -oL tee "$NUMBERED_LOG" | stdbuf -oL tee -a "$SOLVER_LOG"\n'
+            'else\n'
+            '    "$@" 2>&1 | stdbuf -oL tee "$NUMBERED_LOG" | stdbuf -oL tee "$SOLVER_LOG"\n'
+            'fi\n',
+            encoding='utf-8'
+        )
+        solver_log_wrapper.chmod(0o755)
+
+        # Create log directory for this execution
+        self._log_dir = Path(self.case_data.path) / "log" / "RunSolver" / datetime.now().strftime("%Y%m%d_%H%M%S")
+        self._log_dir.mkdir(parents=True, exist_ok=True)
+
+        # Update UI
+        self._is_running = True
+        self.ui.button_run.setEnabled(False)
+        self.ui.button_run.setText("Running...")
+        self.ui.button_stop.setEnabled(True)
+        self.ui.button_pause.setEnabled(True)
+        self.ui.button_mesh_generate.setEnabled(False)
+        self.ui.edit_run_name.setText("Solver")
+        self.ui.edit_run_id.setText("-")
+        self.ui.edit_run_started.setText(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        self.ui.edit_run_finished.setText("-")
+        self.ui.edit_run_status.setText("Running...")
+
+        # Wrap commands with log wrapper and execute
+        commands = self._wrap_commands_with_logging(commands)
+        self._start_log_monitoring()
+        self.exec_widget.run(commands)
+
     def _get_application(self, case_path: Path) -> str:
-        """Read application name from controlDict."""
         try:
             control_dict = case_path / "system" / "controlDict"
             if control_dict.exists():
@@ -349,19 +384,67 @@ class RunView:
             traceback.print_exc()
         return "chtMultiRegionFoam"
 
+    def _wrap_commands_with_logging(self, commands: list) -> list:
+        logged_commands = []
+        append_flag = "1" if self._append_solver_log else "0"
+        for i, cmd in enumerate(commands, 1):
+            display = self._get_display_cmd(cmd)
+            if cmd.startswith("./shell_cmd.sh"):
+                logged_commands.append((cmd, display))
+            elif "mpirun" in cmd or "mpiexec" in cmd:
+                # Main parallel solver: tee to numbered log AND log.Solver
+                cmd_name = self._extract_command_name(cmd)
+                log_file = self._log_dir / f"{i:02d}_{cmd_name}.log"
+                logged_commands.append((
+                    f"./solver_log_cmd.sh {log_file} {self._log_file_path} {append_flag} {cmd}",
+                    display,
+                ))
+            else:
+                cmd_name = self._extract_command_name(cmd)
+                log_file = self._log_dir / f"{i:02d}_{cmd_name}.log"
+                logged_commands.append((f"./log_cmd.sh {log_file} {cmd}", display))
+        return logged_commands
+
+    @staticmethod
+    def _get_display_cmd(cmd: str) -> str:
+        if cmd.startswith("./shell_cmd.sh "):
+            return cmd[len("./shell_cmd.sh "):]
+        if cmd.startswith("./log_cmd.sh "):
+            rest = cmd[len("./log_cmd.sh "):]
+            # skip log file path (first token)
+            parts = rest.split(" ", 1)
+            rest = parts[1] if len(parts) == 2 else rest
+            if rest.startswith("./of_cmd.sh "):
+                return rest[len("./of_cmd.sh "):]
+            return rest
+        if cmd.startswith("./of_cmd.sh "):
+            return cmd[len("./of_cmd.sh "):]
+        return cmd
+
+    @staticmethod
+    def _extract_command_name(cmd: str) -> str:
+        stripped = cmd
+        for prefix in ("./of_cmd.sh ", "./shell_cmd.sh "):
+            if stripped.startswith(prefix):
+                stripped = stripped[len(prefix):]
+                break
+
+        parts = stripped.split()
+        if not parts:
+            return "unknown"
+
+        # Skip mpirun/mpiexec and their arguments to find the actual command
+        i = 0
+        if parts[0] in ("mpirun", "mpiexec"):
+            i = 1
+            while i < len(parts) and parts[i].startswith("-"):
+                i += 1
+                if i < len(parts) and not parts[i - 1].startswith("--"):
+                    i += 1  # skip value of -np, --host, etc.
+        return parts[i] if i < len(parts) else parts[0]
+
     def _parse_script(self, script_path: Path, n_procs: int,
                       use_hostfile: bool = False, application: str = "") -> list:
-        """Parse Allclean/Allrun script into individual wrapped commands.
-
-        Args:
-            script_path: Path to Allclean or Allrun file
-            n_procs: Number of parallel processors
-            use_hostfile: True to use --hostfile, False for --host localhost
-            application: Application name from controlDict
-
-        Returns:
-            List of commands wrapped with shell_cmd.sh or of_cmd.sh
-        """
         SKIP_PREFIXES = (
             '#!',
             'cd "${0%/*}"',
@@ -438,20 +521,31 @@ class RunView:
 
         return commands
 
+
+    def _load_latest_solver_log(self):
+        if not self.case_data.path or not self.residual_graph:
+            return
+
+        solver_log = Path(self.case_data.path) / "5.CHTFCase" / "log.Solver"
+        if solver_log.exists():
+            self._log_file_path = solver_log
+            try:
+                self.residual_graph.load_file(str(solver_log))
+            except Exception:
+                traceback.print_exc()
+
     def _start_log_monitoring(self):
-        """Start monitoring log.solver file for residuals."""
         self._log_timer.start(self._log_check_interval)
 
     def _stop_log_monitoring(self):
-        """Stop monitoring log.solver file."""
         self._log_timer.stop()
+        self._graph_update_timer.stop()
 
         # Remove file from watcher
         if self._log_file_path and str(self._log_file_path) in self._log_watcher.files():
             self._log_watcher.removePath(str(self._log_file_path))
 
     def _check_log_file(self):
-        """Periodically check if log.solver exists and update graph."""
         if not self._log_file_path:
             return
 
@@ -461,15 +555,20 @@ class RunView:
             if log_path_str not in self._log_watcher.files():
                 self._log_watcher.addPath(log_path_str)
 
-            # Update residual graph
+            # Stop the polling timer - file watcher now handles updates
+            self._log_timer.stop()
+
+            # Trigger initial graph update
             self._update_residual_graph()
 
     def _on_log_file_changed(self, path: str):
-        """Handle log file changes."""
         self._update_residual_graph()
 
     def _update_residual_graph(self):
-        """Update residual graph with latest log data."""
+        if not self._graph_update_timer.isActive():
+            self._graph_update_timer.start(self._graph_update_interval)
+
+    def _do_update_residual_graph(self):
         if not self._log_file_path or not self._log_file_path.exists():
             return
 
@@ -480,10 +579,10 @@ class RunView:
                 traceback.print_exc()
 
     def _on_simulation_finished(self):
-        """Handle simulation completion."""
         self._is_running = False
+        self._last_run_completed = True
         self._stop_log_monitoring()
-        self._update_residual_graph()
+        self._do_update_residual_graph()
         self.ui.button_run.setEnabled(True)
         self.ui.button_run.setText("Run Solver")
         self.ui.button_stop.setEnabled(False)
@@ -493,7 +592,6 @@ class RunView:
         self.ui.edit_run_finished.setText(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
     def _on_simulation_error(self):
-        """Handle simulation error."""
         self._is_running = False
         self._stop_log_monitoring()
         self.ui.button_run.setEnabled(True)
@@ -505,7 +603,6 @@ class RunView:
         self.ui.edit_run_finished.setText(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
     def _restore_ui_after_run(self):
-        """Restore UI after simulation ends."""
         self._is_running = False
         self.ui.button_run.setEnabled(True)
         self.ui.button_run.setText("Run Solver")
@@ -518,13 +615,27 @@ class RunView:
         self.ui.edit_run_finished.setText(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
         self._stop_log_monitoring()
-        self._update_residual_graph()
+        self._do_update_residual_graph()
 
     def _on_run_clicked(self):
-        """Handle Run button click - update settings and start simulation."""
         import os
 
         if self._is_running:
+            QMessageBox.warning(
+                self.parent,
+                "Run Solver",
+                "시뮬레이션이 이미 실행 중입니다.\n\n"
+                "실행을 중지하려면 Stop 버튼을 누르세요."
+            )
+            return
+
+        if self.exec_widget and self.exec_widget.is_running():
+            QMessageBox.warning(
+                self.parent,
+                "Run Solver",
+                "다른 작업이 이미 실행 중입니다.\n\n"
+                "현재 작업이 완료될 때까지 기다리거나 Stop 버튼으로 중지하세요."
+            )
             return
 
         # Clear any previous error highlighting first
@@ -549,10 +660,34 @@ class RunView:
         if not self._update_run_settings():
             return
 
+        # Check if a previous run was interrupted and offer to resume
+        if (self._step_tracker > 0
+                and not self._last_run_completed
+                and self._allrun_commands):
+            allclean_count = len(self._allclean_commands)
+            interrupted_idx = self._step_tracker - 1   # 0-based index in combined list
+            allrun_resume = max(0, interrupted_idx - allclean_count)
+            if allrun_resume < len(self._allrun_commands):
+                step_name = self._get_display_cmd(self._allrun_commands[allrun_resume])
+                total = len(self._allrun_commands)
+                msg = QMessageBox(self.parent)
+                msg.setWindowTitle("Run Solver")
+                msg.setText(
+                    f"이전 실행이 중단되었습니다.\n\n"
+                    f"중단 단계: {allrun_resume + 1} / {total}  ({step_name})\n\n"
+                    f"이 단계부터 이어서 실행하시겠습니까?"
+                )
+                btn_resume = msg.addButton("이어서 실행", QMessageBox.ButtonRole.YesRole)
+                msg.addButton("처음부터 실행", QMessageBox.ButtonRole.NoRole)
+                msg.setDefaultButton(btn_resume)
+                msg.exec()
+                if msg.clickedButton() == btn_resume:
+                    self._run_simulation_resume(allrun_resume)
+                    return
+
         self._run_simulation()
 
     def _update_run_settings(self) -> bool:
-        """Update all run-related settings to OpenFOAM files."""
         try:
             case_path = Path(self.case_data.path) / "5.CHTFCase" / "constant" / "fluid"
 
@@ -595,7 +730,6 @@ class RunView:
             return False
 
     def _update_turbulence_properties(self, case_path: Path):
-        """Update turbulenceProperties with RAS.RASModel from comboBox_2."""
         try:
             file_path = case_path / "turbulenceProperties"
             if not file_path.exists():
@@ -613,7 +747,6 @@ class RunView:
         except Exception:
             traceback.print_exc()
     def _update_surface_film_properties(self, case_path: Path):
-        """Update surfaceFilmProperties with surfaceFilmModel and phaseChangeModel."""
         try:
             file_path = case_path / "surfaceFilmProperties"
             if not file_path.exists():
@@ -638,7 +771,6 @@ class RunView:
         except Exception:
             traceback.print_exc()
     def _update_combustion_properties(self, case_path: Path):
-        """Update combustionProperties with combustionModel from comboBox_7."""
         try:
             file_path = case_path / "combustionProperties"
             if not file_path.exists():
@@ -657,7 +789,6 @@ class RunView:
         except Exception:
             traceback.print_exc()
     def _update_thermophysical_properties(self, case_path: Path):
-        """Update thermophysicalProperties CHEMKINFile and thermo type."""
         try:
             file_path = case_path / "thermophysicalProperties"
             if not file_path.exists():
@@ -708,7 +839,6 @@ class RunView:
         except Exception:
             traceback.print_exc()
     def load_data(self):
-        """Load run settings and parameters."""
 
         # Restore hostfile checkbox from app_data and sync Edit button
         self.ui.checkBox_host_2.setChecked(self.app_data.parallel_run_enabled)
@@ -724,8 +854,10 @@ class RunView:
         is_combustion_on = (self.ui.comboBox_7.currentIndex() == 0)
         self.ui.comboBox_10.setEnabled(is_combustion_on)
 
+        # Load residual graph from the latest solver log (if any)
+        self._load_latest_solver_log()
+
     def _load_run_settings(self):
-        """Load run settings from OpenFOAM files to UI."""
         try:
             case_path = Path(self.case_data.path) / "5.CHTFCase" / "constant" / "fluid"
 
@@ -764,7 +896,6 @@ class RunView:
         except Exception:
             traceback.print_exc()
     def _load_turbulence_properties(self, case_path: Path):
-        """Load RAS.RASModel from turbulenceProperties to comboBox_2."""
         try:
             file_path = case_path / "turbulenceProperties"
             if not file_path.exists():
@@ -786,7 +917,6 @@ class RunView:
         except Exception:
             traceback.print_exc()
     def _load_surface_film_properties(self, case_path: Path):
-        """Load surfaceFilmModel and phaseChangeModel from surfaceFilmProperties."""
         try:
             file_path = case_path / "surfaceFilmProperties"
             if not file_path.exists():
@@ -812,7 +942,6 @@ class RunView:
         except Exception:
             traceback.print_exc()
     def _load_combustion_properties(self, case_path: Path):
-        """Load combustionModel from combustionProperties to comboBox_7."""
         try:
             file_path = case_path / "combustionProperties"
             if not file_path.exists():
@@ -831,7 +960,6 @@ class RunView:
         except Exception:
             traceback.print_exc()
     def _load_thermophysical_properties(self, case_path: Path):
-        """Load CHEMKINFile and thermo type from thermophysicalProperties."""
         try:
             file_path = case_path / "thermophysicalProperties"
             if not file_path.exists():
@@ -875,7 +1003,6 @@ class RunView:
         except Exception:
             traceback.print_exc()
     def _update_fluid_initial_conditions(self, fluid_path: Path):
-        """Update fluid initial conditions (p, T, U files)."""
         try:
             if not fluid_path.exists():
                 return
@@ -906,7 +1033,6 @@ class RunView:
         except Exception:
             traceback.print_exc()
     def _update_internal_field_scalar(self, file_path: Path, value):
-        """Update internalField uniform scalar value using regex."""
         with open(file_path, 'r', encoding='utf-8') as f:
             content = f.read()
 
@@ -919,7 +1045,6 @@ class RunView:
             f.write(new_content)
 
     def _update_internal_field_vector(self, file_path: Path, x, y, z):
-        """Update internalField uniform vector value using regex."""
         with open(file_path, 'r', encoding='utf-8') as f:
             content = f.read()
 
@@ -932,7 +1057,6 @@ class RunView:
             f.write(new_content)
 
     def _update_solid_initial_conditions(self, orig_path: Path):
-        """Update solid initial conditions (T files in all non-fluid folders)."""
         try:
             if not orig_path.exists():
                 return
@@ -957,7 +1081,6 @@ class RunView:
         except Exception:
             traceback.print_exc()
     def _update_solid_t_file(self, file_path: Path, solid_name: str, temp: float, h_value: str, bc_type: str):
-        """Update solid T file with temperature, h value, and boundary type."""
         with open(file_path, 'r', encoding='utf-8') as f:
             content = f.read()
 
@@ -981,7 +1104,6 @@ class RunView:
             f.write(content)
 
     def _load_fluid_initial_conditions(self, fluid_path: Path):
-        """Load fluid initial conditions (p, T, U files) to UI."""
         try:
             if not fluid_path.exists():
                 return
@@ -1016,7 +1138,6 @@ class RunView:
         except Exception:
             traceback.print_exc()
     def _read_internal_field_scalar(self, file_path: Path):
-        """Read internalField uniform scalar value."""
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 content = f.read()
@@ -1030,7 +1151,6 @@ class RunView:
         return None
 
     def _read_internal_field_vector(self, file_path: Path):
-        """Read internalField uniform vector value."""
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 content = f.read()
@@ -1044,7 +1164,6 @@ class RunView:
         return None, None, None
 
     def _load_solid_initial_conditions(self, orig_path: Path):
-        """Load solid initial conditions from first solid folder's T file."""
         try:
             if not orig_path.exists():
                 return
@@ -1096,7 +1215,6 @@ class RunView:
         except Exception:
             traceback.print_exc()
     def _update_spray_mmh_properties(self, case_path: Path):
-        """Update sprayMMHCloudProperties with spray settings from UI."""
         try:
             file_path = case_path / "sprayMMHCloudProperties"
             if not file_path.exists():
@@ -1143,7 +1261,6 @@ class RunView:
         except Exception:
             traceback.print_exc()
     def _update_spray_nto_properties(self, case_path: Path):
-        """Update sprayNTOCloudProperties with spray settings from UI."""
         try:
             file_path = case_path / "sprayNTOCloudProperties"
             if not file_path.exists():
@@ -1190,7 +1307,6 @@ class RunView:
         except Exception:
             traceback.print_exc()
     def _load_spray_mmh_properties(self, case_path: Path):
-        """Load sprayMMHCloudProperties settings to UI."""
         try:
             file_path = case_path / "sprayMMHCloudProperties"
             if not file_path.exists():
@@ -1254,7 +1370,6 @@ class RunView:
         except Exception:
             traceback.print_exc()
     def _load_spray_nto_properties(self, case_path: Path):
-        """Load sprayNTOCloudProperties settings to UI."""
         try:
             file_path = case_path / "sprayNTOCloudProperties"
             if not file_path.exists():
@@ -1318,7 +1433,6 @@ class RunView:
         except Exception:
             traceback.print_exc()
     def _update_fv_schemes(self, system_path: Path):
-        """Update fvSchemes with numerical scheme settings from UI."""
         try:
             file_path = system_path / "fvSchemes"
             if not file_path.exists():
@@ -1392,7 +1506,6 @@ class RunView:
         except Exception:
             traceback.print_exc()
     def _load_fv_schemes(self, system_path: Path):
-        """Load fvSchemes settings to UI."""
         try:
             file_path = system_path / "fvSchemes"
             if not file_path.exists():
@@ -1442,7 +1555,6 @@ class RunView:
         except Exception:
             traceback.print_exc()
     def _update_fv_solution(self, system_path: Path):
-        """Update fvSolution with PIMPLE settings from UI."""
         try:
             file_path = system_path / "fvSolution"
             if not file_path.exists():
@@ -1489,7 +1601,6 @@ class RunView:
         except Exception:
             traceback.print_exc()
     def _load_fv_solution(self, system_path: Path):
-        """Load fvSolution settings to UI."""
         try:
             file_path = system_path / "fvSolution"
             if not file_path.exists():
@@ -1522,7 +1633,6 @@ class RunView:
         except Exception:
             traceback.print_exc()
     def _set_combo_text(self, combo, text: str):
-        """Set combobox to item matching the given text."""
         for i in range(combo.count()):
             if combo.itemText(i).strip() == text:
                 combo.setCurrentIndex(i)
@@ -1534,7 +1644,6 @@ class RunView:
                 return
 
     def _update_control_dict(self, system_path: Path):
-        """Update controlDict with run settings from UI."""
         try:
             file_path = system_path / "controlDict"
             if not file_path.exists():
@@ -1625,7 +1734,6 @@ class RunView:
             traceback.print_exc()
 
     def _load_control_dict(self, system_path: Path):
-        """Load controlDict settings to UI."""
         try:
             file_path = system_path / "controlDict"
             if not file_path.exists():

@@ -1,29 +1,15 @@
-"""
-Geometry View - Handles geometry management logic
-
-This view connects to UI widgets defined in center_form_ui.py
-and implements geometry file management functionality.
-"""
 
 import traceback
 from pathlib import Path
 from PySide6.QtWidgets import (
-    QApplication, QToolBar, QLabel, QComboBox, QSlider, QCheckBox, QPushButton,
-    QProgressDialog, QHeaderView
+    QApplication, QToolBar, QLabel, QComboBox, QSlider, QPushButton,
+    QProgressDialog, QHeaderView, QDoubleSpinBox
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
 
 
 def _get_progress_color(progress: float) -> str:
-    """진행률(0~100)에 따라 색상 반환: Blue→Green→Yellow→Orange
-
-    Gradient stops:
-    - 0%:   #3b82f6 (Blue)   = rgb(59, 130, 246)
-    - 33%:  #22c55e (Green)  = rgb(34, 197, 94)
-    - 66%:  #eab308 (Yellow) = rgb(234, 179, 8)
-    - 100%: #f97316 (Orange) = rgb(249, 115, 22)
-    """
     # Gradient color stops (Blue → Green → Yellow → Orange)
     GRAD = [
         (0,   (59, 130, 246)),   # Blue
@@ -48,7 +34,6 @@ def _get_progress_color(progress: float) -> str:
 
 
 def _get_progress_stylesheet(progress: float) -> str:
-    """진행률에 따른 QProgressBar 스타일시트 반환"""
     color = _get_progress_color(progress)
     return f"""
         QProgressBar {{
@@ -75,23 +60,12 @@ from common.case_data import case_data
 
 
 class GeometryView:
-    """
-    Geometry management view.
-
-    Manages STL file loading, VTK visualization, and geometry tree.
-    """
 
     # Visibility icons (Unicode)
     ICON_VISIBLE = "\U0001F441"  # 👁
     ICON_HIDDEN = "\u25CB"  # ○ (empty circle)
 
     def __init__(self, parent):
-        """
-        Initialize geometry view.
-
-        Args:
-            parent: CenterWidget instance (contains ui and context)
-        """
         self.parent = parent
         self.ui = self.parent.ui
         self.ctx = self.parent.context
@@ -109,6 +83,9 @@ class GeometryView:
 
         # Track visibility state per object
         self._visibility_state = {}  # {name: bool}
+
+        # Track flat/planar geometries (any axis extent < 1e-6)
+        self._flat_geometries = set()
 
         # Initialize mesh loader for async loading
         self.mesh_loader = MeshLoader()
@@ -129,7 +106,6 @@ class GeometryView:
         self._init_connect()
 
     def _setup_visibility_tree(self):
-        """Setup tree widget with 2 columns (name, visibility)."""
         tree_widget = self.tree.widget
 
         # Set 2 columns
@@ -147,13 +123,6 @@ class GeometryView:
         tree_widget.itemClicked.connect(self._on_tree_item_clicked)
 
     def _create_slice_widget(self):
-        """
-        Create clip controls as a QToolBar to be added to VTK viewer (bottom area).
-        QToolBar supports floating/docking within the QMainWindow-based VTK widget.
-
-        Returns:
-            QToolBar containing clip controls
-        """
         if not self.vtk_pre:
             return None
 
@@ -167,13 +136,46 @@ class GeometryView:
         clip_toolbar.addWidget(QLabel("Clip:"))
 
         self._clip_combo = QComboBox()
-        self._clip_combo.addItems(["Off", "X", "Y", "Z"])
+        self._clip_combo.addItems(["Off", "X", "Y", "Z", "Custom"])
         self._clip_combo.setCurrentText("Off")
-        self._clip_combo.setFixedWidth(60)
+        self._clip_combo.setFixedWidth(70)
         clip_toolbar.addWidget(self._clip_combo)
 
+        # Normal vector spinboxes
+        clip_toolbar.addWidget(QLabel(" n=("))
+
+        self._clip_spin_nx = QDoubleSpinBox()
+        self._clip_spin_nx.setRange(-1.0, 1.0)
+        self._clip_spin_nx.setSingleStep(0.1)
+        self._clip_spin_nx.setValue(1.0)
+        self._clip_spin_nx.setMaximumWidth(60)
+        self._clip_spin_nx.setEnabled(False)
+        clip_toolbar.addWidget(self._clip_spin_nx)
+
+        clip_toolbar.addWidget(QLabel(","))
+
+        self._clip_spin_ny = QDoubleSpinBox()
+        self._clip_spin_ny.setRange(-1.0, 1.0)
+        self._clip_spin_ny.setSingleStep(0.1)
+        self._clip_spin_ny.setValue(0.0)
+        self._clip_spin_ny.setMaximumWidth(60)
+        self._clip_spin_ny.setEnabled(False)
+        clip_toolbar.addWidget(self._clip_spin_ny)
+
+        clip_toolbar.addWidget(QLabel(","))
+
+        self._clip_spin_nz = QDoubleSpinBox()
+        self._clip_spin_nz.setRange(-1.0, 1.0)
+        self._clip_spin_nz.setSingleStep(0.1)
+        self._clip_spin_nz.setValue(0.0)
+        self._clip_spin_nz.setMaximumWidth(60)
+        self._clip_spin_nz.setEnabled(False)
+        clip_toolbar.addWidget(self._clip_spin_nz)
+
+        clip_toolbar.addWidget(QLabel(")"))
+
         # Position slider
-        clip_toolbar.addWidget(QLabel("Pos:"))
+        clip_toolbar.addWidget(QLabel(" Pos:"))
 
         self._clip_slider = QSlider(Qt.Horizontal)
         self._clip_slider.setMinimum(0)
@@ -187,19 +189,14 @@ class GeometryView:
         self._lbl_pos_value.setMinimumWidth(40)
         clip_toolbar.addWidget(self._lbl_pos_value)
 
-        # Preview checkbox (shows outline instead of real-time clip)
-        self._clip_preview_check = QCheckBox("Preview")
-        self._clip_preview_check.setChecked(True)  # Default to preview mode
-        self._clip_preview_check.setEnabled(False)
-        clip_toolbar.addWidget(self._clip_preview_check)
+        # Flip button
+        self._clip_flip_btn = QPushButton("Flip")
+        self._clip_flip_btn.setFixedWidth(50)
+        self._clip_flip_btn.setCheckable(True)
+        self._clip_flip_btn.setEnabled(False)
+        clip_toolbar.addWidget(self._clip_flip_btn)
 
-        # Apply button (applies the clip when in preview mode)
-        self._clip_apply_btn = QPushButton("Apply")
-        self._clip_apply_btn.setFixedWidth(60)
-        self._clip_apply_btn.setEnabled(False)
-        clip_toolbar.addWidget(self._clip_apply_btn)
-
-        # Reset button (restores original state)
+        # Reset button
         self._clip_reset_btn = QPushButton("Reset")
         self._clip_reset_btn.setFixedWidth(60)
         self._clip_reset_btn.setEnabled(False)
@@ -214,13 +211,15 @@ class GeometryView:
         return clip_toolbar
 
     def _init_connect(self):
-        """Initialize signal connections."""
         # Clip controls
         self._clip_combo.currentTextChanged.connect(self._on_clip_mode_changed)
         self._clip_slider.valueChanged.connect(self._on_clip_slider_changed)
-        self._clip_preview_check.toggled.connect(self._on_clip_preview_toggled)
-        self._clip_apply_btn.clicked.connect(self._on_clip_apply_clicked)
+        self._clip_slider.sliderReleased.connect(self._on_clip_slider_released)
+        self._clip_flip_btn.toggled.connect(self._on_clip_flip_toggled)
         self._clip_reset_btn.clicked.connect(self._on_clip_reset_clicked)
+        self._clip_spin_nx.valueChanged.connect(self._on_clip_normal_changed)
+        self._clip_spin_ny.valueChanged.connect(self._on_clip_normal_changed)
+        self._clip_spin_nz.valueChanged.connect(self._on_clip_normal_changed)
 
         # Button clicks
         self.ui.button_geometry_add.clicked.connect(self._on_add_clicked)
@@ -251,7 +250,6 @@ class GeometryView:
                 probe_tool.visibility_changed.connect(self._on_probe_visibility_changed)
 
     def _on_tree_item_clicked(self, item, column):
-        """Handle tree item click - toggle visibility if clicked on column 1."""
         if column != 1:
             return
 
@@ -262,7 +260,6 @@ class GeometryView:
         self._set_object_visibility(name, new_visible)
 
     def _set_object_visibility(self, name: str, visible: bool):
-        """Set visibility for a geometry object."""
         self._visibility_state[name] = visible
 
         # Update tree icon
@@ -280,7 +277,6 @@ class GeometryView:
                 self.vtk_pre.vtk_widget.GetRenderWindow().Render()
 
     def set_all_visible(self, visible: bool):
-        """Set visibility for all geometry objects."""
         for i in range(self.tree.widget.topLevelItemCount()):
             item = self.tree.widget.topLevelItem(i)
             if item:
@@ -288,7 +284,6 @@ class GeometryView:
                 self._set_object_visibility(name, visible)
 
     def _add_tree_item_with_visibility(self, name: str, visible: bool = True):
-        """Add item to tree with visibility icon."""
         self.tree.insert([], name)
         self._visibility_state[name] = visible
 
@@ -302,7 +297,6 @@ class GeometryView:
                 break
 
     def _on_add_clicked(self):
-        """Handle Add button click - open file dialog and copy STL files to model directory."""
         add_files = FileDialogBox.open_files(
             self.parent, "Select STL files",
             "STL Files (*.stl);;All Files (*)",
@@ -343,7 +337,6 @@ class GeometryView:
             self.case_data.save()
 
     def _start_async_loading(self, files: list):
-        """Start async loading of STL files."""
         self._loading_total = len(files)
 
         # Create QProgressDialog
@@ -369,7 +362,6 @@ class GeometryView:
         self.mesh_loader.load_async(files)
 
     def _on_file_loaded(self, file_path: str, name: str, actor):
-        """Handle single file loaded from async loading."""
         if self.vtk_pre and actor:
             self.vtk_pre.obj_manager.add(actor, name=name, group="geometry")
 
@@ -379,10 +371,16 @@ class GeometryView:
             center_y = (bounds[2] + bounds[3]) / 2
             center_z = (bounds[4] + bounds[5]) / 2
 
+            # Detect flat/planar geometry (any axis extent < 1e-6)
+            dx = bounds[1] - bounds[0]
+            dy = bounds[3] - bounds[2]
+            dz = bounds[5] - bounds[4]
+            if dx < 1e-6 or dy < 1e-6 or dz < 1e-6:
+                self._flat_geometries.add(name)
+
             self.case_data.set_geometry_probe_position(name, center_x, center_y, center_z)
 
     def _on_loading_progress(self, current: int, total: int):
-        """Handle loading progress update."""
         try:
             dialog = getattr(self, '_progress_dialog', None)
             if dialog is not None:
@@ -395,10 +393,9 @@ class GeometryView:
             pass
 
     def _on_loading_error(self, file_path: str, error_msg: str):
-        """Handle loading error."""
+        pass
 
     def _on_loading_canceled(self):
-        """Handle loading canceled by user."""
         self.mesh_loader.cancel_async()
         self._cleanup_loading_signals()
         if hasattr(self, '_progress_dialog') and self._progress_dialog:
@@ -406,7 +403,6 @@ class GeometryView:
             self._progress_dialog = None
 
     def _on_loading_finished(self):
-        """Handle all files loaded."""
         # Close progress dialog
         if hasattr(self, '_progress_dialog') and self._progress_dialog:
             self._progress_dialog.close()
@@ -418,6 +414,9 @@ class GeometryView:
         # Apply saved transforms to all loaded objects
         if self.vtk_pre:
             self._apply_saved_transforms()
+
+            # Set fluid's default probe position to center of combined geometry bounds
+            self._update_fluid_probe_position()
 
             # Set geometry visibility based on current tab
             # Check if we're on Geometry tab
@@ -442,10 +441,21 @@ class GeometryView:
                 self.vtk_pre.camera.fit()
             self.vtk_pre.vtk_widget.GetRenderWindow().Render()
 
+            # Re-enable picking button based on current selection
+            # (fluid needs geometry bounds, flat geometries stay disabled)
+            selected_items = self.tree.widget.selectedItems()
+            if selected_items:
+                selected_name = selected_items[0].text(0)
+                if selected_name in self._flat_geometries:
+                    self.ui.button_geometry_apply.setEnabled(False)
+                elif selected_name == "fluid" and self._get_combined_geometry_bounds() is not None:
+                    self.ui.button_geometry_apply.setEnabled(True)
+                elif selected_name not in ("fluid",):
+                    self.ui.button_geometry_apply.setEnabled(True)
+
         self.case_data.save()
 
     def _apply_saved_transforms(self):
-        """Apply saved position and rotation to all VTK objects."""
         if not self.vtk_pre:
             return
 
@@ -472,8 +482,37 @@ class GeometryView:
 
                 obj.actor.SetUserTransform(transform)
 
+    def _get_combined_geometry_bounds(self):
+        if not self.vtk_pre:
+            return None
+        all_objs = self.vtk_pre.obj_manager.get_all()
+        geom_objs = [o for o in all_objs
+                     if hasattr(o, 'group') and o.group == "geometry"]
+        if not geom_objs:
+            return None
+        combined = [float('inf'), float('-inf'),
+                    float('inf'), float('-inf'),
+                    float('inf'), float('-inf')]
+        for go in geom_objs:
+            gb = go.actor.GetBounds()
+            combined[0] = min(combined[0], gb[0])
+            combined[1] = max(combined[1], gb[1])
+            combined[2] = min(combined[2], gb[2])
+            combined[3] = max(combined[3], gb[3])
+            combined[4] = min(combined[4], gb[4])
+            combined[5] = max(combined[5], gb[5])
+        return tuple(combined)
+
+    def _update_fluid_probe_position(self):
+        bounds = self._get_combined_geometry_bounds()
+        if bounds is None:
+            return
+        cx = (bounds[0] + bounds[1]) / 2
+        cy = (bounds[2] + bounds[3]) / 2
+        cz = (bounds[4] + bounds[5]) / 2
+        self.case_data.set_geometry_probe_position("fluid", cx, cy, cz)
+
     def _cleanup_loading_signals(self):
-        """Disconnect mesh_loader signals safely."""
         if not getattr(self, '_loading_signals_connected', False):
             return
 
@@ -484,7 +523,6 @@ class GeometryView:
         self.mesh_loader.error.disconnect(self._on_loading_error)
 
     def _on_remove_clicked(self):
-        """Handle Remove button click - remove all selected geometries from tree, VTK, and model directory."""
         # Get all selected items
         selected_items = self.tree.widget.selectedItems()
         if not selected_items:
@@ -538,7 +576,6 @@ class GeometryView:
         self.case_data.save()
 
     def _on_set_apply_clicked(self):
-        """Handle Set/Apply button click - toggle probe and save position."""
         current_text = self.ui.button_geometry_apply.text()
 
         if current_text == "Position Picking Mode":
@@ -551,32 +588,23 @@ class GeometryView:
                     if pos is not None:
                         obj_name = self.tree.get_text(pos)
 
-                        # Get selected object bounds, or combined bounds of all geometries
-                        obj = self.vtk_pre.obj_manager.find_by_name(obj_name)
-                        if obj:
-                            bounds = obj.actor.GetBounds()
-                        else:
-                            # obj가 없으면 (fluid 등) 이전 VTK 선택 초기화
+                        # Get selected object bounds
+                        # fluid uses combined bounds of all geometries
+                        if obj_name == "fluid":
+                            self.vtk_pre.obj_manager.blockSignals(True)
                             self.vtk_pre.obj_manager.clear_selection()
-
-                            # Use combined bounding box of all geometry objects
-                            all_objs = self.vtk_pre.obj_manager.get_all()
-                            geom_objs = [o for o in all_objs
-                                         if hasattr(o, 'group') and o.group == "geometry"]
-                            if not geom_objs:
+                            self.vtk_pre.obj_manager.blockSignals(False)
+                            bounds = self._get_combined_geometry_bounds()
+                            if bounds is None:
                                 return
-                            combined = [float('inf'), float('-inf'),
-                                        float('inf'), float('-inf'),
-                                        float('inf'), float('-inf')]
-                            for go in geom_objs:
-                                gb = go.actor.GetBounds()
-                                combined[0] = min(combined[0], gb[0])
-                                combined[1] = max(combined[1], gb[1])
-                                combined[2] = min(combined[2], gb[2])
-                                combined[3] = max(combined[3], gb[3])
-                                combined[4] = min(combined[4], gb[4])
-                                combined[5] = max(combined[5], gb[5])
-                            bounds = tuple(combined)
+                            # Make all geometry objects transparent for fluid picking
+                            self._set_geometry_opacity(0.3)
+                        else:
+                            obj = self.vtk_pre.obj_manager.find_by_name(obj_name)
+                            if obj:
+                                bounds = obj.actor.GetBounds()
+                            else:
+                                return
 
                         obj_size = (
                             bounds[1] - bounds[0],
@@ -627,11 +655,11 @@ class GeometryView:
                         from vtkmodules.vtkCommonTransforms import vtkTransform
                         probe_tool._saved_bounds = new_bounds
                         probe_tool._saved_transform = vtkTransform()  # Identity (no rotation)
-                        # obj가 없으면 (fluid 등) 선택 ID를 비워서 이전 선택 상태 방지
-                        if obj:
-                            probe_tool._saved_selection_ids = self.vtk_pre.obj_manager.selected_ids.copy()
-                        else:
+                        # fluid는 VTK 객체가 없으므로 선택 ID를 비워서 이전 선택 상태 방지
+                        if obj_name == "fluid":
                             probe_tool._saved_selection_ids = set()
+                        else:
+                            probe_tool._saved_selection_ids = self.vtk_pre.obj_manager.selected_ids.copy()
 
                         # Now show() will restore our saved state with correct position
                         probe_tool.show()
@@ -668,12 +696,12 @@ class GeometryView:
 
                     # Deactivate probe and change button to "Position Picking Mode"
                     probe_tool.hide()
+                    self._set_geometry_opacity(1.0)
                     self.ui.button_geometry_apply.setText("Position Picking Mode")
                     self.ui.button_geometry_cancel.hide()
                     self.ui.button_geometry_reset.hide()
 
     def _on_cancel_clicked(self):
-        """Handle Cancel button click - cancel position picking without saving."""
         if self.vtk_pre:
             probe_tool = self.vtk_pre._optional_tools.get("point_probe")
             if probe_tool:
@@ -689,28 +717,11 @@ class GeometryView:
                         x, y, z = probe_pos
                     else:
                         # No saved position - use object center or combined bounds
-                        obj = self.vtk_pre.obj_manager.find_by_name(obj_name)
-                        if obj:
-                            bounds = obj.actor.GetBounds()
+                        if obj_name == "fluid":
+                            bounds = self._get_combined_geometry_bounds()
                         else:
-                            all_objs = self.vtk_pre.obj_manager.get_all()
-                            geom_objs = [o for o in all_objs
-                                         if hasattr(o, 'group') and o.group == "geometry"]
-                            if geom_objs:
-                                combined = [float('inf'), float('-inf'),
-                                            float('inf'), float('-inf'),
-                                            float('inf'), float('-inf')]
-                                for go in geom_objs:
-                                    gb = go.actor.GetBounds()
-                                    combined[0] = min(combined[0], gb[0])
-                                    combined[1] = max(combined[1], gb[1])
-                                    combined[2] = min(combined[2], gb[2])
-                                    combined[3] = max(combined[3], gb[3])
-                                    combined[4] = min(combined[4], gb[4])
-                                    combined[5] = max(combined[5], gb[5])
-                                bounds = tuple(combined)
-                            else:
-                                bounds = None
+                            obj = self.vtk_pre.obj_manager.find_by_name(obj_name)
+                            bounds = obj.actor.GetBounds() if obj else None
                         if bounds:
                             x = (bounds[0] + bounds[1]) / 2
                             y = (bounds[2] + bounds[3]) / 2
@@ -725,12 +736,12 @@ class GeometryView:
 
                 # Deactivate probe
                 probe_tool.hide()
+                self._set_geometry_opacity(1.0)
                 self.ui.button_geometry_apply.setText("Position Picking Mode")
                 self.ui.button_geometry_cancel.hide()
                 self.ui.button_geometry_reset.hide()
 
     def _on_reset_clicked(self):
-        """Handle Reset button click - reset position to object center."""
         # Get selected object
         pos = self.tree.get_current_pos()
         if pos is None:
@@ -738,11 +749,14 @@ class GeometryView:
 
         obj_name = self.tree.get_text(pos)
 
-        # Get object center from VTK
+        # Get object bounds from VTK (fluid uses combined bounds)
         if self.vtk_pre:
-            obj = self.vtk_pre.obj_manager.find_by_name(obj_name)
-            if obj:
-                bounds = obj.actor.GetBounds()
+            if obj_name == "fluid":
+                bounds = self._get_combined_geometry_bounds()
+            else:
+                obj = self.vtk_pre.obj_manager.find_by_name(obj_name)
+                bounds = obj.actor.GetBounds() if obj else None
+            if bounds:
                 center_x = (bounds[0] + bounds[1]) / 2
                 center_y = (bounds[2] + bounds[3]) / 2
                 center_z = (bounds[4] + bounds[5]) / 2
@@ -779,11 +793,12 @@ class GeometryView:
                     # Set bounds directly to preserve size
                     if hasattr(probe_tool, '_rep'):
                         probe_tool._rep.PlaceWidget(new_bounds)
+                        probe_tool._update_cursor_from_bounds(new_bounds)
                         probe_tool._saved_bounds = new_bounds
+                        probe_tool._saved_transform = None
                         self.vtk_pre.vtk_widget.GetRenderWindow().Render()
 
     def _on_tree_selection_changed(self):
-        """Handle tree selection changed - sync VTK and update position fields."""
         selected_items = self.tree.widget.selectedItems()
         selected_names = [item.text(0) for item in selected_items]
         selected_count = len(selected_names)
@@ -809,7 +824,14 @@ class GeometryView:
         elif selected_count == 1:
             # Enable Input Position group and Set button for single selection
             self.ui.AdvancedGroupBox.setEnabled(True)
-            self.ui.button_geometry_apply.setEnabled(True)
+            # Disable picking for flat geometries or fluid with no geometry objects
+            sel_name = selected_names[0]
+            if sel_name in self._flat_geometries:
+                self.ui.button_geometry_apply.setEnabled(False)
+            elif sel_name == "fluid" and self._get_combined_geometry_bounds() is None:
+                self.ui.button_geometry_apply.setEnabled(False)
+            else:
+                self.ui.button_geometry_apply.setEnabled(True)
             self._highlight_object(selected_names[0])
 
             # Print selected object size
@@ -875,23 +897,27 @@ class GeometryView:
             self.ui.button_geometry_apply.setEnabled(False)
 
     def _highlight_object(self, obj_name: str):
-        """Highlight selected object - handled by ObjectManager."""
         # Selection visual is now handled by ObjectManager._update_selection_visual()
         # which also fades edge colors for wireframe/surface with edge modes
         pass
 
     def _highlight_multiple_objects(self, obj_names: list):
-        """Highlight multiple selected objects - handled by ObjectManager."""
         # Selection visual is now handled by ObjectManager._update_selection_visual()
         pass
 
     def _restore_all_opacity(self):
-        """Restore all objects to full opacity - handled by ObjectManager."""
         # Selection visual is now handled by ObjectManager._update_selection_visual()
         pass
 
+    def _set_geometry_opacity(self, opacity: float):
+        if not self.vtk_pre:
+            return
+        for obj in self.vtk_pre.obj_manager.get_all():
+            if hasattr(obj, 'group') and obj.group == "geometry":
+                obj.actor.GetProperty().SetOpacity(opacity)
+        self.vtk_pre.vtk_widget.GetRenderWindow().Render()
+
     def _sync_vtk_selection(self, selected_names: list):
-        """Sync VTK object selection with tree selection."""
         if not self.vtk_pre:
             return
 
@@ -924,7 +950,6 @@ class GeometryView:
         self.vtk_pre.vtk_widget.GetRenderWindow().Render()
 
     def _on_vtk_selection_changed(self, info: dict):
-        """Handle VTK selection changed - sync tree widget selection."""
         selected_objects = info.get("selected_objects", [])
         selected_names = [obj["name"] for obj in selected_objects]
         selected_count = len(selected_names)
@@ -955,7 +980,14 @@ class GeometryView:
         elif selected_count == 1:
             # Enable Input Position group and Set button for single selection
             self.ui.AdvancedGroupBox.setEnabled(True)
-            self.ui.button_geometry_apply.setEnabled(True)
+            # Disable picking for flat geometries or fluid with no geometry objects
+            sel_name = selected_names[0]
+            if sel_name in self._flat_geometries:
+                self.ui.button_geometry_apply.setEnabled(False)
+            elif sel_name == "fluid" and self._get_combined_geometry_bounds() is None:
+                self.ui.button_geometry_apply.setEnabled(False)
+            else:
+                self.ui.button_geometry_apply.setEnabled(True)
             self._highlight_object(selected_names[0])
 
             # Print selected object size
@@ -1021,7 +1053,6 @@ class GeometryView:
             self.ui.button_geometry_apply.setEnabled(False)
 
     def _on_probe_visibility_changed(self, is_visible: bool):
-        """Handle point_probe visibility changed - enable/disable tree widget and buttons."""
         if is_visible:
             # Probe activated - disable tree widget and Add/Remove buttons
             self.tree.widget.setEnabled(False)
@@ -1036,76 +1067,88 @@ class GeometryView:
             # Set/Apply button remains enabled (controlled by selection logic)
 
     def _on_clip_mode_changed(self, mode: str):
-        """Handle clip mode combo box change."""
         mode_lower = mode.lower()
         is_clipping = (mode_lower != "off")
+        is_custom = (mode_lower == "custom")
 
-        # Enable/disable controls based on mode
         self._clip_slider.setEnabled(is_clipping)
-        self._clip_preview_check.setEnabled(is_clipping)
-        self._clip_apply_btn.setEnabled(is_clipping and self._clip_preview_check.isChecked())
+        self._clip_flip_btn.setEnabled(is_clipping)
         self._clip_reset_btn.setEnabled(is_clipping)
+        self._clip_spin_nx.setEnabled(is_custom)
+        self._clip_spin_ny.setEnabled(is_custom)
+        self._clip_spin_nz.setEnabled(is_custom)
 
-        # Reset slider to center when mode changes
+        # Set normal spinbox values for fixed axes
+        for spin, val in zip(
+            [self._clip_spin_nx, self._clip_spin_ny, self._clip_spin_nz],
+            {"x": (1, 0, 0), "y": (0, 1, 0), "z": (0, 0, 1)}.get(mode_lower, (None, None, None))
+        ):
+            if val is not None:
+                spin.blockSignals(True)
+                spin.setValue(val)
+                spin.blockSignals(False)
+
+        if not is_clipping:
+            self._clip_flip_btn.blockSignals(True)
+            self._clip_flip_btn.setChecked(False)
+            self._clip_flip_btn.blockSignals(False)
+
         if is_clipping:
             self._clip_slider.blockSignals(True)
             self._clip_slider.setValue(50)
             self._clip_slider.blockSignals(False)
-            # Update position label manually since signals are blocked
             if hasattr(self, '_lbl_pos_value'):
                 self._lbl_pos_value.setText("50%")
 
-        # Apply clip to VTK widget (preview or real-time based on checkbox)
         if self.vtk_pre:
-            is_preview = self._clip_preview_check.isChecked() if is_clipping else False
-            self.vtk_pre.set_clip_mode(mode_lower, preview=is_preview)
+            if is_custom:
+                nx = self._clip_spin_nx.value()
+                ny = self._clip_spin_ny.value()
+                nz = self._clip_spin_nz.value()
+                self.vtk_pre.set_clip_custom_normal(nx, ny, nz)
+            self.vtk_pre.set_clip_mode(mode_lower, preview=is_clipping)
 
-    def _on_clip_preview_toggled(self, checked: bool):
-        """Handle preview checkbox toggle."""
-        # Enable/disable apply button based on preview mode
-        mode_lower = self._clip_combo.currentText().lower()
-        is_clipping = (mode_lower != "off")
-        self._clip_apply_btn.setEnabled(is_clipping and checked)
+    def _on_clip_flip_toggled(self, checked: bool):
+        if self.vtk_pre:
+            self.vtk_pre.set_clip_invert(checked)
 
-        # Update VTK clip mode with new preview state
-        if self.vtk_pre and is_clipping:
-            self.vtk_pre.set_clip_mode(mode_lower, preview=checked)
-            # Also update position to refresh the view
-            self.vtk_pre.set_clip_position(self._clip_slider.value(), preview=checked)
+    def _on_clip_reset_clicked(self):
+        if self.vtk_pre:
+            self._clip_flip_btn.blockSignals(True)
+            self._clip_flip_btn.setChecked(False)
+            self._clip_flip_btn.blockSignals(False)
+            self.vtk_pre.set_clip_invert(False)
+            self.vtk_pre.reset_clip()
 
-    def _on_clip_apply_clicked(self):
-        """Handle Apply button click - apply the clip."""
+    def _on_clip_normal_changed(self):
+        if self.vtk_pre and self._clip_combo.currentText().lower() == "custom":
+            nx = self._clip_spin_nx.value()
+            ny = self._clip_spin_ny.value()
+            nz = self._clip_spin_nz.value()
+            self.vtk_pre.set_clip_custom_normal(nx, ny, nz)
+
+    def _on_clip_slider_changed(self, value: int):
+        if hasattr(self, '_lbl_pos_value'):
+            self._lbl_pos_value.setText(f"{value}%")
+        if self.vtk_pre:
+            self.vtk_pre.set_clip_position(value, preview=True)
+
+    def _on_clip_slider_released(self):
         if self.vtk_pre:
             self.vtk_pre.apply_clip()
 
-    def _on_clip_reset_clicked(self):
-        """Handle Reset button click - reset clip to original state (keep preview plane)."""
-        if self.vtk_pre:
-            self.vtk_pre.reset_clip()
-            # Ensure preview checkbox is checked
-            self._clip_preview_check.blockSignals(True)
-            self._clip_preview_check.setChecked(True)
-            self._clip_preview_check.blockSignals(False)
-            # Enable apply button since we're back in preview mode
-            self._clip_apply_btn.setEnabled(True)
-
-    def _on_clip_slider_changed(self, value: int):
-        """Handle clip slider value change."""
-        # Update position label
-        if hasattr(self, '_lbl_pos_value'):
-            self._lbl_pos_value.setText(f"{value}%")
-
-        if self.vtk_pre:
-            is_preview = self._clip_preview_check.isChecked()
-            self.vtk_pre.set_clip_position(value, preview=is_preview)
-
     def load_data(self):
-        """Load geometry data from model folder."""
         self.tree.clear_all()
         self._visibility_state.clear()
 
         # Add "fluid" as fixed first item (cannot be removed)
         self._add_tree_item_with_visibility("fluid", visible=True)
+        # Ensure fluid exists in case_data (no STL file, path is empty)
+        if not self.case_data.get_geometry("fluid"):
+            from common.case_data import GeometryData
+            self.case_data.objects["fluid"] = GeometryData(
+                name="fluid", path="", is_visible=True
+            )
 
         # Get model directory path
         model_path = Path(self.case_data.path) / "1.model_Mhead" / "scale0"

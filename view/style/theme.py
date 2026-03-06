@@ -1,8 +1,3 @@
-"""
-Application Theme - Light/Dark Theme Toggle
-
-Supports switching between professional light and dark themes at runtime.
-"""
 
 import tempfile
 from pathlib import Path
@@ -182,7 +177,6 @@ def _apply_palette(app: QApplication, c: dict) -> None:
 
 
 def _generate_combo_arrows(c: dict) -> dict:
-    """Generate small combobox arrow PNGs for the current theme."""
     tmp = Path(tempfile.gettempdir()) / "bipropthrust_theme"
     tmp.mkdir(exist_ok=True)
     arrows = {}
@@ -205,7 +199,6 @@ def _generate_combo_arrows(c: dict) -> dict:
 
 
 def _generate_spin_arrows(c: dict) -> dict:
-    """Generate spinbox up/down arrow PNGs for the current theme."""
     tmp = Path(tempfile.gettempdir()) / "bipropthrust_theme"
     tmp.mkdir(exist_ok=True)
     arrows = {}
@@ -246,7 +239,6 @@ def _generate_spin_arrows(c: dict) -> dict:
 
 
 def _generate_tree_indicators(c: dict) -> dict:
-    """Generate tree branch expand/collapse indicator PNGs (+/-) and branch lines."""
     tmp = Path(tempfile.gettempdir()) / "bipropthrust_theme"
     tmp.mkdir(exist_ok=True)
     indicators = {}

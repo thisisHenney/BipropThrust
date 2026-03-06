@@ -1,9 +1,3 @@
-"""
-Main Window - Application Main Window Controller
-
-This module manages the main application window, layout,
-and component lifecycle.
-"""
 
 import shutil
 import traceback
@@ -35,19 +29,8 @@ from view.main.center_widget import CenterWidget
 
 
 class MainWindow(QMainWindow):
-    """
-    Main application window.
-
-    Manages the UI layout, components, and case lifecycle.
-    """
 
     def __init__(self, case_path: str = ""):
-        """
-        Initialize main window.
-
-        Args:
-            case_path: Path to case directory
-        """
         super().__init__()
 
         # Store paths and data
@@ -74,7 +57,6 @@ class MainWindow(QMainWindow):
         self._setup_window()
 
     def _setup_menu(self) -> None:
-        """Setup menu bar."""
         menubar = self.menuBar()
 
         # File menu
@@ -171,7 +153,6 @@ class MainWindow(QMainWindow):
         self.menu_handler.connect_actions()
 
     def _setup_components(self) -> None:
-        """Setup main components (VTK, Exec, Graph)."""
         # Execution widget (log output)
         self.exec_widget = ExecWidget(self)
         self.context.register("exec", self.exec_widget)
@@ -205,7 +186,6 @@ class MainWindow(QMainWindow):
         self.context.register("residual_graph", self.residual_graph)
 
     def _setup_vtk_pre_toolbar(self) -> None:
-        """Customize vtk_pre toolbar - hide OpenFOAM button, add probe tool."""
         # Hide "Load OpenFOAM" action
         for action in self.vtk_pre.toolbar.actions():
             if action.text() == "Load OpenFOAM":
@@ -228,24 +208,29 @@ class MainWindow(QMainWindow):
             probe_tool.visibility_changed.connect(self._on_probe_visibility_changed)
 
     def _on_save_clicked(self) -> None:
-        """Handle Save menu action - save all settings to files."""
-        # Save run settings
+        # Save mesh panel settings to OpenFOAM dict files
+        mesh_panel = self.center_widget.panel_views.get("mesh")
+        if mesh_panel:
+            mesh_panel._update_snappyhex_dict()          # geometry + locationsInMesh (probe positions)
+            mesh_panel._update_castellation_settings()   # castellatedMeshControls
+            mesh_panel._update_snap_settings()           # snapControls
+            mesh_panel._update_boundary_layer_settings() # addLayersControls
+
+        # Save run settings to OpenFOAM dict files
         run_panel = self.center_widget.panel_views.get("run")
         if run_panel:
             run_panel._update_run_settings()
 
-        # Save case data
+        # Save case data (probe positions, geometry list, etc.) to JSON
         self.case_data.save()
 
         # Show status message
         self.statusBar().showMessage("Saved", 2000)
 
     def _on_residual_refresh(self) -> None:
-        """Handle residual graph refresh button click."""
         self.center_widget._load_residual_log()
 
     def _create_theme_toggle(self) -> QToolButton:
-        """Create theme toggle button for the menu bar corner."""
         self._theme_btn = QToolButton()
         self._theme_btn.setText("\u25D0")  # ◐ half-circle symbol
         self._theme_btn.setToolTip("Switch to dark theme")
@@ -256,7 +241,6 @@ class MainWindow(QMainWindow):
         return self._theme_btn
 
     def _on_theme_toggle(self) -> None:
-        """Toggle between light and dark themes."""
         import pyqtgraph as pg
         from PySide6.QtWidgets import QApplication
 
@@ -295,7 +279,6 @@ class MainWindow(QMainWindow):
             self.residual_graph.plot_widget.setLabel('left', 'Residual', color=c["graph_axis"])
 
     def _on_probe_position_changed(self, x: float, y: float, z: float) -> None:
-        """Handle probe position change - sync to geometry panel."""
         # Get geometry panel from center widget
         geom_panel = self.center_widget.panel_views.get("geometry")
         if geom_panel:
@@ -304,7 +287,6 @@ class MainWindow(QMainWindow):
             geom_panel.ui.edit_input_position_z.setText(f"{z:.4f}")
 
     def _on_probe_visibility_changed(self, visible: bool) -> None:
-        """Handle probe visibility change - restore saved position when shown."""
         if not visible:
             return
 
@@ -318,7 +300,6 @@ class MainWindow(QMainWindow):
                 probe_tool.set_center(x, y, z)
 
     def _on_view_dock_toggled(self, dock_num: int, checked: bool) -> None:
-        """Handle View menu dock toggle."""
         if not self.dock_manager:
             return
         if checked:
@@ -327,7 +308,6 @@ class MainWindow(QMainWindow):
             self.dock_manager.hide_dock(dock_num)
 
     def _on_dock_visibility_changed(self, dock_num: int, visible: bool) -> None:
-        """Sync View menu check state with dock visibility."""
         action = self._dock_view_actions.get(dock_num)
         if action:
             action.blockSignals(True)
@@ -335,7 +315,6 @@ class MainWindow(QMainWindow):
             action.blockSignals(False)
 
     def _setup_dock(self) -> None:
-        """Setup dock widget layout."""
         # Create central widget container for dock manager
         self._central_container = QWidget()
         self._central_container.setLayout(QVBoxLayout())
@@ -370,7 +349,6 @@ class MainWindow(QMainWindow):
         self.dock_manager.change_dock_tab(2)
 
     def _setup_window(self) -> None:
-        """Setup window properties."""
         # Set window title (will be updated after case is loaded)
         self.setWindowTitle(self.app_data.title)
 
@@ -391,14 +369,12 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage("Ready", 3000)
 
     def _sync_view_menu_states(self) -> None:
-        """Sync View menu check states with actual dock visibility."""
         for dock_num, action in self._dock_view_actions.items():
             dock_info = self.dock_manager.docks.get(dock_num)
             if dock_info:
                 action.setChecked(dock_info.show_state)
 
     def _update_window_title(self) -> None:
-        """Update window title with current case path."""
         if self.case_path:
             title = f"{self.app_data.title} [{self.case_path}]"
         else:
@@ -406,12 +382,6 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(title)
 
     def initialize(self) -> None:
-        """
-        Initialize the main window and load case.
-
-        This is called after construction to load the case
-        and setup all components.
-        """
 
         # Initialize components
         self.exec_widget.set_defaults()
@@ -446,12 +416,6 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage("Ready", 3000)
 
     def _load_case(self, case_path: str) -> None:
-        """
-        Load a case from the given path.
-
-        Args:
-            case_path: Path to case directory
-        """
         path = Path(case_path)
 
         # Check if case exists
@@ -469,12 +433,6 @@ class MainWindow(QMainWindow):
 
 
     def _create_case_from_template(self, case_path: str) -> None:
-        """
-        Create a new case from base template.
-
-        Args:
-            case_path: Path where case should be created
-        """
         # Get base case template path
         base_case_path = self.app_data.get_config_basecase_path()
 
@@ -491,18 +449,13 @@ class MainWindow(QMainWindow):
             Path(case_path).mkdir(parents=True, exist_ok=True)
 
     def open_case(self, path: str = "") -> None:
-        """
-        Open a case from path.
-
-        Args:
-            path: Case path. If empty, shows folder dialog.
-        """
         if not path:
             path = DirDialogBox.open_folder(self, "Open Case")
 
         if not path:
             return
 
+        self._delete_temp_case()  # discard previous temp case before switching
         self._reset_all_state()
         self.case_path = path
         self._load_case(path)
@@ -510,12 +463,6 @@ class MainWindow(QMainWindow):
         self._update_window_title()
 
     def create_new_case(self, user_select: bool = True) -> None:
-        """
-        Create a new case.
-
-        Args:
-            user_select: If True, show folder dialog for case location
-        """
         if user_select:
             path = DirDialogBox.create_folder(self, "Create New Case")
             if not path:
@@ -526,6 +473,7 @@ class MainWindow(QMainWindow):
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             path = str(Path(self.app_data.user_path) / "temp" / f"temp_{timestamp}")
 
+        self._delete_temp_case()  # discard previous temp case before switching
         self._reset_all_state()
         self.case_path = path
         self._create_case_from_template(path)
@@ -534,10 +482,9 @@ class MainWindow(QMainWindow):
         self._update_window_title()
 
     def _reset_all_state(self) -> None:
-        """Reset all UI and visualization state when switching cases."""
         # 1) Stop running processes
         if self.exec_widget and self.exec_widget.is_running():
-            self.exec_widget.stop_process()
+            self.exec_widget.stop_process(kill=True)
 
         # 2) VTK pre - remove all objects
         if self.vtk_pre:
@@ -574,7 +521,6 @@ class MainWindow(QMainWindow):
             run_panel.ui.edit_run_finished.setText("-")
 
     def _reload_panels(self) -> None:
-        """Reload all panel data for the new case."""
         for key in ("geometry", "mesh", "run"):
             panel = self.center_widget.panel_views.get(key)
             if panel:
@@ -583,12 +529,6 @@ class MainWindow(QMainWindow):
         self.exec_widget.add_log_ready()
 
     def closeEvent(self, event):
-        """
-        Handle window close event.
-
-        Args:
-            event: Close event
-        """
 
         # Check if case is temporary and unsaved
         if self.case_path and "temp" in self.case_path:
@@ -608,14 +548,6 @@ class MainWindow(QMainWindow):
         event.accept()
 
     def _handle_temp_case_close(self) -> bool:
-        """
-        Handle closing of temporary case.
-
-        Asks user if they want to save the temporary case.
-
-        Returns:
-            True if should continue closing, False if cancelled
-        """
         reply = QMessageBox.question(
             self,
             'Save Temporary Case?',
@@ -640,18 +572,9 @@ class MainWindow(QMainWindow):
             return False
 
     def _save_temp_case_as(self) -> bool:
-        """
-        Save temporary case to permanent location.
-
-        Returns:
-            True if saved successfully or user cancelled, False to abort close
-        """
-        # Open directory dialog
         new_path = DirDialogBox.create_folder(self, "Save Case As")
 
         if not new_path:
-            # User cancelled save dialog
-            # Ask again what to do
             reply = QMessageBox.question(
                 self,
                 'Save Cancelled',
@@ -668,12 +591,14 @@ class MainWindow(QMainWindow):
                 return False
 
         try:
-            # Copy temp case to new location
             copy_files(self.case_path, new_path)
 
-            # Delete temp case
-            self._delete_temp_case()
+            old_temp = self.case_path
+            self.case_path = new_path
+            self.case_data.set_path(new_path)
+            shutil.rmtree(old_temp, ignore_errors=True)
 
+            self._update_window_title()
             return True
 
         except Exception as e:
@@ -684,8 +609,32 @@ class MainWindow(QMainWindow):
             )
             return False
 
+    def save_case_as(self) -> bool:
+        new_path = DirDialogBox.create_folder(self, "Save Case As")
+        if not new_path:
+            return False
+
+        try:
+            copy_files(self.case_path, new_path)
+
+            is_temp = "temp" in self.case_path
+            old_path = self.case_path
+
+            self.case_path = new_path
+            self.case_data.set_path(new_path)
+
+            if is_temp:
+                shutil.rmtree(old_path, ignore_errors=True)
+
+            self._update_window_title()
+            self.statusBar().showMessage(f"Saved to {new_path}", 3000)
+            return True
+
+        except Exception as e:
+            QMessageBox.critical(self, 'Save Error', f'Failed to save case:\n{e}')
+            return False
+
     def _delete_temp_case(self) -> None:
-        """Delete temporary case directory."""
         if self.case_path and "temp" in self.case_path:
             try:
                 shutil.rmtree(self.case_path, ignore_errors=True)
@@ -693,7 +642,6 @@ class MainWindow(QMainWindow):
                 traceback.print_exc()
 
     def _cleanup(self) -> None:
-        """Cleanup resources before closing."""
         # Save dock layout
         self.dock_manager.save_layout()
 
@@ -710,5 +658,4 @@ class MainWindow(QMainWindow):
             self.exec_widget.end()
 
     def __repr__(self) -> str:
-        """String representation."""
         return f"MainWindow(case_path='{self.case_path}')"

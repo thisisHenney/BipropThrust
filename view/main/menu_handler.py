@@ -1,8 +1,3 @@
-"""
-Menu Handler - Menu Action Handler
-
-This module handles all menu actions for the main window.
-"""
 
 from PySide6.QtWidgets import QMessageBox
 
@@ -13,25 +8,13 @@ from common.case_data import case_data
 
 
 class MenuHandler:
-    """
-    Handles menu actions for the main window.
-
-    Connects menu actions to their respective handlers.
-    """
 
     def __init__(self, main_window):
-        """
-        Initialize menu handler.
-
-        Args:
-            main_window: MainWindow instance
-        """
         self.main_window = main_window
         self.app_data = app_data
         self.case_data = case_data
 
     def connect_actions(self) -> None:
-        """Connect all menu actions to their handlers."""
         mw = self.main_window
 
         # File menu
@@ -61,82 +44,66 @@ class MenuHandler:
     # ========== File Menu ==========
 
     def on_new(self) -> None:
-        """Handle New action."""
         self.main_window.create_new_case(user_select=True)
 
     def on_open(self) -> None:
-        """Handle Open action."""
         self.main_window.open_case()
 
     def on_save(self) -> None:
-        """Handle Save action."""
         if self.case_data.path:
-            self.case_data.save()
-            self.main_window.statusBar().showMessage("Case saved", 3000)
+            self.main_window._on_save_clicked()
         else:
             self.on_save_as()
 
     def on_save_as(self) -> None:
-        """Handle Save As action."""
-        # TODO: Implement save as functionality
-        self.main_window.statusBar().showMessage("Save As - Not implemented yet", 3000)
+        self.main_window.save_case_as()
 
     def on_exit(self) -> None:
-        """Handle Exit action."""
         self.main_window.close()
 
     # ========== Run Menu ==========
 
     def on_run(self) -> None:
-        """Handle Run action."""
         # TODO: Implement run simulation
         self.main_window.statusBar().showMessage("Run - Not implemented yet", 3000)
 
     def on_stop(self) -> None:
-        """Handle Stop action."""
         # TODO: Implement stop simulation
         self.main_window.statusBar().showMessage("Stop - Not implemented yet", 3000)
 
     # ========== View Menu ==========
 
     def on_view_mesh(self) -> None:
-        """Handle View Mesh action."""
         if self.main_window.dock_manager:
             self.main_window.dock_manager.change_dock_tab(2)
 
     def on_view_post(self) -> None:
-        """Handle View Post action."""
         if self.main_window.dock_manager:
             self.main_window.dock_manager.change_dock_tab(3)
 
     def on_view_residuals(self) -> None:
-        """Handle View Residuals action."""
         if self.main_window.dock_manager:
             self.main_window.dock_manager.change_dock_tab(0)
 
     def on_view_log(self) -> None:
-        """Handle View Log action."""
         # Log is in bottom dock, always visible
         self.main_window.statusBar().showMessage("Log panel is at the bottom", 2000)
 
     # ========== Tools Menu ==========
 
     def on_file_explorer(self) -> None:
-        """Handle Open File Explorer action."""
         if self.case_data.path:
             open_file_explorer(self.main_window, self.case_data.path)
         else:
             self.main_window.statusBar().showMessage("No case loaded", 2000)
 
     def on_terminal(self) -> None:
-        """Handle Open Terminal action."""
         # TODO: Implement terminal opening
         self.main_window.statusBar().showMessage("Terminal - Not implemented yet", 3000)
 
     # ========== Help Menu ==========
 
     def on_about(self) -> None:
-        """Handle About action."""
         QMessageBox.about(
             self.main_window,
             f"About {self.app_data.name}",
