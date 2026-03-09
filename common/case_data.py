@@ -68,9 +68,11 @@ class CaseData(BaseCase):
         # Get geometry name from filename
         name = path.stem
 
-        # Check if already exists
+        # If already exists, update path and return (no error)
         if name in self.objects:
-            raise ValueError(f"Geometry '{name}' already exists in case")
+            self.objects[name].path = str(path.resolve())
+            self._update_modified_time()
+            return name
 
         # Create geometry data
         self.objects[name] = GeometryData(

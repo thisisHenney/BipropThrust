@@ -96,6 +96,10 @@ class GeometryView:
         if self.vtk_pre:
             self.vtk_pre.obj_manager.show_individual_outlines = False
 
+        # Red sphere marker for probe position (shown when picking mode is off)
+        self._probe_marker_actor = None
+        self._saved_view_style = None  # view style saved before entering picking mode
+
         # Setup tree for visibility column
         self._setup_visibility_tree()
 
@@ -325,9 +329,15 @@ class GeometryView:
                 continue
 
             # Add to case_data and tree
-            self.case_data.add_geometry(dst_file)
             name = dst_file.stem
-            self._add_tree_item_with_visibility(name, visible=True)
+            self.case_data.add_geometry(dst_file)
+            # Only add tree item if not already present in the tree
+            tree_names = [
+                self.tree.widget.topLevelItem(i).text(0)
+                for i in range(self.tree.widget.topLevelItemCount())
+            ]
+            if name not in tree_names:
+                self._add_tree_item_with_visibility(name, visible=True)
             copied_files.append(str(dst_file))
 
         # Load STL files asynchronously to prevent GUI lock
@@ -378,7 +388,11 @@ class GeometryView:
             if dx < 1e-6 or dy < 1e-6 or dz < 1e-6:
                 self._flat_geometries.add(name)
 
-            self.case_data.set_geometry_probe_position(name, center_x, center_y, center_z)
+            # Only set probe_position to geometry center if not already set
+            # (e.g. loaded from snappyHexMeshDict or case_data.json)
+            existing = self.case_data.get_geometry_probe_position(name)
+            if not existing or existing == (0.0, 0.0, 0.0):
+                self.case_data.set_geometry_probe_position(name, center_x, center_y, center_z)
 
     def _on_loading_progress(self, current: int, total: int):
         try:
@@ -579,6 +593,10 @@ class GeometryView:
         current_text = self.ui.button_geometry_apply.text()
 
         if current_text == "Position Picking Mode":
+            # Save current view style before entering picking mode
+            if self.vtk_pre:
+                self._saved_view_style = self.vtk_pre._current_view_style
+
             # Activate point_probe and change button to "Apply"
             if self.vtk_pre:
                 probe_tool = self.vtk_pre._optional_tools.get("point_probe")
@@ -701,6 +719,16 @@ class GeometryView:
                     self.ui.button_geometry_cancel.hide()
                     self.ui.button_geometry_reset.hide()
 
+                    # Restore view style that was active before picking mode
+                    if self.vtk_pre and hasattr(self, '_saved_view_style') and self._saved_view_style:
+                        self.vtk_pre.set_visibility_mode(self.vtk_pre._visibility_mode, apply_visibility=False)
+                        self.vtk_pre.obj_manager.all().style(self._saved_view_style)
+                        self.vtk_pre._view_combo.setCurrentText(self._saved_view_style)
+
+                    # Show red sphere at saved probe position
+                    if probe_center:
+                        self._show_probe_marker(*probe_center)
+
     def _on_cancel_clicked(self):
         if self.vtk_pre:
             probe_tool = self.vtk_pre._optional_tools.get("point_probe")
@@ -740,6 +768,14 @@ class GeometryView:
                 self.ui.button_geometry_apply.setText("Position Picking Mode")
                 self.ui.button_geometry_cancel.hide()
                 self.ui.button_geometry_reset.hide()
+
+                # Restore view style that was active before picking mode
+                if self.vtk_pre and hasattr(self, '_saved_view_style') and self._saved_view_style:
+                    self.vtk_pre.obj_manager.all().style(self._saved_view_style)
+                    self.vtk_pre._view_combo.setCurrentText(self._saved_view_style)
+
+                # Show red sphere at restored position
+                self._show_probe_marker(x, y, z)
 
     def _on_reset_clicked(self):
         # Get selected object
@@ -821,6 +857,7 @@ class GeometryView:
             # Disable Position Picking button when nothing is selected
             self.ui.AdvancedGroupBox.setEnabled(True)
             self.ui.button_geometry_apply.setEnabled(False)
+            self._hide_probe_marker()
         elif selected_count == 1:
             # Enable Input Position group and Set button for single selection
             self.ui.AdvancedGroupBox.setEnabled(True)
@@ -856,6 +893,15 @@ class GeometryView:
             if probe_pos is not None:
                 # Display saved probe position in line editors
                 x, y, z = probe_pos
+
+                # Update red sphere marker if not in picking mode (flat objects excluded)
+                is_picking = (self.ui.button_geometry_apply.text() == "Apply")
+                is_flat = selected_names[0] in self._flat_geometries
+                if not is_picking and not is_flat:
+                    self._show_probe_marker(x, y, z)
+                else:
+                    self._hide_probe_marker()
+
                 self.ui.edit_input_position_x.setText(f"{x:.4f}")
                 self.ui.edit_input_position_y.setText(f"{y:.4f}")
                 self.ui.edit_input_position_z.setText(f"{z:.4f}")
@@ -867,7 +913,8 @@ class GeometryView:
                     if self.ui.button_geometry_apply.text() != "Apply":
                         probe_tool.set_center(*probe_pos)
             else:
-                # No saved probe position - show geometry position
+                # No saved probe position - hide marker and show geometry position
+                self._hide_probe_marker()
                 position = self.case_data.get_geometry_position(selected_names[0])
                 if position:
                     x, y, z = position
@@ -977,6 +1024,7 @@ class GeometryView:
             # Disable Position Picking button when nothing is selected
             self.ui.AdvancedGroupBox.setEnabled(True)
             self.ui.button_geometry_apply.setEnabled(False)
+            self._hide_probe_marker()
         elif selected_count == 1:
             # Enable Input Position group and Set button for single selection
             self.ui.AdvancedGroupBox.setEnabled(True)
@@ -1012,6 +1060,15 @@ class GeometryView:
             if probe_pos is not None:
                 # Display saved probe position in line editors
                 x, y, z = probe_pos
+
+                # Update red sphere marker if not in picking mode (flat objects excluded)
+                is_picking = (self.ui.button_geometry_apply.text() == "Apply")
+                is_flat = selected_names[0] in self._flat_geometries
+                if not is_picking and not is_flat:
+                    self._show_probe_marker(x, y, z)
+                else:
+                    self._hide_probe_marker()
+
                 self.ui.edit_input_position_x.setText(f"{x:.4f}")
                 self.ui.edit_input_position_y.setText(f"{y:.4f}")
                 self.ui.edit_input_position_z.setText(f"{z:.4f}")
@@ -1023,7 +1080,8 @@ class GeometryView:
                     if self.ui.button_geometry_apply.text() != "Apply":
                         probe_tool.set_center(*probe_pos)
             else:
-                # No saved probe position - show geometry position
+                # No saved probe position - hide marker and show geometry position
+                self._hide_probe_marker()
                 position = self.case_data.get_geometry_position(selected_names[0])
                 if position:
                     x, y, z = position
@@ -1054,17 +1112,84 @@ class GeometryView:
 
     def _on_probe_visibility_changed(self, is_visible: bool):
         if is_visible:
-            # Probe activated - disable tree widget and Add/Remove buttons
+            # Probe activated: hide marker, disable tree/buttons
+            self._hide_probe_marker()
             self.tree.widget.setEnabled(False)
             self.ui.button_geometry_add.setEnabled(False)
             self.ui.button_geometry_remove.setEnabled(False)
-            # Set/Apply button remains enabled (controlled by selection logic)
         else:
-            # Probe deactivated - enable tree widget and Add/Remove buttons
+            # Probe deactivated: enable tree/buttons
             self.tree.widget.setEnabled(True)
             self.ui.button_geometry_add.setEnabled(True)
             self.ui.button_geometry_remove.setEnabled(True)
-            # Set/Apply button remains enabled (controlled by selection logic)
+
+    def _get_probe_marker_radius(self) -> float:
+        """개별 STL 오브젝트(fluid 제외) 중 첫 번째 것의 대각선 1.5%를 공통 반지름으로 반환."""
+        if not self.vtk_pre:
+            return 0.005
+        try:
+            for name, geo in self.case_data.objects.items():
+                if name == "fluid":
+                    continue
+                obj = self.vtk_pre.obj_manager.find_by_name(name)
+                if obj and obj.actor:
+                    bounds = obj.actor.GetBounds()
+                    dx = bounds[1] - bounds[0]
+                    dy = bounds[3] - bounds[2]
+                    dz = bounds[5] - bounds[4]
+                    diag = (dx**2 + dy**2 + dz**2) ** 0.5
+                    if diag > 0:
+                        return diag * 0.015
+        except Exception:
+            pass
+        return 0.005
+
+    def _show_probe_marker(self, x: float, y: float, z: float):
+        """빨간 구를 표시한다. 크기는 모든 오브젝트에서 공통으로 사용."""
+        if not self.vtk_pre:
+            return
+
+        try:
+            from vtkmodules.vtkFiltersSources import vtkSphereSource
+            from vtkmodules.vtkRenderingCore import vtkPolyDataMapper, vtkActor
+        except ImportError:
+            try:
+                from vtk import vtkSphereSource, vtkPolyDataMapper, vtkActor
+            except ImportError:
+                return
+
+        # Remove existing marker
+        self._hide_probe_marker()
+
+        radius = self._get_probe_marker_radius()
+
+        sphere = vtkSphereSource()
+        sphere.SetCenter(x, y, z)
+        sphere.SetRadius(radius)
+        sphere.SetThetaResolution(24)
+        sphere.SetPhiResolution(24)
+
+        mapper = vtkPolyDataMapper()
+        mapper.SetInputConnection(sphere.GetOutputPort())
+
+        actor = vtkActor()
+        actor.SetMapper(mapper)
+        actor.GetProperty().SetColor(1.0, 0.1, 0.1)   # 빨간색
+        actor.GetProperty().SetOpacity(0.85)
+
+        self.vtk_pre.renderer.AddActor(actor)
+        self.vtk_pre.vtk_widget.GetRenderWindow().Render()
+        self._probe_marker_actor = actor
+
+    def _hide_probe_marker(self):
+        """빨간 구 마커를 제거한다."""
+        if self._probe_marker_actor and self.vtk_pre:
+            try:
+                self.vtk_pre.renderer.RemoveActor(self._probe_marker_actor)
+                self.vtk_pre.vtk_widget.GetRenderWindow().Render()
+            except Exception:
+                pass
+        self._probe_marker_actor = None
 
     def _on_clip_mode_changed(self, mode: str):
         mode_lower = mode.lower()
@@ -1090,7 +1215,7 @@ class GeometryView:
 
         if not is_clipping:
             self._clip_flip_btn.blockSignals(True)
-            self._clip_flip_btn.setChecked(False)
+            self._clip_flip_btn.setChecked(True)   # 기본: 반전 상태
             self._clip_flip_btn.blockSignals(False)
 
         if is_clipping:
@@ -1099,6 +1224,12 @@ class GeometryView:
             self._clip_slider.blockSignals(False)
             if hasattr(self, '_lbl_pos_value'):
                 self._lbl_pos_value.setText("50%")
+            # 클립 활성화 시 기본 flip=True 적용
+            self._clip_flip_btn.blockSignals(True)
+            self._clip_flip_btn.setChecked(True)
+            self._clip_flip_btn.blockSignals(False)
+            if self.vtk_pre:
+                self.vtk_pre.set_clip_invert(True)
 
         if self.vtk_pre:
             if is_custom:
@@ -1115,9 +1246,9 @@ class GeometryView:
     def _on_clip_reset_clicked(self):
         if self.vtk_pre:
             self._clip_flip_btn.blockSignals(True)
-            self._clip_flip_btn.setChecked(False)
+            self._clip_flip_btn.setChecked(True)   # 리셋 시 기본 반전 상태로
             self._clip_flip_btn.blockSignals(False)
-            self.vtk_pre.set_clip_invert(False)
+            self.vtk_pre.set_clip_invert(True)
             self.vtk_pre.reset_clip()
 
     def _on_clip_normal_changed(self):

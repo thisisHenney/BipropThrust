@@ -19,7 +19,7 @@ libs
     "libmyLiquids8.so"
 );
 
-application     chtMultiRegionTwoSprayCentralFoam; //chtMultiRegionFoam;
+application     twoSprayChtMultiRegionCentralFoam;
 
 startFrom       startTime;
 
@@ -71,3 +71,26 @@ maxDeltaT       1e-3;
 CourantType     cellCourant; //faceCourant;
 
 // ************************************************************************* //
+
+functions
+{
+  solverInfo_0
+  {
+    type solverInfo;
+    libs
+      (
+        "/usr/lib/openfoam/openfoam2212/platforms/linux64GccDPInt32Opt/lib/libutilityFunctionObjects.so"
+        // libutilityFunctionObjects.so
+      );
+    executeControl timeStep;
+    executeInterval 1;
+    writeResidualFields no;
+    fields
+      (
+        U
+        p_rgh
+        k
+        epsilon
+      );
+  }
+}

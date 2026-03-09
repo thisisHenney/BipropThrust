@@ -1,0 +1,39 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2212                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      changeDictionaryDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+boundary
+{
+    fluid_to_thruster
+    {
+        type            wall;
+        inGroups        1(wall);
+    }
+
+    fluid_to_header
+    {
+        type            wall;
+        inGroups        1(wall);
+    }
+
+    wallFilm_to_fluid
+    {
+        sampleRegion    fluid;
+        samplePatch     fluid_to_thruster;
+    }
+}
+
+
+// ************************************************************************* //

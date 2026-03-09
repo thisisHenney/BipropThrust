@@ -6,7 +6,7 @@ from pathlib import Path
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QLabel, QMessageBox,
     QGroupBox, QPushButton, QCheckBox, QComboBox, QProgressBar,
-    QToolButton, QTextEdit
+    QToolButton, QTextEdit, QInputDialog, QFileDialog
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction
@@ -69,6 +69,10 @@ class MainWindow(QMainWindow):
         self.action_open = QAction("&Open...", self)
         self.action_open.setShortcut("Ctrl+O")
         file_menu.addAction(self.action_open)
+
+        # Open Recent submenu
+        self.menu_recent = file_menu.addMenu("Open &Recent")
+        self._update_recent_menu()
 
         self.action_save = QAction("&Save", self)
         self.action_save.setShortcut("Ctrl+S")
@@ -357,6 +361,7 @@ class MainWindow(QMainWindow):
 
         # Load saved app_data and restore window geometry
         self.app_data.load()
+        self._update_recent_menu()
         restore_window_geometry(self, self.app_data.window_geometry)
 
         # Restore dock layout
@@ -408,6 +413,14 @@ class MainWindow(QMainWindow):
         run_panel = self.center_widget.panel_views.get("run")
         if run_panel:
             run_panel.load_data()
+
+        # Load residual log
+        self.center_widget._load_residual_log()
+
+        # Load post-processing results (last - can be slow for large cases)
+        post_panel = self.center_widget.panel_views.get("post")
+        if post_panel:
+            post_panel.load_results()
 
         # Select default tab (Geometry) - this triggers visibility logic
         self.center_widget.select_default_tab()
@@ -462,6 +475,10 @@ class MainWindow(QMainWindow):
         self._reload_panels()
         self._update_window_title()
 
+        # 최근 케이스 등록 및 메뉴 업데이트
+        self.app_data.add_recent_case(path)
+        self._update_recent_menu()
+
     def create_new_case(self, user_select: bool = True) -> None:
         if user_select:
             path = DirDialogBox.create_folder(self, "Create New Case")
@@ -481,6 +498,35 @@ class MainWindow(QMainWindow):
         self._reload_panels()
         self._update_window_title()
 
+    def _update_recent_menu(self) -> None:
+        """최근 케이스 서브메뉴를 app_data.recent_cases로 갱신"""
+        self.menu_recent.clear()
+        recent = self.app_data.recent_cases
+        if not recent:
+            action = self.menu_recent.addAction("(없음)")
+            action.setEnabled(False)
+            return
+
+        for i, path in enumerate(recent):
+            exists = Path(path).exists()
+            # 표시: "1. /path/to/case" (최대 50자 앞에서 줄임)
+            display = path if len(path) <= 55 else f"...{path[-52:]}"
+            action = self.menu_recent.addAction(f"&{i + 1}. {display}" if i < 9 else f"{i + 1}. {display}")
+            action.setEnabled(exists)
+            if exists:
+                action.triggered.connect(lambda checked=False, p=path: self.open_case(p))
+            else:
+                action.setToolTip("경로가 존재하지 않습니다")
+
+        self.menu_recent.addSeparator()
+        clear_action = self.menu_recent.addAction("목록 지우기")
+        clear_action.triggered.connect(self._clear_recent_cases)
+
+    def _clear_recent_cases(self) -> None:
+        self.app_data.recent_cases.clear()
+        self.app_data.save()
+        self._update_recent_menu()
+
     def _reset_all_state(self) -> None:
         # 1) Stop running processes
         if self.exec_widget and self.exec_widget.is_running():
@@ -496,10 +542,21 @@ class MainWindow(QMainWindow):
                 mesh_panel._clear_existing_mesh()
             self.vtk_pre.vtk_widget.GetRenderWindow().Render()
 
-        # 3) VTK post - clear renderer
+        # 3) VTK post - clear renderer and reader state
         if self.vtk_post:
+            self.vtk_post._cancel_loading()
             self.vtk_post.renderer.RemoveAllViewProps()
+            self.vtk_post.reader = None
+            if hasattr(self.vtk_post, 'foam_reader'):
+                self.vtk_post.foam_reader = None
+            self.vtk_post.field_combo.blockSignals(True)
+            self.vtk_post.field_combo.clear()
+            self.vtk_post.field_combo.blockSignals(False)
             self.vtk_post.vtk_widget.GetRenderWindow().Render()
+        # Post view - reset loaded state
+        post_panel = self.center_widget.panel_views.get("post")
+        if post_panel:
+            post_panel._results_loaded = False
 
         # 4) Exec widget - clear log/output
         if self.exec_widget:
@@ -571,8 +628,45 @@ class MainWindow(QMainWindow):
             # Don't close window
             return False
 
+    def _pick_save_path(self, title: str = "Save Case As") -> str | None:
+        """부모 폴더 선택 → 케이스 이름 입력 → 새 폴더 경로 반환 (폴더 자동 생성)."""
+        # 1. 부모 폴더 선택
+        parent_dir = QFileDialog.getExistingDirectory(
+            self, f"{title} - 저장할 위치 선택",
+            str(Path.home()),
+            QFileDialog.Option.ShowDirsOnly
+        )
+        if not parent_dir:
+            return None
+
+        # 2. 케이스 이름 입력
+        default_name = Path(self.case_path).name if self.case_path else "NewCase"
+        name, ok = QInputDialog.getText(
+            self, title, "케이스 폴더 이름:", text=default_name
+        )
+        if not ok or not name.strip():
+            return None
+
+        name = name.strip()
+        new_path = str(Path(parent_dir) / name)
+
+        # 3. 이미 존재하면 확인
+        if Path(new_path).exists():
+            reply = QMessageBox.question(
+                self, title,
+                f"'{name}' 폴더가 이미 존재합니다.\n덮어쓰시겠습니까?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                return None
+
+        # 4. 폴더 생성
+        Path(new_path).mkdir(parents=True, exist_ok=True)
+        return new_path
+
     def _save_temp_case_as(self) -> bool:
-        new_path = DirDialogBox.create_folder(self, "Save Case As")
+        new_path = self._pick_save_path("Save Case As")
 
         if not new_path:
             reply = QMessageBox.question(
@@ -610,7 +704,7 @@ class MainWindow(QMainWindow):
             return False
 
     def save_case_as(self) -> bool:
-        new_path = DirDialogBox.create_folder(self, "Save Case As")
+        new_path = self._pick_save_path("Save Case As")
         if not new_path:
             return False
 

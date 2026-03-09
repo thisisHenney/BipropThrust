@@ -102,9 +102,10 @@ class MeshGenerationView:
         # Clip pipeline objects (cached for performance)
         self.clip_plane = None
         self.clip_actor = None
-        self._clip_flip = False
+        self._clip_flip = True
         self._clip_clip_filter = None
         self._clip_geom_filter = None
+        self._clip_preview_actor = None  # 빨간 반투명 preview plane
 
         # Debounce timer for clip updates (prevents laggy updates during rapid changes)
         self._slice_update_timer = QTimer()
@@ -130,6 +131,7 @@ class MeshGenerationView:
         # Clip toolbar signals (debounced to prevent lag during rapid changes)
         self.combo_dir.currentTextChanged.connect(self._on_clip_dir_changed)
         self.slider_pos.valueChanged.connect(self._on_slider_changed)
+        self.slider_pos.sliderReleased.connect(self._on_slider_released)
         self.clip_flip_btn.toggled.connect(self._on_clip_flip_toggled)
         self.clip_reset_btn.clicked.connect(self._on_clip_reset_clicked)
         self.spin_nx.valueChanged.connect(self._request_slice_update)
@@ -1262,14 +1264,16 @@ FoamFile
                 spin.blockSignals(False)
 
         if not is_clipping:
-            self.clip_flip_btn.blockSignals(True)
-            self.clip_flip_btn.setChecked(False)
-            self.clip_flip_btn.blockSignals(False)
-            self._clip_flip = False
             self.slider_pos.blockSignals(True)
             self.slider_pos.setValue(50)
             self.slider_pos.blockSignals(False)
             self.lbl_pos_value.setText("50%")
+
+        # 방향 변경 시 항상 flip=True(기본 반전 상태)로 초기화
+        self.clip_flip_btn.blockSignals(True)
+        self.clip_flip_btn.setChecked(True)
+        self.clip_flip_btn.blockSignals(False)
+        self._clip_flip = True
 
         self._request_slice_update()
 
@@ -1279,9 +1283,9 @@ FoamFile
 
     def _on_clip_reset_clicked(self):
         self.clip_flip_btn.blockSignals(True)
-        self.clip_flip_btn.setChecked(False)
+        self.clip_flip_btn.setChecked(True)    # 리셋 시 기본 반전 상태로
         self.clip_flip_btn.blockSignals(False)
-        self._clip_flip = False
+        self._clip_flip = True
         self.slider_pos.blockSignals(True)
         self.slider_pos.setValue(50)
         self.slider_pos.blockSignals(False)
@@ -1290,7 +1294,105 @@ FoamFile
 
     def _on_slider_changed(self, value: int):
         self.lbl_pos_value.setText(f"{value}%")
+        # 슬라이더 드래그 중에는 preview plane만 표시 (실제 clip 미적용)
+        if self.slider_pos.isSliderDown():
+            self._show_clip_preview_plane()
+        else:
+            self._request_slice_update()
+
+    def _on_slider_released(self):
+        """슬라이더 릴리즈 시 preview 제거 후 실제 clip 적용."""
+        self._remove_clip_preview_plane()
         self._request_slice_update()
+
+    def _show_clip_preview_plane(self):
+        """현재 슬라이더 위치에 빨간 반투명 평면을 표시한다 (geometry view와 동일한 방식)."""
+        if not self.vtk_pre or self.bounds is None:
+            return
+
+        origin, normal = self._get_plane_params()
+        if origin is None or normal is None:
+            self._remove_clip_preview_plane()
+            return
+
+        try:
+            import vtk as _vtk
+        except ImportError:
+            return
+
+        renderer = self.vtk_pre.vtk_widget.GetRenderWindow().GetRenderers().GetFirstRenderer()
+
+        # 기존 preview 제거
+        self._remove_clip_preview_plane()
+
+        # bounds를 10% 확장 (geometry view와 동일)
+        xmin, xmax, ymin, ymax, zmin, zmax = self.bounds
+        margin = 0.1
+        ext_xmin = xmin - (xmax - xmin) * margin
+        ext_xmax = xmax + (xmax - xmin) * margin
+        ext_ymin = ymin - (ymax - ymin) * margin
+        ext_ymax = ymax + (ymax - ymin) * margin
+        ext_zmin = zmin - (zmax - zmin) * margin
+        ext_zmax = zmax + (zmax - zmin) * margin
+
+        ox, oy, oz = origin
+        dir_text = self.combo_dir.currentText()
+
+        plane_src = _vtk.vtkPlaneSource()
+        if dir_text == "X":
+            plane_src.SetOrigin(ox, ext_ymin, ext_zmin)
+            plane_src.SetPoint1(ox, ext_ymax, ext_zmin)
+            plane_src.SetPoint2(ox, ext_ymin, ext_zmax)
+        elif dir_text == "Y":
+            plane_src.SetOrigin(ext_xmin, oy, ext_zmin)
+            plane_src.SetPoint1(ext_xmax, oy, ext_zmin)
+            plane_src.SetPoint2(ext_xmin, oy, ext_zmax)
+        elif dir_text == "Z":
+            plane_src.SetOrigin(ext_xmin, ext_ymin, oz)
+            plane_src.SetPoint1(ext_xmax, ext_ymin, oz)
+            plane_src.SetPoint2(ext_xmin, ext_ymax, oz)
+        else:
+            # Custom: 법선에 수직인 두 축으로 대각선 크기의 평면
+            size = (((xmax-xmin)**2 + (ymax-ymin)**2 + (zmax-zmin)**2) ** 0.5) * 1.1
+            nx, ny, nz = normal
+            u = (0.0, nz, -ny) if abs(nx) < 0.9 else (nz, 0.0, -nx)
+            ul = (u[0]**2 + u[1]**2 + u[2]**2) ** 0.5
+            u = (u[0]/ul, u[1]/ul, u[2]/ul)
+            v = (ny*u[2]-nz*u[1], nz*u[0]-nx*u[2], nx*u[1]-ny*u[0])
+            half = size / 2.0
+            plane_src.SetOrigin(ox-u[0]*half-v[0]*half, oy-u[1]*half-v[1]*half, oz-u[2]*half-v[2]*half)
+            plane_src.SetPoint1(ox+u[0]*half-v[0]*half, oy+u[1]*half-v[1]*half, oz+u[2]*half-v[2]*half)
+            plane_src.SetPoint2(ox-u[0]*half+v[0]*half, oy-u[1]*half+v[1]*half, oz-u[2]*half+v[2]*half)
+
+        plane_src.SetResolution(1, 1)
+        plane_src.Update()
+
+        mapper = _vtk.vtkPolyDataMapper()
+        mapper.SetInputConnection(plane_src.GetOutputPort())
+
+        actor = _vtk.vtkActor()
+        actor.SetMapper(mapper)
+        prop = actor.GetProperty()
+        prop.SetColor(1.0, 0.2, 0.2)
+        prop.SetOpacity(0.4)
+        prop.SetRepresentationToSurface()
+        prop.EdgeVisibilityOn()
+        prop.SetEdgeColor(1.0, 0.0, 0.0)
+        prop.SetLineWidth(2.0)
+
+        renderer.AddActor(actor)
+        self._clip_preview_actor = actor
+        self.vtk_pre.vtk_widget.GetRenderWindow().Render()
+
+    def _remove_clip_preview_plane(self):
+        """빨간 반투명 preview plane을 제거한다."""
+        if self._clip_preview_actor and self.vtk_pre:
+            try:
+                renderer = self.vtk_pre.vtk_widget.GetRenderWindow().GetRenderers().GetFirstRenderer()
+                renderer.RemoveActor(self._clip_preview_actor)
+            except Exception:
+                pass
+        self._clip_preview_actor = None
 
     def _request_slice_update(self):
         self._slice_update_timer.start()
@@ -1395,7 +1497,7 @@ FoamFile
             locations_block = match.group(1)
 
             # Parse each line: (( x y z) region_name)
-            line_pattern = r'\(\s*\(\s*([\d\.\-e]+)\s+([\d\.\-e]+)\s+([\d\.\-e]+)\s*\)\s+(\w+)\s*\)'
+            line_pattern = r'\(\s*\(\s*([+-]?[\d\.e]+)\s+([+-]?[\d\.e]+)\s+([+-]?[\d\.e]+)\s*\)\s+(\w+)\s*\)'
 
             loaded_count = 0
             for line_match in re.finditer(line_pattern, locations_block):
@@ -1403,6 +1505,13 @@ FoamFile
                 y = float(line_match.group(2))
                 z = float(line_match.group(3))
                 region_name = line_match.group(4)
+
+                # Create entry for regions not yet in case_data (e.g. mesh-only regions)
+                if not self.case_data.get_geometry(region_name):
+                    from common.case_data import GeometryData
+                    obj = GeometryData()  # empty name passes __post_init__ check
+                    obj.name = region_name
+                    self.case_data.objects[region_name] = obj
 
                 # Update case_data with probe position
                 if self.case_data.set_geometry_probe_position(region_name, x, y, z):
@@ -1426,9 +1535,9 @@ FoamFile
         # Load numberOfSubdomains from decomposeParDict
         self._load_number_of_subdomains()
 
-        # NOTE: Probe positions are authoritative in case_data JSON (loaded by case_data.load()).
-        # Do NOT call _load_locations_from_snappyhex() here — it would overwrite the
-        # correctly restored JSON values with potentially outdated snappyHexMeshDict values.
+        # snappyHexMeshDict의 locationsInMesh를 항상 로드하여 case_data와 동기화
+        # (파일이 진실의 원천 - JSON보다 snappyHexMeshDict 우선)
+        self._load_locations_from_snappyhex()
 
         # Load castellation settings from snappyHexMeshDict
         self._load_castellation_settings()

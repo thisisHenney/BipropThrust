@@ -29,6 +29,9 @@ class AppData:
     parallel_mesh_enabled: bool = field(default=True, init=False)
     parallel_run_enabled: bool = field(default=True, init=False)
 
+    # Recent cases (most recent first, max 10)
+    recent_cases: list = field(default_factory=list, init=False)
+
     # Platform-specific user paths
     _user_path_win: str = field(default="", init=False, repr=False)
     _user_path_linux: str = field(default="", init=False, repr=False)
@@ -78,6 +81,15 @@ class AppData:
             if not Path(path).exists():
                 print(f"Warning: {path_name} does not exist: {path}")
 
+    def add_recent_case(self, path: str, max_count: int = 10) -> None:
+        """최근 케이스 목록 맨 앞에 추가 (중복 제거, 최대 max_count개 유지)"""
+        path = str(Path(path).resolve())
+        if path in self.recent_cases:
+            self.recent_cases.remove(path)
+        self.recent_cases.insert(0, path)
+        self.recent_cases = self.recent_cases[:max_count]
+        self.save()
+
     def save(self) -> None:
         file_path = Path(self.user_path) / "app_data.json"
         try:
@@ -102,6 +114,7 @@ class AppData:
                 "name", "version",
                 "window_geometry",
                 "parallel_mesh_enabled", "parallel_run_enabled",
+                "recent_cases",
             }
             for k, v in data.items():
                 if k in safe_fields:

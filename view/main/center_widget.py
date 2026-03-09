@@ -158,6 +158,11 @@ class CenterWidget(QWidget):
                     self._show_slice_toolbar("mesh")
                     # Sync toolbar visibility buttons
                     self.vtk_pre.set_visibility_mode("mesh")
+                    # Hide probe marker
+                    geo_view = self.panel_views.get("Geometry")
+                    if geo_view and hasattr(geo_view, '_probe_marker_actor') and geo_view._probe_marker_actor:
+                        geo_view._probe_marker_actor.SetVisibility(False)
+                        self.vtk_pre.vtk_widget.GetRenderWindow().Render()
                 return
         else:
             # Top-level item
@@ -180,12 +185,22 @@ class CenterWidget(QWidget):
                     self._show_slice_toolbar("geometry")
                     # Sync toolbar visibility buttons
                     self.vtk_pre.set_visibility_mode("geometry")
+                    # Restore probe marker if geometry view has one saved
+                    geo_view = self.panel_views.get("Geometry")
+                    if geo_view and hasattr(geo_view, '_probe_marker_actor') and geo_view._probe_marker_actor:
+                        geo_view._probe_marker_actor.SetVisibility(True)
+                        self.vtk_pre.vtk_widget.GetRenderWindow().Render()
                 else:
                     # All other tabs - show mesh with slice
                     self._show_mesh_objects()
                     self._show_slice_toolbar("mesh")
                     # Sync toolbar visibility buttons
                     self.vtk_pre.set_visibility_mode("mesh")
+                    # Hide probe marker when leaving Geometry tab
+                    geo_view = self.panel_views.get("Geometry")
+                    if geo_view and hasattr(geo_view, '_probe_marker_actor') and geo_view._probe_marker_actor:
+                        geo_view._probe_marker_actor.SetVisibility(False)
+                        self.vtk_pre.vtk_widget.GetRenderWindow().Render()
 
     def _show_geometry_objects(self):
         all_objs = self.vtk_pre.obj_manager.get_all()
@@ -303,12 +318,14 @@ class CenterWidget(QWidget):
         if not case_data.path:
             return
 
-        # Look for log.solver in 5.CHTFCase folder
+        # Look for log.Solver (or log.solver) in 5.CHTFCase folder
         chtf_case = Path(case_data.path) / "5.CHTFCase"
-        log_file = chtf_case / "log.solver"
+        log_file = chtf_case / "log.Solver"
+        if not log_file.exists():
+            log_file = chtf_case / "log.solver"
 
         if log_file.exists():
-            self.residual_graph.load_file(str(log_file))
+            self.residual_graph.load_file(str(log_file), target_vars=['h', 'p', 'rho'])
 
     def get_panel(self, panel_id: str):
         return self.panel_views.get(panel_id)

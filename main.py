@@ -152,7 +152,7 @@ class BipropThrustApp:
             self.main_window.show()
 
         except Exception as e:
-            import traceback
+            import traceback옴
             traceback.print_exc()
             sys.exit(1)
 

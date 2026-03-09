@@ -1,0 +1,48 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2112                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volVectorField;
+    object      Uf;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions      [0 1 -1 0 0 0 0];
+
+internalField   uniform (0 0 0);
+
+boundaryField
+{
+    // extruded boundaries with physical BC
+    "(fluid_to_.*)"
+    {
+        type            noSlip;
+    }
+
+    // top film surface
+    "(.*top)"
+    {
+        type            slip;
+    }
+
+    // mapped boundaries
+//    "(region0_to_.*)"
+    wallFilm_to_fluid
+    {
+        type            noSlip;
+    }
+    outlet
+    {
+        type            zeroGradient;
+    }
+}
+
+
+// ************************************************************************* //

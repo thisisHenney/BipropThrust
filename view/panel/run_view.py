@@ -199,13 +199,22 @@ class RunView:
         self.ui.button_pause.setEnabled(False)
         self.ui.button_mesh_generate.setEnabled(True)  # Re-enable Mesh Generate
         self.ui.button_mesh_stop.setEnabled(False)  # Disable Mesh Stop
+        self.ui.button_pause.setText("Pause")
         self.ui.edit_run_status.setText("Stopped")
         self.ui.edit_run_finished.setText(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
         self._stop_log_monitoring()
 
     def _on_pause_clicked(self):
-        if self.exec_widget:
+        if not self.exec_widget:
+            return
+        if self.exec_widget._pause_all_proc:
+            self.exec_widget.resume_process()
+            self.ui.button_pause.setText("Pause")
+            self.ui.edit_run_status.setText("Running...")
+        else:
             self.exec_widget.pause_process()
+            self.ui.button_pause.setText("Resume")
+            self.ui.edit_run_status.setText("Paused")
 
     def _on_proc_status_changed(self, proc_idx: int, cpu_id: int, pid: int, status: str):
         # Update process ID display
@@ -530,9 +539,76 @@ class RunView:
         if solver_log.exists():
             self._log_file_path = solver_log
             try:
-                self.residual_graph.load_file(str(solver_log))
+                self.residual_graph.load_file(str(solver_log), target_vars=['h', 'p', 'rho'])
             except Exception:
                 traceback.print_exc()
+
+    def _detect_resume_state(self):
+        """케이스 로드 시 이전 실행이 중단됐는지 감지하여 재개 상태를 설정."""
+        if not self.case_data.path:
+            return
+
+        case_path = Path(self.case_data.path) / "5.CHTFCase"
+        allrun_path = case_path / "Allrun"
+        if not allrun_path.exists():
+            return
+
+        # Parse scripts with current UI settings
+        n_procs = 4
+        try:
+            n_procs = int(self.ui.edit_number_of_subdomains_2.text())
+        except (ValueError, AttributeError):
+            pass
+        use_hostfile = self.ui.checkBox_host_2.isChecked()
+        application = self._get_application(case_path)
+
+        allclean_path = case_path / "Allclean"
+        self._allclean_commands = []
+        if allclean_path.exists():
+            self._allclean_commands = self._parse_script(allclean_path, n_procs, use_hostfile, application)
+        self._allrun_commands = self._parse_script(allrun_path, n_procs, use_hostfile, application)
+
+        if not self._allrun_commands:
+            return
+
+        # Check if solver log exists
+        solver_log = case_path / "log.Solver"
+        if not solver_log.exists():
+            return
+
+        # Check if run completed normally (OpenFOAM writes "End" at finish)
+        try:
+            content = solver_log.read_text(encoding='utf-8', errors='ignore')
+            last_lines = content[-200:] if len(content) > 200 else content
+            if re.search(r'\bEnd\b', last_lines):
+                self._last_run_completed = True
+                return
+        except Exception:
+            traceback.print_exc()
+            return
+
+        # Incomplete run - estimate step from numbered log files in latest run dir
+        last_step = 0
+        log_base = Path(self.case_data.path) / "log" / "RunSolver"
+        if log_base.exists():
+            try:
+                run_dirs = [d for d in log_base.iterdir() if d.is_dir()]
+                if run_dirs:
+                    latest_dir = max(run_dirs, key=lambda d: d.name)
+                    for lf in latest_dir.glob("*.log"):
+                        m = re.match(r'^(\d+)_', lf.name)
+                        if m:
+                            last_step = max(last_step, int(m.group(1)))
+            except Exception:
+                traceback.print_exc()
+
+        total = len(self._allclean_commands) + len(self._allrun_commands)
+        if last_step > 0:
+            self._step_tracker = min(last_step, total)
+        else:
+            # solver log exists but no numbered logs → assume interrupted at first allrun step
+            self._step_tracker = len(self._allclean_commands) + 1
+        self._last_run_completed = False
 
     def _start_log_monitoring(self):
         self._log_timer.start(self._log_check_interval)
@@ -574,7 +650,7 @@ class RunView:
 
         if self.residual_graph:
             try:
-                self.residual_graph.load_file(str(self._log_file_path))
+                self.residual_graph.load_file(str(self._log_file_path), target_vars=['h', 'p', 'rho'])
             except Exception:
                 traceback.print_exc()
 
@@ -587,6 +663,7 @@ class RunView:
         self.ui.button_run.setText("Run Solver")
         self.ui.button_stop.setEnabled(False)
         self.ui.button_pause.setEnabled(False)
+        self.ui.button_pause.setText("Pause")
         self.ui.button_mesh_generate.setEnabled(True)  # Re-enable Mesh Generate
         self.ui.edit_run_status.setText("Finished")
         self.ui.edit_run_finished.setText(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
@@ -598,6 +675,7 @@ class RunView:
         self.ui.button_run.setText("Run Solver")
         self.ui.button_stop.setEnabled(False)
         self.ui.button_pause.setEnabled(False)
+        self.ui.button_pause.setText("Pause")
         self.ui.button_mesh_generate.setEnabled(True)  # Re-enable Mesh Generate
         self.ui.edit_run_status.setText("Error")
         self.ui.edit_run_finished.setText(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
@@ -856,6 +934,9 @@ class RunView:
 
         # Load residual graph from the latest solver log (if any)
         self._load_latest_solver_log()
+
+        # Detect if a previous run was interrupted (enables resume on next Run click)
+        self._detect_resume_state()
 
     def _load_run_settings(self):
         try:
