@@ -55,6 +55,9 @@ class PostView:
         if not has_results:
             return False
 
+        # 케이스 경로 등록 (Refresh 버튼에서 이 경로로 새로고침)
+        self.vtk_post.set_case_path(str(chtf_case))
+
         # Load OpenFOAM case into vtk_post (직접 케이스 폴더 경로 전달)
         self.vtk_post.load_foam_file(str(chtf_case))
 
@@ -67,6 +70,22 @@ class PostView:
 
         # Show scalar bar
         self._show_scalar_bar()
+
+        # 카메라 뷰: Y축 위, X축 오른쪽, +Z가 화면 앞방향 (-Z가 모니터 뒷방향)
+        # fit_to_scene()이 ResetCamera를 호출하므로, 그 이후에 카메라를 직접 재설정
+        try:
+            renderer = self.vtk_post.renderer
+            camera = renderer.GetActiveCamera()
+            fp = camera.GetFocalPoint()
+            dist = camera.GetDistance()
+            # +Z 방향에서 바라보기: Y가 위, X가 오른쪽
+            camera.SetPosition(fp[0], fp[1], fp[2] + dist)
+            camera.SetViewUp(0.0, 1.0, 0.0)
+            camera.SetFocalPoint(fp)
+            renderer.ResetCameraClippingRange()
+            self.vtk_post.vtk_widget.GetRenderWindow().Render()
+        except Exception:
+            pass
 
         self._results_loaded = True
         return True

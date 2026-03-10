@@ -148,9 +148,9 @@ class CenterWidget(QWidget):
                 elif item_text == "Post":
                     if self.dock_manager:
                         self.dock_manager.change_dock_tab(3)
-                    # Load post-processing results
+                    # 아직 로드되지 않은 경우에만 불러옴 (Refresh는 위젯 버튼으로)
                     post_view = self.panel_views.get("post")
-                    if post_view:
+                    if post_view and not getattr(post_view, '_results_loaded', False):
                         post_view.load_results()
                 # Update visibility for Results tabs (show mesh with slice)
                 if self.vtk_pre:

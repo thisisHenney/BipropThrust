@@ -582,6 +582,9 @@ class MainWindow(QMainWindow):
             panel = self.center_widget.panel_views.get(key)
             if panel:
                 panel.load_data()
+        post_panel = self.center_widget.panel_views.get("post")
+        if post_panel:
+            post_panel.load_results()
         self.center_widget.select_default_tab()
         self.exec_widget.add_log_ready()
 

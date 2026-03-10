@@ -48,8 +48,8 @@ class RunView:
 
         # Simulation state
         self._is_running = False
+        self._is_paused = False  # True when paused via controlDict writeNow
         self._log_file_path = None
-        self._append_solver_log = False  # True when resuming (appends to log.Solver)
 
         # Resume tracking state
         self._allclean_commands = []   # commands parsed from Allclean
@@ -189,6 +189,7 @@ class RunView:
         self.ui.comboBox_10.setEnabled(is_on)
 
     def _on_stop_clicked(self):
+        self._is_paused = False  # 정지는 일시정지 상태 해제
         if self.exec_widget:
             self.exec_widget.stop_process(kill=True)
 
@@ -205,16 +206,46 @@ class RunView:
         self._stop_log_monitoring()
 
     def _on_pause_clicked(self):
-        if not self.exec_widget:
-            return
-        if self.exec_widget._pause_all_proc:
-            self.exec_widget.resume_process()
-            self.ui.button_pause.setText("Pause")
-            self.ui.edit_run_status.setText("Running...")
+        case_path = Path(self.case_data.path) / "5.CHTFCase"
+
+        if self._is_paused:
+            # Resume: controlDict 복원, _pause_all_proc 해제 후 솔버 재실행
+            self._set_control_dict_run_params(case_path, stop_at='endTime', start_from='latestTime')
+            self._is_paused = False
+            if self.exec_widget:
+                self.exec_widget._pause_all_proc = False
+            self._resume_from_pause(case_path)
         else:
-            self.exec_widget.pause_process()
+            # Pause: controlDict에 writeNow 설정 후 즉시 프로세스 종료
+            # (log_cmd.sh에 kill 0 없으므로 kill이 Python 프로세스에 영향 없음)
+            self._set_control_dict_run_params(case_path, stop_at='writeNow')
+            self._is_paused = True
+            if self.exec_widget:
+                self.exec_widget.stop_process(kill=True)
             self.ui.button_pause.setText("Resume")
-            self.ui.edit_run_status.setText("Paused")
+
+    def _set_control_dict_run_params(self, case_path: Path, stop_at: str, start_from: str = None):
+        """controlDict의 stopAt / startFrom 값을 변경한다."""
+        try:
+            file_path = case_path / "system" / "controlDict"
+            if not file_path.exists():
+                return
+            content = file_path.read_text(encoding='utf-8')
+            content = re.sub(r'(stopAt\s+)\w+(\s*;)', rf'\g<1>{stop_at}\2', content)
+            if start_from:
+                content = re.sub(r'(startFrom\s+)\w+(\s*;)', rf'\g<1>{start_from}\2', content)
+            file_path.write_text(content, encoding='utf-8')
+        except Exception:
+            traceback.print_exc()
+
+    def _resume_from_pause(self, case_path: Path):
+        """일시정지 후 재개: allrun_commands에서 mpirun(솔버) 단계부터 재실행."""
+        mpirun_idx = next(
+            (i for i, cmd in enumerate(self._allrun_commands)
+             if 'mpirun' in cmd or 'mpiexec' in cmd),
+            0
+        )
+        self._run_simulation_resume(mpirun_idx)
 
     def _on_proc_status_changed(self, proc_idx: int, cpu_id: int, pid: int, status: str):
         # Update process ID display
@@ -266,7 +297,9 @@ class RunView:
             # Reset resume tracking state
             self._step_tracker = 0
             self._last_run_completed = False
-            self._append_solver_log = False  # Fresh run: overwrite log.Solver
+
+            # 새로 시작: startFrom startTime, stopAt endTime
+            self._set_control_dict_run_params(case_path, stop_at='endTime', start_from='startTime')
 
             self._execute_commands(case_path, commands)
 
@@ -286,7 +319,9 @@ class RunView:
             # Initialize step_tracker to reflect already-completed steps
             self._step_tracker = len(self._allclean_commands) + allrun_start
             self._last_run_completed = False
-            self._append_solver_log = True  # Resume: append to existing log.Solver
+
+            # 이어서 실행: startFrom latestTime, stopAt endTime
+            self._set_control_dict_run_params(case_path, stop_at='endTime', start_from='latestTime')
 
             self._execute_commands(case_path, commands)
 
@@ -295,11 +330,9 @@ class RunView:
             self.ui.edit_run_status.setText("Error")
 
     def _execute_commands(self, case_path: Path, commands: list):
-        # Set solver log file (5.CHTFCase/log.Solver)
+        # log.Solver 심볼릭 링크 경로 (실제 파일은 numbered log)
         self._log_file_path = case_path / "log.Solver"
-        # Fresh run: delete existing log; Resume: keep it (append mode)
-        if not self._append_solver_log and self._log_file_path.exists():
-            self._log_file_path.unlink()
+        self._solver_numbered_log = None  # _wrap_commands_with_logging에서 결정됨
 
         # Set working directory and callbacks
         self.exec_widget.set_working_path(str(case_path))
@@ -324,39 +357,18 @@ class RunView:
         of_wrapper.chmod(0o755)
 
         # Create log wrapper script (tees output to log file while preserving exit code)
-        # trap ensures all child processes (tee, command) are killed on SIGTERM/SIGINT
+        # setsid로 새 세션을 만들어 Python 앱 프로세스 그룹과 분리
         # stdbuf -oL on tee forces line-buffered output to QProcess
         log_wrapper = case_path / "log_cmd.sh"
         log_wrapper.write_text(
             '#!/bin/bash\n'
             'set -o pipefail\n'
-            'trap "kill 0" SIGTERM SIGINT\n'
             'LOG_FILE="$1"\n'
             'shift\n'
-            '"$@" 2>&1 | stdbuf -oL tee "$LOG_FILE"\n',
+            'setsid "$@" 2>&1 | stdbuf -oL tee "$LOG_FILE"\n',
             encoding='utf-8'
         )
         log_wrapper.chmod(0o755)
-
-        # Create solver log wrapper: tees output to both numbered log AND log.Solver
-        # $1=numbered log, $2=log.Solver path, $3=append flag (0/1)
-        solver_log_wrapper = case_path / "solver_log_cmd.sh"
-        solver_log_wrapper.write_text(
-            '#!/bin/bash\n'
-            'set -o pipefail\n'
-            'trap "kill 0" SIGTERM SIGINT\n'
-            'NUMBERED_LOG="$1"\n'
-            'SOLVER_LOG="$2"\n'
-            'APPEND="$3"\n'
-            'shift 3\n'
-            'if [ "$APPEND" = "1" ]; then\n'
-            '    "$@" 2>&1 | stdbuf -oL tee "$NUMBERED_LOG" | stdbuf -oL tee -a "$SOLVER_LOG"\n'
-            'else\n'
-            '    "$@" 2>&1 | stdbuf -oL tee "$NUMBERED_LOG" | stdbuf -oL tee "$SOLVER_LOG"\n'
-            'fi\n',
-            encoding='utf-8'
-        )
-        solver_log_wrapper.chmod(0o755)
 
         # Create log directory for this execution
         self._log_dir = Path(self.case_data.path) / "log" / "RunSolver" / datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -377,6 +389,13 @@ class RunView:
 
         # Wrap commands with log wrapper and execute
         commands = self._wrap_commands_with_logging(commands)
+
+        # log.Solver → numbered solver log 심볼릭 링크 생성
+        if self._solver_numbered_log:
+            if self._log_file_path.exists() or self._log_file_path.is_symlink():
+                self._log_file_path.unlink()
+            self._log_file_path.symlink_to(self._solver_numbered_log)
+
         self._start_log_monitoring()
         self.exec_widget.run(commands)
 
@@ -395,19 +414,18 @@ class RunView:
 
     def _wrap_commands_with_logging(self, commands: list) -> list:
         logged_commands = []
-        append_flag = "1" if self._append_solver_log else "0"
         for i, cmd in enumerate(commands, 1):
             display = self._get_display_cmd(cmd)
             if cmd.startswith("./shell_cmd.sh"):
                 logged_commands.append((cmd, display))
             elif "mpirun" in cmd or "mpiexec" in cmd:
-                # Main parallel solver: tee to numbered log AND log.Solver
+                # 메인 병렬 솔버: numbered log에만 기록, log.Solver는 심볼릭 링크로 연결
                 cmd_name = self._extract_command_name(cmd)
                 log_file = self._log_dir / f"{i:02d}_{cmd_name}.log"
-                logged_commands.append((
-                    f"./solver_log_cmd.sh {log_file} {self._log_file_path} {append_flag} {cmd}",
-                    display,
-                ))
+                # 첫 번째 mpirun 커맨드를 solver log로 지정
+                if self._solver_numbered_log is None:
+                    self._solver_numbered_log = log_file
+                logged_commands.append((f"./log_cmd.sh {log_file} {cmd}", display))
             else:
                 cmd_name = self._extract_command_name(cmd)
                 log_file = self._log_dir / f"{i:02d}_{cmd_name}.log"
@@ -535,13 +553,59 @@ class RunView:
         if not self.case_data.path or not self.residual_graph:
             return
 
-        solver_log = Path(self.case_data.path) / "5.CHTFCase" / "log.Solver"
+        case_path = Path(self.case_data.path) / "5.CHTFCase"
+        solver_log = case_path / "log.Solver"
+
+        # 심볼릭 링크가 아니거나, 심볼릭 링크지만 대상이 없는(dangling) 경우에 새로 생성
+        need_symlink = (
+            not solver_log.exists() and not solver_log.is_symlink()  # 없음
+            or (solver_log.is_symlink() and not solver_log.exists())  # dangling 심볼릭 링크
+            or (solver_log.exists() and not solver_log.is_symlink())  # 일반 파일 → 심볼릭 링크로 교체
+        )
+        if need_symlink:
+            if solver_log.exists() or solver_log.is_symlink():
+                solver_log.unlink()
+            self._try_create_solver_log_symlink(solver_log)
+
         if solver_log.exists():
             self._log_file_path = solver_log
             try:
                 self.residual_graph.load_file(str(solver_log), target_vars=['h', 'p', 'rho'])
             except Exception:
                 traceback.print_exc()
+
+    def _try_create_solver_log_symlink(self, symlink_path: Path):
+        """log/RunSolver 최신 폴더에서 mpirun 솔버 로그를 찾아 log.Solver 심볼릭 링크 생성."""
+        log_base = Path(self.case_data.path) / "log" / "RunSolver"
+        if not log_base.exists():
+            return
+        try:
+            run_dirs = sorted(
+                [d for d in log_base.iterdir() if d.is_dir()],
+                key=lambda d: d.name, reverse=True
+            )
+            for run_dir in run_dirs:
+                target = self._find_solver_log_in_dir(run_dir)
+                if target and target.exists():
+                    symlink_path.symlink_to(target.resolve())
+                    return
+        except Exception:
+            traceback.print_exc()
+
+    def _find_solver_log_in_dir(self, run_dir: Path):
+        """디렉터리에서 mpirun 솔버 로그 파일을 찾는다 (*localhost*.log 우선, 없으면 최대 번호)."""
+        def num_key(f):
+            m = re.match(r'^(\d+)', f.name)
+            return int(m.group(1)) if m else 0
+
+        # 1. *localhost*.log 패턴 우선 (--host localhost 모드)
+        candidates = sorted(run_dir.glob("*localhost*.log"), key=num_key, reverse=True)
+        if candidates:
+            return candidates[0]
+
+        # 2. 가장 큰 번호의 .log 파일 (mpirun은 보통 마지막 번호)
+        all_logs = sorted(run_dir.glob("*.log"), key=num_key, reverse=True)
+        return all_logs[0] if all_logs else None
 
     def _detect_resume_state(self):
         """케이스 로드 시 이전 실행이 중단됐는지 감지하여 재개 상태를 설정."""
@@ -655,6 +719,8 @@ class RunView:
                 traceback.print_exc()
 
     def _on_simulation_finished(self):
+        if self._is_paused:
+            return  # 일시정지 중 정상 종료는 무시
         self._is_running = False
         self._last_run_completed = True
         self._stop_log_monitoring()
@@ -669,6 +735,8 @@ class RunView:
         self.ui.edit_run_finished.setText(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
     def _on_simulation_error(self):
+        if self._is_paused:
+            return  # 일시정지로 인한 프로세스 종료는 무시
         self._is_running = False
         self._stop_log_monitoring()
         self.ui.button_run.setEnabled(True)
@@ -681,6 +749,18 @@ class RunView:
         self.ui.edit_run_finished.setText(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
     def _restore_ui_after_run(self):
+        if self._is_paused:
+            # 일시정지 상태: Resume 버튼 표시, Run/Mesh 비활성
+            self._is_running = False
+            self.ui.button_run.setEnabled(False)
+            self.ui.button_stop.setEnabled(True)
+            self.ui.button_pause.setEnabled(True)
+            self.ui.button_pause.setText("Resume")
+            self.ui.button_mesh_generate.setEnabled(False)
+            self.ui.edit_run_status.setText("Paused")
+            self._stop_log_monitoring()
+            return
+
         self._is_running = False
         self.ui.button_run.setEnabled(True)
         self.ui.button_run.setText("Run Solver")

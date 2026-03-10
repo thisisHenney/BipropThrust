@@ -3,7 +3,7 @@ import traceback
 from pathlib import Path
 from PySide6.QtWidgets import (
     QApplication, QToolBar, QLabel, QComboBox, QSlider, QPushButton,
-    QProgressDialog, QHeaderView, QDoubleSpinBox
+    QHeaderView, QDoubleSpinBox
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
@@ -349,17 +349,11 @@ class GeometryView:
     def _start_async_loading(self, files: list):
         self._loading_total = len(files)
 
-        # Create QProgressDialog
-        self._progress_dialog = QProgressDialog(
-            "Loading geometry files...", "Cancel", 0, len(files), self.parent
-        )
-        self._progress_dialog.setWindowTitle("Loading")
-        self._progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
-        self._progress_dialog.setMinimumDuration(0)
-        self._progress_dialog.setValue(0)
-        self._progress_dialog.setStyleSheet(_get_progress_stylesheet(0))
-        self._progress_dialog.canceled.connect(self._on_loading_canceled)
-        self._progress_dialog.show()
+        # vtk_pre 인-위젯 프로그레스 바 표시
+        if self.vtk_pre:
+            self.vtk_pre.show_progress(
+                f"Loading geometry... (0/{len(files)})", value=0, maximum=len(files)
+            )
 
         # Connect mesh_loader signals
         self._loading_signals_connected = True
@@ -396,14 +390,11 @@ class GeometryView:
 
     def _on_loading_progress(self, current: int, total: int):
         try:
-            dialog = getattr(self, '_progress_dialog', None)
-            if dialog is not None:
-                progress_pct = (current / total) * 100 if total > 0 else 0
-                dialog.setValue(current)
-                dialog.setLabelText(f"Loading geometry files... ({current}/{total})")
-                dialog.setStyleSheet(_get_progress_stylesheet(progress_pct))
+            if self.vtk_pre:
+                self.vtk_pre.update_progress(
+                    current, label=f"Loading geometry... ({current}/{total})"
+                )
         except (RuntimeError, AttributeError):
-            # Dialog may have been closed during progress update
             pass
 
     def _on_loading_error(self, file_path: str, error_msg: str):
@@ -412,15 +403,13 @@ class GeometryView:
     def _on_loading_canceled(self):
         self.mesh_loader.cancel_async()
         self._cleanup_loading_signals()
-        if hasattr(self, '_progress_dialog') and self._progress_dialog:
-            self._progress_dialog.close()
-            self._progress_dialog = None
+        if self.vtk_pre:
+            self.vtk_pre.hide_progress()
 
     def _on_loading_finished(self):
-        # Close progress dialog
-        if hasattr(self, '_progress_dialog') and self._progress_dialog:
-            self._progress_dialog.close()
-            self._progress_dialog = None
+        # 프로그레스 바 숨기기
+        if self.vtk_pre:
+            self.vtk_pre.hide_progress()
 
         # Disconnect signals
         self._cleanup_loading_signals()
