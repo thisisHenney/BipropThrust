@@ -523,6 +523,15 @@ class RunView:
 
         commands = self._wrap_commands_with_logging(commands)
 
+        if self._solver_numbered_log is None:
+            for _cmd_tuple in commands:
+                _raw = _cmd_tuple[0] if isinstance(_cmd_tuple, tuple) else _cmd_tuple
+                if _raw.startswith("./log_cmd.sh "):
+                    parts = _raw.split()
+                    if len(parts) >= 2:
+                        self._solver_numbered_log = Path(parts[1])
+                    break
+
         if self._solver_numbered_log:
 
             if self._log_file_path.exists() or self._log_file_path.is_symlink():
@@ -560,6 +569,8 @@ class RunView:
         return "chtMultiRegionFoam"
 
     def _wrap_commands_with_logging(self, commands: list) -> list:
+        case_path = Path(self.case_data.path) / "5.CHTFCase"
+        app_name = self._get_application(case_path)
 
         logged_commands = []
 
@@ -571,23 +582,19 @@ class RunView:
 
                 logged_commands.append((cmd, display))
 
-            elif "mpirun" in cmd or "mpiexec" in cmd:
+            else:
 
                 cmd_name = self._extract_command_name(cmd)
 
                 log_file = self._log_dir / f"{i:02d}_{cmd_name}.log"
 
                 if self._solver_numbered_log is None:
-
-                    self._solver_numbered_log = log_file
-
-                logged_commands.append((f"./log_cmd.sh {log_file} {cmd}", display))
-
-            else:
-
-                cmd_name = self._extract_command_name(cmd)
-
-                log_file = self._log_dir / f"{i:02d}_{cmd_name}.log"
+                    is_solver = app_name and app_name in cmd
+                    is_mpi = "mpirun" in cmd or "mpiexec" in cmd
+                    if is_solver or (is_mpi and not any(
+                        util in cmd for util in ("decomposePar", "reconstructPar", "checkMesh")
+                    )):
+                        self._solver_numbered_log = log_file
 
                 logged_commands.append((f"./log_cmd.sh {log_file} {cmd}", display))
 
