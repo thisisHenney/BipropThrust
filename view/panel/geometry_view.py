@@ -96,8 +96,8 @@ class GeometryView:
         if self.vtk_pre:
             self.vtk_pre.obj_manager.show_individual_outlines = False
 
-        # Red sphere marker for probe position (shown when picking mode is off)
-        self._probe_marker_actor = None
+        # Red sphere markers for probe positions (one per selected object with saved position)
+        self._probe_marker_actors: list = []
         self._saved_view_style = None  # view style saved before entering picking mode
 
         # Setup tree for visibility column
@@ -931,6 +931,12 @@ class GeometryView:
             self.ui.edit_input_position_z.setText("")
             self.ui.AdvancedGroupBox.setEnabled(False)
             self.ui.button_geometry_apply.setEnabled(False)
+            # 저장된 probe 위치가 있는 오브젝트마다 빨간 구 표시
+            self._hide_probe_marker()
+            for name in selected_names:
+                pos = self.case_data.get_geometry_probe_position(name)
+                if pos is not None:
+                    self._add_probe_marker(*pos)
 
     def _highlight_object(self, obj_name: str):
         # Selection visual is now handled by ObjectManager._update_selection_visual()
@@ -1098,6 +1104,12 @@ class GeometryView:
             self.ui.edit_input_position_z.setText("")
             self.ui.AdvancedGroupBox.setEnabled(False)
             self.ui.button_geometry_apply.setEnabled(False)
+            # 저장된 probe 위치가 있는 오브젝트마다 빨간 구 표시
+            self._hide_probe_marker()
+            for name in selected_names:
+                pos = self.case_data.get_geometry_probe_position(name)
+                if pos is not None:
+                    self._add_probe_marker(*pos)
 
     def _on_probe_visibility_changed(self, is_visible: bool):
         if is_visible:
@@ -1133,8 +1145,8 @@ class GeometryView:
             pass
         return 0.005
 
-    def _show_probe_marker(self, x: float, y: float, z: float):
-        """빨간 구를 표시한다. 크기는 모든 오브젝트에서 공통으로 사용."""
+    def _add_probe_marker(self, x: float, y: float, z: float):
+        """빨간 구를 하나 추가한다 (기존 마커 유지). 다중 선택 지원."""
         if not self.vtk_pre:
             return
 
@@ -1146,9 +1158,6 @@ class GeometryView:
                 from vtk import vtkSphereSource, vtkPolyDataMapper, vtkActor
             except ImportError:
                 return
-
-        # Remove existing marker
-        self._hide_probe_marker()
 
         radius = self._get_probe_marker_radius()
 
@@ -1167,18 +1176,27 @@ class GeometryView:
         actor.GetProperty().SetOpacity(0.85)
 
         self.vtk_pre.renderer.AddActor(actor)
+        self._probe_marker_actors.append(actor)
         self.vtk_pre.vtk_widget.GetRenderWindow().Render()
-        self._probe_marker_actor = actor
+
+    def _show_probe_marker(self, x: float, y: float, z: float):
+        """기존 마커를 모두 지우고 빨간 구 하나를 표시한다 (단일 선택용)."""
+        self._hide_probe_marker()
+        self._add_probe_marker(x, y, z)
 
     def _hide_probe_marker(self):
-        """빨간 구 마커를 제거한다."""
-        if self._probe_marker_actor and self.vtk_pre:
+        """모든 빨간 구 마커를 제거한다."""
+        if not self.vtk_pre:
+            self._probe_marker_actors.clear()
+            return
+        for actor in self._probe_marker_actors:
             try:
-                self.vtk_pre.renderer.RemoveActor(self._probe_marker_actor)
-                self.vtk_pre.vtk_widget.GetRenderWindow().Render()
+                self.vtk_pre.renderer.RemoveActor(actor)
             except Exception:
                 pass
-        self._probe_marker_actor = None
+        if self._probe_marker_actors:
+            self.vtk_pre.vtk_widget.GetRenderWindow().Render()
+        self._probe_marker_actors.clear()
 
     def _on_clip_mode_changed(self, mode: str):
         mode_lower = mode.lower()

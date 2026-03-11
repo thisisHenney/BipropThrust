@@ -158,10 +158,11 @@ class CenterWidget(QWidget):
                     self._show_slice_toolbar("mesh")
                     # Sync toolbar visibility buttons
                     self.vtk_pre.set_visibility_mode("mesh")
-                    # Hide probe marker
+                    # Hide probe markers
                     geo_view = self.panel_views.get("Geometry")
-                    if geo_view and hasattr(geo_view, '_probe_marker_actor') and geo_view._probe_marker_actor:
-                        geo_view._probe_marker_actor.SetVisibility(False)
+                    if geo_view and hasattr(geo_view, '_probe_marker_actors') and geo_view._probe_marker_actors:
+                        for _m in geo_view._probe_marker_actors:
+                            _m.SetVisibility(False)
                         self.vtk_pre.vtk_widget.GetRenderWindow().Render()
                 return
         else:
@@ -185,10 +186,11 @@ class CenterWidget(QWidget):
                     self._show_slice_toolbar("geometry")
                     # Sync toolbar visibility buttons
                     self.vtk_pre.set_visibility_mode("geometry")
-                    # Restore probe marker if geometry view has one saved
+                    # Restore probe markers if geometry view has any saved
                     geo_view = self.panel_views.get("Geometry")
-                    if geo_view and hasattr(geo_view, '_probe_marker_actor') and geo_view._probe_marker_actor:
-                        geo_view._probe_marker_actor.SetVisibility(True)
+                    if geo_view and hasattr(geo_view, '_probe_marker_actors') and geo_view._probe_marker_actors:
+                        for _m in geo_view._probe_marker_actors:
+                            _m.SetVisibility(True)
                         self.vtk_pre.vtk_widget.GetRenderWindow().Render()
                 else:
                     # All other tabs - show mesh with slice
@@ -196,10 +198,11 @@ class CenterWidget(QWidget):
                     self._show_slice_toolbar("mesh")
                     # Sync toolbar visibility buttons
                     self.vtk_pre.set_visibility_mode("mesh")
-                    # Hide probe marker when leaving Geometry tab
+                    # Hide probe markers when leaving Geometry tab
                     geo_view = self.panel_views.get("Geometry")
-                    if geo_view and hasattr(geo_view, '_probe_marker_actor') and geo_view._probe_marker_actor:
-                        geo_view._probe_marker_actor.SetVisibility(False)
+                    if geo_view and hasattr(geo_view, '_probe_marker_actors') and geo_view._probe_marker_actors:
+                        for _m in geo_view._probe_marker_actors:
+                            _m.SetVisibility(False)
                         self.vtk_pre.vtk_widget.GetRenderWindow().Render()
 
     def _show_geometry_objects(self):
