@@ -176,7 +176,7 @@ class BipropThrustApp:
 
         except Exception as e:
 
-            import traceback옴
+            import traceback
 
             traceback.print_exc()
 
