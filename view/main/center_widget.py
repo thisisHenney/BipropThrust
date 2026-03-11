@@ -76,17 +76,57 @@ class CenterWidget(QWidget):
     def _on_step_clicked(self, step_key: str) -> None:
         self.step_nav.set_current(step_key)
 
+        # ── 상위 단계 ─────────────────────────────────────────────
         if step_key == "geometry":
             self.ui.stackedWidget.setCurrentWidget(self.ui.page_geometry)
             self._on_tab_geometry()
 
-        elif step_key == "mesh":
-            self.ui.stackedWidget.setCurrentWidget(self.ui.page_mesh_generation)
-            self._on_tab_mesh()
+        elif step_key == "setup":
+            # 부모 클릭 시 첫 번째 하위 항목으로 이동
+            self.ui.stackedWidget.setCurrentWidget(self.ui.page_models)
+            self._on_tab_mesh_like()
+
+        elif step_key == "solution":
+            self.ui.stackedWidget.setCurrentWidget(self.ui.page_numerical_conditions)
+            self._on_tab_mesh_like()
 
         elif step_key == "run":
             self.ui.stackedWidget.setCurrentWidget(self.ui.page_run)
             self._on_tab_run()
+
+        elif step_key == "results":
+            # 부모 클릭 시 Residual 독으로
+            self._on_tab_residual()
+
+        # ── 하위 항목 (Setup) ─────────────────────────────────────
+        elif step_key == "models":
+            self.ui.stackedWidget.setCurrentWidget(self.ui.page_models)
+            self._on_tab_mesh_like()
+
+        elif step_key == "initial_conditions":
+            self.ui.stackedWidget.setCurrentWidget(self.ui.page_initial_conditions)
+            self._on_tab_mesh_like()
+
+        elif step_key == "spray_mmh":
+            self.ui.stackedWidget.setCurrentWidget(self.ui.page_mmh)
+            self._on_tab_mesh_like()
+
+        elif step_key == "spray_nto":
+            self.ui.stackedWidget.setCurrentWidget(self.ui.page_nto)
+            self._on_tab_mesh_like()
+
+        # ── 하위 항목 (Solution) ──────────────────────────────────
+        elif step_key == "numerical":
+            self.ui.stackedWidget.setCurrentWidget(self.ui.page_numerical_conditions)
+            self._on_tab_mesh_like()
+
+        elif step_key == "run_cond":
+            self.ui.stackedWidget.setCurrentWidget(self.ui.page_run_conditions)
+            self._on_tab_mesh_like()
+
+        # ── 하위 항목 (Results) ───────────────────────────────────
+        elif step_key == "residual":
+            self._on_tab_residual()
 
         elif step_key == "post":
             self._on_tab_post()
@@ -112,10 +152,25 @@ class CenterWidget(QWidget):
             self.vtk_pre.set_visibility_mode("mesh")
             self._hide_probe_marker()
 
-    def _on_tab_run(self):
+    def _on_tab_mesh_like(self):
+        """Setup/Solution 하위 항목 — 메시 VTK 뷰 유지."""
+        if self.vtk_pre:
+            self._show_mesh_objects()
+            self._show_slice_toolbar("mesh")
+            self.vtk_pre.set_visibility_mode("mesh")
+            self._hide_probe_marker()
+
+    def _on_tab_residual(self):
         if self.dock_manager:
-            self.dock_manager.change_dock_tab(4)  # Residual 그래프 독
+            self.dock_manager.change_dock_tab(4)
         self._load_residual_log()
+        if self.vtk_pre:
+            self._show_mesh_objects()
+            self._show_slice_toolbar("mesh")
+            self.vtk_pre.set_visibility_mode("mesh")
+            self._hide_probe_marker()
+
+    def _on_tab_run(self):
         if self.vtk_pre:
             self._show_mesh_objects()
             self._show_slice_toolbar("mesh")
