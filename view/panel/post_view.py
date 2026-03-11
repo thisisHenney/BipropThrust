@@ -14,134 +14,7 @@ from typing import Optional
 
 import vtk
 
-from PySide6.QtCore import QObject, QThread, Signal
-
 from common.case_data import case_data
-
-class _SprayWorker(QObject):
-
-    """Lagrangian 입자 데이터 추출을 백그라운드에서 실행하는 Worker.
-
-    append.Update()는 데이터 처리만 하므로 스레드 안전합니다.
-    추출 결과(vtkUnstructuredGrid + d_range)를 시그널로 전달하면
-    메인 스레드에서 mapper/actor를 생성해 렌더러에 추가합니다.
-    """
-
-    finished = Signal(object, tuple)
-
-    def __init__(self, reader, parent=None):
-
-        super().__init__(parent)
-
-        self._reader = reader
-
-    def run(self):
-
-        try:
-
-            from vtkmodules.vtkFiltersCore import vtkAppendFilter
-
-            mb = self._reader.GetOutput()
-
-            if mb is None:
-
-                self.finished.emit(None, ())
-
-                return
-
-            append = vtkAppendFilter()
-
-            append.MergePointsOff()
-
-            count = 0
-
-            def _block_name(parent_obj, idx):
-
-                try:
-
-                    meta = parent_obj.GetMetaData(idx)
-
-                    key = vtk.vtkCompositeDataSet.NAME()
-
-                    if meta and meta.Has(key):
-
-                        return meta.Get(key)
-
-                except Exception:
-
-                    pass
-
-                return ''
-
-            def _collect(data_obj, parent_obj=None, idx=0):
-
-                nonlocal count
-
-                if data_obj is None:
-
-                    return
-
-                name = _block_name(parent_obj, idx) if parent_obj is not None else ''
-
-                if 'Tracks' in name:
-
-                    return
-
-                if not hasattr(data_obj, 'GetNumberOfBlocks'):
-
-                    if (hasattr(data_obj, 'GetPointData') and
-                            hasattr(data_obj, 'GetNumberOfPoints') and
-                            data_obj.GetNumberOfPoints() > 0):
-
-                        try:
-
-                            if data_obj.GetPointData().HasArray('d'):
-
-                                append.AddInputData(data_obj)
-
-                                count += 1
-
-                        except Exception:
-
-                            pass
-
-                    return
-
-                for i in range(data_obj.GetNumberOfBlocks()):
-
-                    _collect(data_obj.GetBlock(i), data_obj, i)
-
-            _collect(mb)
-
-            if count == 0:
-
-                self.finished.emit(None, ())
-
-                return
-
-            append.Update()
-
-            ug = append.GetOutput()
-
-            if ug is None or ug.GetNumberOfPoints() == 0:
-
-                self.finished.emit(None, ())
-
-                return
-
-            arr = ug.GetPointData().GetArray('d')
-
-            if arr is None:
-
-                self.finished.emit(None, ())
-
-                return
-
-            self.finished.emit(ug, arr.GetRange())
-
-        except Exception:
-
-            self.finished.emit(None, ())
 
 class PostView:
 
@@ -156,10 +29,6 @@ class PostView:
         self._results_loaded = False
 
         self._spray_actor: Optional[vtk.vtkActor] = None
-
-        self._spray_thread = None
-
-        self._spray_worker = None
 
         if self.vtk_post:
 
@@ -292,34 +161,70 @@ class PostView:
             vp.field_combo.setCurrentIndex(0)
 
     def _add_spray_overlay(self):
+        """Lagrangian 파티클 추출 및 오버레이 추가 (동기, 메인 스레드).
 
-        """Lagrangian 파티클 추출을 백그라운드 스레드에서 실행.
-
-        append.Update()만 스레드에서 처리하고,
-        mapper/actor 생성 및 renderer 추가는 _on_spray_ready() 콜백(메인 스레드)에서 수행.
+        VTK는 스레드 안전하지 않으므로 모든 VTK 작업은 메인 스레드에서 실행.
+        835개 파티클 extract는 수ms로 충분히 빠름.
         """
-
         vp = self.vtk_post
-
         if not vp or not vp.reader:
-
             return
 
-        self._spray_worker = _SprayWorker(vp.reader)
+        mb = vp.reader.GetOutput()
+        if mb is None:
+            return
 
-        self._spray_thread = QThread()
+        from vtkmodules.vtkFiltersCore import vtkAppendFilter
+        append = vtkAppendFilter()
+        append.MergePointsOff()
+        count = 0
 
-        self._spray_worker.moveToThread(self._spray_thread)
+        def _block_name(parent_obj, idx):
+            try:
+                meta = parent_obj.GetMetaData(idx)
+                key = vtk.vtkCompositeDataSet.NAME()
+                if meta and meta.Has(key):
+                    return meta.Get(key)
+            except Exception:
+                pass
+            return ''
 
-        self._spray_thread.started.connect(self._spray_worker.run)
+        def _collect(data_obj, parent_obj=None, idx=0):
+            nonlocal count
+            if data_obj is None:
+                return
+            name = _block_name(parent_obj, idx) if parent_obj is not None else ''
+            if 'Tracks' in name:
+                return
+            if not hasattr(data_obj, 'GetNumberOfBlocks'):
+                if (hasattr(data_obj, 'GetPointData') and
+                        hasattr(data_obj, 'GetNumberOfPoints') and
+                        data_obj.GetNumberOfPoints() > 0):
+                    try:
+                        if data_obj.GetPointData().HasArray('d'):
+                            append.AddInputData(data_obj)
+                            count += 1
+                    except Exception:
+                        pass
+                return
+            for i in range(data_obj.GetNumberOfBlocks()):
+                _collect(data_obj.GetBlock(i), data_obj, i)
 
-        self._spray_worker.finished.connect(self._on_spray_ready)
+        _collect(mb)
 
-        self._spray_worker.finished.connect(self._spray_thread.quit)
+        if count == 0:
+            return
 
-        self._spray_thread.finished.connect(self._spray_thread.deleteLater)
+        append.Update()
+        ug = append.GetOutput()
+        if ug is None or ug.GetNumberOfPoints() == 0:
+            return
 
-        self._spray_thread.start()
+        arr = ug.GetPointData().GetArray('d')
+        if arr is None:
+            return
+
+        self._on_spray_ready(ug, arr.GetRange())
 
     def _on_spray_ready(self, ug, d_range: tuple):
 
