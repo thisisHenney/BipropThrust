@@ -11,8 +11,88 @@ from pathlib import Path
 from typing import Optional
 
 import vtk
+from PySide6.QtCore import QObject, QThread, Signal
 
 from common.case_data import case_data
+
+
+class _SprayWorker(QObject):
+    """Lagrangian 입자 데이터 추출을 백그라운드에서 실행하는 Worker.
+
+    append.Update()는 데이터 처리만 하므로 스레드 안전합니다.
+    추출 결과(vtkUnstructuredGrid + d_range)를 시그널로 전달하면
+    메인 스레드에서 mapper/actor를 생성해 렌더러에 추가합니다.
+    """
+    finished = Signal(object, tuple)  # (ug | None, d_range | ())
+
+    def __init__(self, reader, parent=None):
+        super().__init__(parent)
+        self._reader = reader
+
+    def run(self):
+        try:
+            from vtkmodules.vtkFiltersCore import vtkAppendFilter
+            mb = self._reader.GetOutput()
+            if mb is None:
+                self.finished.emit(None, ())
+                return
+
+            append = vtkAppendFilter()
+            append.MergePointsOff()
+            count = 0
+
+            def _block_name(parent_obj, idx):
+                try:
+                    meta = parent_obj.GetMetaData(idx)
+                    key = vtk.vtkCompositeDataSet.NAME()
+                    if meta and meta.Has(key):
+                        return meta.Get(key)
+                except Exception:
+                    pass
+                return ''
+
+            def _collect(data_obj, parent_obj=None, idx=0):
+                nonlocal count
+                if data_obj is None:
+                    return
+                name = _block_name(parent_obj, idx) if parent_obj is not None else ''
+                if 'Tracks' in name:
+                    return
+                if not hasattr(data_obj, 'GetNumberOfBlocks'):
+                    if (hasattr(data_obj, 'GetPointData') and
+                            hasattr(data_obj, 'GetNumberOfPoints') and
+                            data_obj.GetNumberOfPoints() > 0):
+                        try:
+                            if data_obj.GetPointData().HasArray('d'):
+                                append.AddInputData(data_obj)
+                                count += 1
+                        except Exception:
+                            pass
+                    return
+                for i in range(data_obj.GetNumberOfBlocks()):
+                    _collect(data_obj.GetBlock(i), data_obj, i)
+
+            _collect(mb)
+
+            if count == 0:
+                self.finished.emit(None, ())
+                return
+
+            append.Update()
+            ug = append.GetOutput()
+            if ug is None or ug.GetNumberOfPoints() == 0:
+                self.finished.emit(None, ())
+                return
+
+            arr = ug.GetPointData().GetArray('d')
+            if arr is None:
+                self.finished.emit(None, ())
+                return
+
+            self.finished.emit(ug, arr.GetRange())
+
+        except Exception:
+            self.finished.emit(None, ())
 
 
 class PostView:
@@ -23,6 +103,8 @@ class PostView:
         self.case_data = case_data
         self._results_loaded = False
         self._spray_actor: Optional[vtk.vtkActor] = None
+        self._spray_thread = None
+        self._spray_worker = None
 
         # 케이스 로드 완료 시그널 연결 (로드 후 오버레이·카메라 설정)
         if self.vtk_post:
@@ -129,73 +211,37 @@ class PostView:
             vp.field_combo.setCurrentIndex(0)
 
     def _add_spray_overlay(self):
-        """vtkOpenFOAMReader 출력에서 Lagrangian 파티클을 추출해 오버레이로 추가.
+        """Lagrangian 파티클 추출을 백그라운드 스레드에서 실행.
 
-        isinstance 체크 없이 덕타이핑으로 vtkPolyData/vtkUnstructuredGrid 모두 지원.
-        vtkDataSetMapper 사용으로 PolyData 전용 제약 없음.
+        append.Update()만 스레드에서 처리하고,
+        mapper/actor 생성 및 renderer 추가는 _on_spray_ready() 콜백(메인 스레드)에서 수행.
         """
         vp = self.vtk_post
         if not vp or not vp.reader:
             return
 
-        mb = vp.reader.GetOutput()
-        if mb is None:
+        self._spray_worker = _SprayWorker(vp.reader)
+        self._spray_thread = QThread()
+        self._spray_worker.moveToThread(self._spray_thread)
+
+        self._spray_thread.started.connect(self._spray_worker.run)
+        self._spray_worker.finished.connect(self._on_spray_ready)
+        self._spray_worker.finished.connect(self._spray_thread.quit)
+        self._spray_thread.finished.connect(self._spray_thread.deleteLater)
+
+        self._spray_thread.start()
+
+    def _on_spray_ready(self, ug, d_range: tuple):
+        """스프레이 데이터 추출 완료 → 메인 스레드에서 actor 생성 및 추가."""
+        self._spray_worker = None
+        self._spray_thread = None
+
+        if ug is None or not d_range:
             return
 
-        # vtkAppendFilter: PolyData·UnstructuredGrid 모두 수용
-        from vtkmodules.vtkFiltersCore import vtkAppendFilter
-        append = vtkAppendFilter()
-        append.MergePointsOff()
-        count = [0]
-
-        def _block_name(parent, idx: int) -> str:
-            """부모 복합 데이터셋에서 idx번 블록 이름 반환."""
-            try:
-                meta = parent.GetMetaData(idx)
-                key = vtk.vtkCompositeDataSet.NAME()
-                if meta and meta.Has(key):
-                    return meta.Get(key)
-            except Exception:
-                pass
-            return ''
-
-        def _collect(data_obj, parent=None, idx: int = 0):
-            if data_obj is None:
-                return
-            name = _block_name(parent, idx) if parent is not None else ''
-            # Tracks(궤적 전체)는 제외 – 현재 위치 클라우드만 표시
-            if 'Tracks' in name:
-                return
-            # 리프 노드: 'd' 포인트 배열 확인
-            if not hasattr(data_obj, 'GetNumberOfBlocks'):
-                if (hasattr(data_obj, 'GetPointData') and
-                        hasattr(data_obj, 'GetNumberOfPoints') and
-                        data_obj.GetNumberOfPoints() > 0):
-                    try:
-                        if data_obj.GetPointData().HasArray('d'):
-                            append.AddInputData(data_obj)
-                            count[0] += 1
-                    except Exception:
-                        pass
-                return
-            # 복합 데이터셋: 재귀
-            for i in range(data_obj.GetNumberOfBlocks()):
-                _collect(data_obj.GetBlock(i), data_obj, i)
-
-        _collect(mb)
-
-        if count[0] == 0:
+        vp = self.vtk_post
+        if not vp:
             return
-
-        append.Update()
-        ug = append.GetOutput()
-        if ug is None or ug.GetNumberOfPoints() == 0:
-            return
-
-        arr = ug.GetPointData().GetArray('d')
-        if arr is None:
-            return
-        d_range = arr.GetRange()
 
         # Blue → Red LUT (파라뷰 Cool-to-Warm 방향)
         lut = vtk.vtkLookupTable()
