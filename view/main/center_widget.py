@@ -159,7 +159,7 @@ class CenterWidget(QWidget):
                     # Sync toolbar visibility buttons
                     self.vtk_pre.set_visibility_mode("mesh")
                     # Hide probe markers
-                    geo_view = self.panel_views.get("Geometry")
+                    geo_view = self.panel_views.get("geometry")
                     if geo_view and hasattr(geo_view, '_probe_marker_actors') and geo_view._probe_marker_actors:
                         for _m in geo_view._probe_marker_actors:
                             _m.SetVisibility(False)
@@ -187,7 +187,7 @@ class CenterWidget(QWidget):
                     # Sync toolbar visibility buttons
                     self.vtk_pre.set_visibility_mode("geometry")
                     # Restore probe markers if geometry view has any saved
-                    geo_view = self.panel_views.get("Geometry")
+                    geo_view = self.panel_views.get("geometry")
                     if geo_view and hasattr(geo_view, '_probe_marker_actors') and geo_view._probe_marker_actors:
                         for _m in geo_view._probe_marker_actors:
                             _m.SetVisibility(True)
@@ -199,7 +199,7 @@ class CenterWidget(QWidget):
                     # Sync toolbar visibility buttons
                     self.vtk_pre.set_visibility_mode("mesh")
                     # Hide probe markers when leaving Geometry tab
-                    geo_view = self.panel_views.get("Geometry")
+                    geo_view = self.panel_views.get("geometry")
                     if geo_view and hasattr(geo_view, '_probe_marker_actors') and geo_view._probe_marker_actors:
                         for _m in geo_view._probe_marker_actors:
                             _m.SetVisibility(False)
