@@ -1,5 +1,7 @@
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QScrollArea
-from PySide6.QtCore import Signal, Qt, QPropertyAnimation, QEasingCurve
+from PySide6.QtCore import Signal, Qt
+
+from view.style.theme import get_colors
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -25,6 +27,11 @@ STEP_TREE = [
 ]
 
 
+def _c():
+    """현재 테마 색상 반환."""
+    return get_colors()
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # SubItem – 하위 항목 버튼
 # ─────────────────────────────────────────────────────────────────────────────
@@ -38,13 +45,11 @@ class SubItem(QWidget):
         self._setup_ui(name)
 
     def _setup_ui(self, name: str):
-        self.setFixedHeight(32)
+        self.setFixedHeight(26)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
 
-        # 왼쪽 액센트 바 (active 시 표시)
         self._accent = QFrame(self)
         self._accent.setFixedWidth(3)
-        self._accent.setStyleSheet("background-color: transparent;")
 
         outer = QHBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -52,30 +57,34 @@ class SubItem(QWidget):
         outer.addWidget(self._accent)
 
         inner = QHBoxLayout()
-        inner.setContentsMargins(22, 0, 10, 0)   # 들여쓰기
-        inner.setSpacing(6)
+        inner.setContentsMargins(28, 0, 8, 0)
+        inner.setSpacing(4)
         outer.addLayout(inner)
 
-        dot = QLabel("·")
-        dot.setStyleSheet("color: #555; font-size: 14px;")
-        dot.setFixedWidth(10)
-        inner.addWidget(dot)
-
         self._label = QLabel(name)
-        self._label.setStyleSheet("color: #777777; font-size: 10px;")
+        self._label.setStyleSheet(f"font-size: 10px; color: {_c()['text_dim']};")
         inner.addWidget(self._label, 1)
 
-        self.setStyleSheet("SubItem { background-color: transparent; }")
+        self._apply_style()
 
     def set_active(self, active: bool):
         self._active = active
-        if active:
-            self._accent.setStyleSheet("background-color: #3a7bd5;")
-            self._label.setStyleSheet("color: #ffffff; font-size: 10px; font-weight: bold;")
-            self.setStyleSheet("SubItem { background-color: rgba(58,123,213,0.10); }")
+        self._apply_style()
+
+    def _apply_style(self):
+        c = _c()
+        if self._active:
+            self._accent.setStyleSheet(f"background-color: {c['accent']};")
+            self._label.setStyleSheet(
+                f"font-size: 10px; color: {c['highlight_text']}; font-weight: bold;"
+            )
+            self.setStyleSheet(
+                f"SubItem {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1,"
+                f" stop:0 {c['tree_sel_start']}, stop:1 {c['tree_sel_end']}); }}"
+            )
         else:
             self._accent.setStyleSheet("background-color: transparent;")
-            self._label.setStyleSheet("color: #777777; font-size: 10px;")
+            self._label.setStyleSheet(f"font-size: 10px; color: {c['text_dim']};")
             self.setStyleSheet("SubItem { background-color: transparent; }")
 
     def mousePressEvent(self, event):
@@ -85,14 +94,12 @@ class SubItem(QWidget):
 
     def enterEvent(self, event):
         if not self._active:
-            self.setStyleSheet("SubItem { background-color: rgba(255,255,255,0.05); }")
+            c = _c()
+            self.setStyleSheet(f"SubItem {{ background-color: {c['tree_hover']}; }}")
         super().enterEvent(event)
 
     def leaveEvent(self, event):
-        if self._active:
-            self.setStyleSheet("SubItem { background-color: rgba(58,123,213,0.10); }")
-        else:
-            self.setStyleSheet("SubItem { background-color: transparent; }")
+        self._apply_style()
         super().leaveEvent(event)
 
 
@@ -100,8 +107,8 @@ class SubItem(QWidget):
 # StepItem – 상위 단계 버튼 (하위 항목 포함 가능)
 # ─────────────────────────────────────────────────────────────────────────────
 class StepItem(QWidget):
-    clicked    = Signal(str)   # step_key
-    sub_clicked = Signal(str)  # sub_key
+    clicked     = Signal(str)
+    sub_clicked = Signal(str)
 
     STATUS_NONE    = "none"
     STATUS_CURRENT = "current"
@@ -124,7 +131,7 @@ class StepItem(QWidget):
 
         # ── 헤더 행 ──────────────────────────────────────────────
         self._header = QWidget()
-        self._header.setFixedHeight(48)
+        self._header.setFixedHeight(30)
         self._header.setCursor(Qt.CursorShape.PointingHandCursor)
 
         self._accent = QFrame(self._header)
@@ -136,12 +143,13 @@ class StepItem(QWidget):
         h_outer.addWidget(self._accent)
 
         h_inner = QHBoxLayout()
-        h_inner.setContentsMargins(10, 4, 10, 4)
-        h_inner.setSpacing(8)
+        h_inner.setContentsMargins(6, 2, 8, 2)
+        h_inner.setSpacing(6)
         h_outer.addLayout(h_inner)
 
+        # 단계 번호 (작은 원형)
         self._circle = QLabel(str(number))
-        self._circle.setFixedSize(26, 26)
+        self._circle.setFixedSize(18, 18)
         self._circle.setAlignment(Qt.AlignmentFlag.AlignCenter)
         h_inner.addWidget(self._circle)
 
@@ -150,14 +158,14 @@ class StepItem(QWidget):
 
         if sub_items:
             self._expand_label = QLabel("▶")
-            self._expand_label.setFixedWidth(12)
+            self._expand_label.setFixedWidth(10)
             self._expand_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            self._expand_label.setStyleSheet("color: #555; font-size: 8px;")
             h_inner.addWidget(self._expand_label)
+            self._status_label = None
         else:
             self._expand_label = None
             self._status_label = QLabel("○")
-            self._status_label.setFixedWidth(14)
+            self._status_label.setFixedWidth(12)
             self._status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             h_inner.addWidget(self._status_label)
 
@@ -178,7 +186,6 @@ class StepItem(QWidget):
         self._sub_container.setVisible(False)
         root.addWidget(self._sub_container)
 
-        # 헤더 클릭 이벤트
         self._header.mousePressEvent = self._on_header_click
 
     def _on_header_click(self, event):
@@ -213,44 +220,66 @@ class StepItem(QWidget):
         self._apply_style()
 
     def _apply_style(self):
+        c = _c()
         has_sub = bool(self._sub_items)
+
         if self._status == self.STATUS_CURRENT:
-            self._accent.setStyleSheet("background-color: #3a7bd5;")
+            self._accent.setStyleSheet(f"background-color: {c['accent']};")
             self._circle.setStyleSheet(
-                "background-color: #3a7bd5; border-radius: 13px;"
-                " color: white; font-weight: bold; font-size: 12px;"
+                f"background-color: {c['accent']}; border-radius: 9px;"
+                f" color: {c['highlight_text']}; font-weight: bold; font-size: 10px;"
             )
-            self._name_label.setStyleSheet("color: #ffffff; font-weight: bold; font-size: 11px;")
-            self._header.setStyleSheet("QWidget { background-color: rgba(58,123,213,0.12); }")
-            if not has_sub:
+            self._name_label.setStyleSheet(
+                f"color: {c['highlight_text']}; font-weight: bold; font-size: 11px;"
+            )
+            self._header.setStyleSheet(
+                f"QWidget {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1,"
+                f" stop:0 {c['tree_sel_start']}, stop:1 {c['tree_sel_end']}); }}"
+            )
+            if has_sub and self._expand_label:
+                self._expand_label.setStyleSheet(
+                    f"color: {c['highlight_text']}; font-size: 8px;"
+                )
+            elif self._status_label:
                 self._status_label.setText("●")
-                self._status_label.setStyleSheet("color: #3a7bd5; font-size: 10px;")
+                self._status_label.setStyleSheet(f"color: {c['highlight_text']}; font-size: 9px;")
+
         elif self._status == self.STATUS_DONE:
             self._accent.setStyleSheet("background-color: transparent;")
             self._circle.setStyleSheet(
-                "background-color: #2d4a2d; border-radius: 13px;"
-                " color: #5cb85c; font-weight: bold; font-size: 12px;"
+                f"background-color: {c['mid']}; border-radius: 9px;"
+                f" color: {c['accent']}; font-weight: bold; font-size: 10px;"
             )
-            self._name_label.setStyleSheet("color: #888888; font-size: 11px;")
+            self._name_label.setStyleSheet(
+                f"color: {c['text_dim']}; font-size: 11px;"
+            )
             self._header.setStyleSheet("")
-            if not has_sub:
+            if has_sub and self._expand_label:
+                self._expand_label.setStyleSheet(f"color: {c['text_dim']}; font-size: 8px;")
+            elif self._status_label:
                 self._status_label.setText("✓")
-                self._status_label.setStyleSheet("color: #5cb85c; font-size: 10px;")
-        else:
+                self._status_label.setStyleSheet(f"color: {c['accent']}; font-size: 9px;")
+
+        else:  # NONE
             self._accent.setStyleSheet("background-color: transparent;")
             self._circle.setStyleSheet(
-                "background-color: #2d2d2d; border-radius: 13px;"
-                " color: #666666; font-size: 12px;"
+                f"background-color: {c['mid']}; border-radius: 9px;"
+                f" color: {c['text_dim']}; font-size: 10px;"
             )
-            self._name_label.setStyleSheet("color: #777777; font-size: 11px;")
+            self._name_label.setStyleSheet(
+                f"color: {c['text_dim']}; font-size: 11px;"
+            )
             self._header.setStyleSheet("")
-            if not has_sub:
+            if has_sub and self._expand_label:
+                self._expand_label.setStyleSheet(f"color: {c['text_dim']}; font-size: 8px;")
+            elif self._status_label:
                 self._status_label.setText("○")
-                self._status_label.setStyleSheet("color: #555555; font-size: 10px;")
+                self._status_label.setStyleSheet(f"color: {c['text_dim']}; font-size: 9px;")
 
     def enterEvent(self, event):
         if self._status != self.STATUS_CURRENT:
-            self._header.setStyleSheet("QWidget { background-color: rgba(255,255,255,0.05); }")
+            c = _c()
+            self._header.setStyleSheet(f"QWidget {{ background-color: {c['tree_hover']}; }}")
         super().enterEvent(event)
 
     def leaveEvent(self, event):
@@ -262,28 +291,27 @@ class StepItem(QWidget):
 # StepNavWidget – 전체 네비게이션 패널
 # ─────────────────────────────────────────────────────────────────────────────
 class StepNavWidget(QWidget):
-    step_clicked = Signal(str)   # step_key 또는 sub_key
+    step_clicked = Signal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._step_items: dict[str, StepItem] = {}
-        # sub_key → parent step_key 매핑
         self._sub_parent: dict[str, str] = {}
         self._setup_ui()
 
     def _setup_ui(self):
-        self.setFixedWidth(175)
+        c = _c()
+        self.setFixedWidth(180)
         self.setObjectName("StepNavWidget")
         self.setStyleSheet(
-            "QWidget#StepNavWidget { background-color: #1e1e1e;"
-            " border-right: 1px solid #333333; }"
+            f"QWidget#StepNavWidget {{ background-color: {c['base']};"
+            f" border-right: 1px solid {c['border_light']}; }}"
         )
 
         outer_layout = QVBoxLayout(self)
         outer_layout.setContentsMargins(0, 0, 0, 0)
         outer_layout.setSpacing(0)
 
-        # 스크롤 가능하도록 감싸기
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -292,34 +320,14 @@ class StepNavWidget(QWidget):
         outer_layout.addWidget(scroll)
 
         container = QWidget()
-        container.setStyleSheet("background-color: #1e1e1e;")
+        container.setStyleSheet(f"background-color: {c['base']};")
         scroll.setWidget(container)
 
         layout = QVBoxLayout(container)
-        layout.setContentsMargins(0, 16, 0, 16)
+        layout.setContentsMargins(0, 4, 0, 8)
         layout.setSpacing(0)
 
-        # 타이틀
-        title = QLabel("WORKFLOW")
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title.setStyleSheet(
-            "color: #555555; font-size: 9px; font-weight: bold;"
-            " letter-spacing: 2px; padding-bottom: 14px;"
-        )
-        layout.addWidget(title)
-
         for i, (key, name, subs) in enumerate(STEP_TREE):
-            # 단계 사이 연결선
-            if i > 0:
-                connector = QFrame()
-                connector.setFixedSize(2, 8)
-                connector.setStyleSheet("background-color: #2e2e2e;")
-                wrapper = QHBoxLayout()
-                wrapper.setContentsMargins(31, 0, 0, 0)
-                wrapper.addWidget(connector)
-                wrapper.addStretch()
-                layout.addLayout(wrapper)
-
             item = StepItem(key, i + 1, name, subs)
             item.clicked.connect(self._on_step_clicked)
             item.sub_clicked.connect(self._on_sub_clicked)
@@ -330,12 +338,19 @@ class StepNavWidget(QWidget):
 
             layout.addWidget(item)
 
+            # 구분선 (하위 항목 없는 단계 사이)
+            if i < len(STEP_TREE) - 1:
+                sep = QFrame()
+                sep.setFrameShape(QFrame.Shape.HLine)
+                sep.setStyleSheet(f"color: {c['border_light']}; margin: 0px 8px;")
+                sep.setFixedHeight(1)
+                layout.addWidget(sep)
+
         layout.addStretch(1)
 
     # ── 내부 핸들러 ───────────────────────────────────────────────
 
     def _on_step_clicked(self, step_key: str):
-        # 하위 항목이 없는 단계 → 활성화
         step = self._step_items.get(step_key)
         if step and not step._sub_items:
             self._activate_step(step_key)
@@ -350,14 +365,12 @@ class StepNavWidget(QWidget):
     # ── 공개 API ──────────────────────────────────────────────────
 
     def set_current(self, key: str):
-        """step_key 또는 sub_key를 활성 상태로 설정."""
         if key in self._step_items:
             self._activate_step(key)
         elif key in self._sub_parent:
             self._activate_sub(self._sub_parent[key], key)
 
     def _activate_step(self, step_key: str):
-        """하위 없는 단계를 current로, 순서에 따라 done/none 설정."""
         step_keys = [k for k, _, _ in STEP_TREE]
         try:
             current_idx = step_keys.index(step_key)
@@ -377,7 +390,6 @@ class StepNavWidget(QWidget):
                 item.set_status(StepItem.STATUS_NONE)
 
     def _activate_sub(self, parent_key: str, sub_key: str):
-        """하위 항목을 활성화, 부모 단계를 current로 설정."""
         step_keys = [k for k, _, _ in STEP_TREE]
         try:
             parent_idx = step_keys.index(parent_key)
