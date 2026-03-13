@@ -53,14 +53,25 @@ class PrepareMeshThread(QThread):
 
         self.bounds = bounds
 
+        self._stop_requested = False
+
+    def stop(self):
+        self._stop_requested = True
+
     def run(self):
 
         try:
+
+            if self._stop_requested:
+                return
 
             if not self.view._update_blockmesh_dict(self.cells_x, self.cells_y, self.cells_z, bounds=self.bounds):
 
                 self.finished_error.emit("Failed to update blockMeshDict")
 
+                return
+
+            if self._stop_requested:
                 return
 
             if not self.view._update_snappyhex_dict():
@@ -69,10 +80,16 @@ class PrepareMeshThread(QThread):
 
                 return
 
+            if self._stop_requested:
+                return
+
             if not self.view._update_surface_feature_extract_dict():
 
                 self.finished_error.emit("Failed to update surfaceFeatureExtractDict")
 
+                return
+
+            if self._stop_requested:
                 return
 
             if not self.view._update_castellation_settings():
@@ -81,10 +98,16 @@ class PrepareMeshThread(QThread):
 
                 return
 
+            if self._stop_requested:
+                return
+
             if not self.view._update_snap_settings():
 
                 self.finished_error.emit("Failed to update snap settings")
 
+                return
+
+            if self._stop_requested:
                 return
 
             if not self.view._update_boundary_layer_settings():
@@ -492,11 +515,19 @@ class MeshGenerationView:
 
         self._flat_geometries = geom_view._flat_geometries if geom_view else set()
 
+        # 기존 스레드가 실행 중이면 취소 후 대기
+        if hasattr(self, 'prepare_thread') and self.prepare_thread is not None:
+            if self.prepare_thread.isRunning():
+                self.prepare_thread.stop()
+                self.prepare_thread.wait(3000)
+
         self.prepare_thread = PrepareMeshThread(self, x, y, z, bounds=geom_bounds)
 
         self.prepare_thread.finished_success.connect(self._on_preparation_finished)
 
         self.prepare_thread.finished_error.connect(self._on_preparation_error)
+
+        self.prepare_thread.finished.connect(self.prepare_thread.deleteLater)
 
         self.prepare_thread.start()
 
@@ -805,13 +836,26 @@ class MeshGenerationView:
 
         if parts[0] in ("mpirun", "mpiexec"):
 
+            MPIRUN_VALUE_FLAGS = {
+                '-n', '-np', '-c',
+                '--hostfile', '-hostfile', '--machinefile',
+                '--host', '-host',
+                '--wdir', '-wdir',
+                '--mca', '-mca',
+                '-x',
+                '--rankfile',
+                '--output-filename',
+            }
+
             i = 1
 
             while i < len(parts) and parts[i].startswith("-"):
 
+                flag = parts[i]
+
                 i += 1
 
-                if i < len(parts) and not parts[i - 1].startswith("--"):
+                if flag in MPIRUN_VALUE_FLAGS and i < len(parts):
 
                     i += 1
 
@@ -1340,71 +1384,49 @@ FoamFile
 
             return
 
-        class MeshLoadThread(QThread):
+        QTimer.singleShot(0, lambda: self._load_mesh_on_main_thread(mesh_case_path))
 
-            def __init__(self, view, case_path):
+    def _load_mesh_on_main_thread(self, mesh_case_path):
 
-                super().__init__()
+        try:
 
-                self.view = view
+            foam_file = mesh_case_path / "case.foam"
 
-                self.case_path = case_path
+            if not foam_file.exists():
 
-                self.reader = None
+                foam_file.write_text("", encoding="utf-8")
 
-                self.success = False
+            reader = vtk.vtkOpenFOAMReader()
 
-            def run(self):
+            reader.SetFileName(str(foam_file))
 
-                try:
+            if hasattr(reader, "SetCreateCellToPointOn"):
 
-                    foam_file = self.case_path / "case.foam"
+                reader.SetCreateCellToPointOn()
 
-                    if not foam_file.exists():
+            elif hasattr(reader, "SetCreateCellToPoint"):
 
-                        foam_file.write_text("", encoding="utf-8")
+                reader.SetCreateCellToPoint(1)
 
-                    reader = vtk.vtkOpenFOAMReader()
+            if hasattr(reader, "DecomposePolyhedraOn"):
 
-                    reader.SetFileName(str(foam_file))
+                reader.DecomposePolyhedraOn()
 
-                    if hasattr(reader, "SetCreateCellToPointOn"):
+            elif hasattr(reader, "SetDecomposePolyhedra"):
 
-                        reader.SetCreateCellToPointOn()
+                reader.SetDecomposePolyhedra(1)
 
-                    elif hasattr(reader, "SetCreateCellToPoint"):
+            reader.Update()
 
-                        reader.SetCreateCellToPoint(1)
+            self._on_openfoam_case_loaded(reader)
 
-                    if hasattr(reader, "DecomposePolyhedraOn"):
+        except Exception:
 
-                        reader.DecomposePolyhedraOn()
+            import traceback
 
-                    elif hasattr(reader, "SetDecomposePolyhedra"):
+            traceback.print_exc()
 
-                        reader.SetDecomposePolyhedra(1)
-
-                    reader.Update()
-
-                    self.reader = reader
-
-                    self.success = True
-
-                except Exception:
-
-                    self.success = False
-
-        self.mesh_thread = MeshLoadThread(self, mesh_case_path)
-
-        self.mesh_thread.finished.connect(
-            lambda: self._on_openfoam_case_loaded(
-                self.mesh_thread.reader if self.mesh_thread.success else None
-            )
-        )
-
-        self.mesh_thread.finished.connect(self.mesh_thread.deleteLater)
-
-        self.mesh_thread.start()
+            self._on_openfoam_case_loaded(None)
 
     def _on_openfoam_case_loaded(self, reader):
 

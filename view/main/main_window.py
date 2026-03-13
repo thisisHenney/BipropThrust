@@ -268,6 +268,12 @@ class MainWindow(QMainWindow):
 
     def _on_save_clicked(self) -> None:
 
+        if self.case_path and "temp" in self.case_path:
+
+            self.save_case_as()
+
+            return
+
         mesh_panel = self.center_widget.panel_views.get("mesh")
 
         if mesh_panel:
@@ -962,6 +968,10 @@ class MainWindow(QMainWindow):
         self.dock_manager.save_layout()
 
         self.app_data.window_geometry = save_window_geometry(self)
+
+        if self.case_path and "temp" not in self.case_path:
+
+            self.app_data.add_recent_case(self.case_path)
 
         self.app_data.save()
 

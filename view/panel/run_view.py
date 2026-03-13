@@ -540,6 +540,10 @@ class RunView:
 
             self._log_file_path.symlink_to(self._solver_numbered_log)
 
+        # 새 솔버 실행 시 증분 파싱 상태 초기화
+        if self.residual_graph and hasattr(self.residual_graph, 'reset_incremental'):
+            self.residual_graph.reset_incremental()
+
         self._start_log_monitoring()
 
         self.exec_widget.run(commands)
@@ -652,13 +656,26 @@ class RunView:
 
         if parts[0] in ("mpirun", "mpiexec"):
 
+            MPIRUN_VALUE_FLAGS = {
+                '-n', '-np', '-c',
+                '--hostfile', '-hostfile', '--machinefile',
+                '--host', '-host',
+                '--wdir', '-wdir',
+                '--mca', '-mca',
+                '-x',
+                '--rankfile',
+                '--output-filename',
+            }
+
             i = 1
 
             while i < len(parts) and parts[i].startswith("-"):
 
+                flag = parts[i]
+
                 i += 1
 
-                if i < len(parts) and not parts[i - 1].startswith("--"):
+                if flag in MPIRUN_VALUE_FLAGS and i < len(parts):
 
                     i += 1
 
@@ -972,9 +989,11 @@ class RunView:
 
         self._graph_update_timer.stop()
 
-        if self._log_file_path and str(self._log_file_path) in self._log_watcher.files():
+        for p in [self._solver_numbered_log, self._log_file_path]:
 
-            self._log_watcher.removePath(str(self._log_file_path))
+            if p and str(p) in self._log_watcher.files():
+
+                self._log_watcher.removePath(str(p))
 
     def _check_log_file(self):
 
@@ -982,13 +1001,16 @@ class RunView:
 
             return
 
-        if self._log_file_path.exists():
+        # Watch the actual numbered log directly — Allclean may delete log.Solver symlink
+        watch_target = self._solver_numbered_log if self._solver_numbered_log else self._log_file_path
 
-            log_path_str = str(self._log_file_path)
+        if watch_target.exists():
 
-            if log_path_str not in self._log_watcher.files():
+            watch_str = str(watch_target)
 
-                self._log_watcher.addPath(log_path_str)
+            if watch_str not in self._log_watcher.files():
+
+                self._log_watcher.addPath(watch_str)
 
             self._log_timer.stop()
 
@@ -1006,7 +1028,9 @@ class RunView:
 
     def _do_update_residual_graph(self):
 
-        if not self._log_file_path or not self._log_file_path.exists():
+        log_path = self._solver_numbered_log if self._solver_numbered_log else self._log_file_path
+
+        if not log_path or not log_path.exists():
 
             return
 
@@ -1014,7 +1038,7 @@ class RunView:
 
             try:
 
-                self.residual_graph.load_file(str(self._log_file_path), target_vars=['h', 'p', 'rho'])
+                self.residual_graph.load_file_incremental(str(log_path), target_vars=['h', 'p', 'rho'])
 
             except Exception:
 
