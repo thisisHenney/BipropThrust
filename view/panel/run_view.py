@@ -1150,9 +1150,11 @@ class RunView:
 
             n_procs = int(self.ui.edit_number_of_subdomains_2.text())
 
+            use_hostfile = self.ui.checkBox_host_2.isChecked()
+
             cpu_count = os.cpu_count() or 1
 
-            if n_procs > cpu_count:
+            if not use_hostfile and n_procs > cpu_count:
 
                 self._highlight_error_widget(self.ui.edit_number_of_subdomains_2)
 
