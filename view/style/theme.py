@@ -702,6 +702,13 @@ def _build_stylesheet(c: dict) -> str:
             background-color: {c["highlight"]};
             color: {c["highlight_text"]};
         }}
+        QMenu::item:disabled {{
+            color: {c["text_disabled"]};
+        }}
+        QMenu::item:disabled:selected {{
+            background-color: {c["button_hover"]};
+            color: {c["text_disabled"]};
+        }}
         QMenu::separator {{
             height: 1px;
             background-color: {c["border_light"]};

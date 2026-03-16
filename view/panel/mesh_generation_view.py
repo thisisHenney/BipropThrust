@@ -515,11 +515,14 @@ class MeshGenerationView:
 
         self._flat_geometries = geom_view._flat_geometries if geom_view else set()
 
-        # 기존 스레드가 실행 중이면 취소 후 대기
         if hasattr(self, 'prepare_thread') and self.prepare_thread is not None:
-            if self.prepare_thread.isRunning():
-                self.prepare_thread.stop()
-                self.prepare_thread.wait(3000)
+            try:
+                if self.prepare_thread.isRunning():
+                    self.prepare_thread.stop()
+                    self.prepare_thread.wait(3000)
+            except RuntimeError:
+                pass
+            self.prepare_thread = None
 
         self.prepare_thread = PrepareMeshThread(self, x, y, z, bounds=geom_bounds)
 
@@ -527,6 +530,10 @@ class MeshGenerationView:
 
         self.prepare_thread.finished_error.connect(self._on_preparation_error)
 
+        def _on_thread_done():
+            self.prepare_thread = None
+
+        self.prepare_thread.finished.connect(_on_thread_done)
         self.prepare_thread.finished.connect(self.prepare_thread.deleteLater)
 
         self.prepare_thread.start()
@@ -1501,6 +1508,10 @@ FoamFile
             self.vtk_pre.obj_manager.add(actor, name="mesh", group="mesh")
 
             self.surface_actor = actor
+
+            if (hasattr(self.vtk_pre, '_view_combo')
+                    and self.vtk_pre._view_combo.currentText() == "transparent"):
+                self.vtk_pre._view_combo.setCurrentText("surface with edge")
 
             current_page = self.parent.ui.stackedWidget.currentWidget()
 

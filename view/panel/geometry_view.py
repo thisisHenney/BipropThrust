@@ -872,6 +872,13 @@ class GeometryView:
 
                         self.vtk_pre.vtk_widget.GetRenderWindow().Render()
 
+            if self.vtk_pre:
+                self._saved_projection = self.vtk_pre.camera.is_parallel_projection()
+                if not self._saved_projection:
+                    self.vtk_pre.camera.set_parallel_projection(True)
+                    self.vtk_pre._projection_action.setChecked(True)
+                self.vtk_pre.fit_to_scene()
+
             self.ui.button_geometry_apply.setText("Apply")
 
             self.ui.button_geometry_cancel.show()
@@ -909,6 +916,11 @@ class GeometryView:
                     self.ui.button_geometry_cancel.hide()
 
                     self.ui.button_geometry_reset.hide()
+
+                    if self.vtk_pre and hasattr(self, '_saved_projection'):
+                        if not self._saved_projection:
+                            self.vtk_pre.camera.set_parallel_projection(False)
+                            self.vtk_pre._projection_action.setChecked(False)
 
                     if self.vtk_pre and hasattr(self, '_saved_view_style') and self._saved_view_style:
 
@@ -981,6 +993,11 @@ class GeometryView:
                 self.ui.button_geometry_cancel.hide()
 
                 self.ui.button_geometry_reset.hide()
+
+                if self.vtk_pre and hasattr(self, '_saved_projection'):
+                    if not self._saved_projection:
+                        self.vtk_pre.camera.set_parallel_projection(False)
+                        self.vtk_pre._projection_action.setChecked(False)
 
                 if self.vtk_pre and hasattr(self, '_saved_view_style') and self._saved_view_style:
 

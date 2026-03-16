@@ -654,27 +654,41 @@ class MainWindow(QMainWindow):
 
         for i, path in enumerate(recent):
 
-            exists = Path(path).exists()
-
             display = path if len(path) <= 55 else f"...{path[-52:]}"
 
             action = self.menu_recent.addAction(f"&{i + 1}. {display}" if i < 9 else f"{i + 1}. {display}")
 
-            action.setEnabled(exists)
-
-            if exists:
-
-                action.triggered.connect(lambda checked=False, p=path: self.open_case(p))
-
-            else:
-
-                action.setToolTip("경로가 존재하지 않습니다")
+            action.triggered.connect(lambda checked=False, p=path: self.open_case(p) if Path(p).exists() else QMessageBox.warning(self, "경고", f"경로가 존재하지 않습니다:\n{p}"))
 
         self.menu_recent.addSeparator()
 
-        clear_action = self.menu_recent.addAction("목록 지우기")
+        remove_menu = self.menu_recent.addMenu("항목 제거")
+
+        for i, path in enumerate(recent):
+
+            display = path if len(path) <= 55 else f"...{path[-52:]}"
+
+            label = f"&{i + 1}. {display}" if i < 9 else f"{i + 1}. {display}"
+
+            remove_action = remove_menu.addAction(label)
+
+            remove_action.triggered.connect(lambda checked=False, p=path: self._remove_recent_case(p))
+
+        self.menu_recent.addSeparator()
+
+        clear_action = self.menu_recent.addAction("목록 전체 지우기")
 
         clear_action.triggered.connect(self._clear_recent_cases)
+
+    def _remove_recent_case(self, path: str) -> None:
+
+        if path in self.app_data.recent_cases:
+
+            self.app_data.recent_cases.remove(path)
+
+            self.app_data.save()
+
+            self._update_recent_menu()
 
     def _clear_recent_cases(self) -> None:
 

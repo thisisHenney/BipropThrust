@@ -13,7 +13,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QFileSystemWatcher, QTimer
 
-from PySide6.QtWidgets import QMessageBox
+from PySide6.QtWidgets import QMessageBox, QPushButton, QSpacerItem, QSizePolicy
 
 from nextlib.openfoam.PyFoamCase.foamfile import FoamFile
 
@@ -63,7 +63,7 @@ class RunView:
 
         self._is_running = False
 
-        self._is_paused = False
+        self._is_stopping_gracefully = False
 
         self._log_file_path = None
 
@@ -81,15 +81,20 @@ class RunView:
 
         self.ui.button_edit_hostfile_run.clicked.connect(self._on_edit_hostfile_clicked)
 
+        self._button_initialize = QPushButton("Initialize")
+        self._button_initialize.setMinimumHeight(36)
+        self._button_initialize.clicked.connect(self._on_initialize_clicked)
+        layout = self.ui.horizontalLayout_2
+        layout.insertWidget(0, self._button_initialize)
+        layout.insertSpacing(1, 12)
+
         self.ui.button_run.clicked.connect(self._on_run_clicked)
 
         self.ui.button_stop.clicked.connect(self._on_stop_clicked)
 
-        self.ui.button_pause.clicked.connect(self._on_pause_clicked)
-
         self.ui.button_stop.setEnabled(False)
 
-        self.ui.button_pause.setEnabled(False)
+        self.ui.button_pause.hide()
 
         self.ui.checkBox_host_2.toggled.connect(self._on_hostfile_run_toggled)
 
@@ -251,61 +256,21 @@ class RunView:
 
     def _on_stop_clicked(self):
 
-        self._is_paused = False
-
-        if self.exec_widget:
-
-            self.exec_widget.stop_process(kill=True)
-
-        self._is_running = False
-
-        self.ui.button_run.setEnabled(True)
-
-        self.ui.button_run.setText("Run Solver")
-
-        self.ui.button_stop.setEnabled(False)
-
-        self.ui.button_pause.setEnabled(False)
-
-        self.ui.button_mesh_generate.setEnabled(True)
-
-        self.ui.button_mesh_stop.setEnabled(False)
-
-        self.ui.button_pause.setText("Pause")
-
-        self.ui.edit_run_status.setText("Stopped")
-
-        self.ui.edit_run_finished.setText(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-
-        self._stop_log_monitoring()
-
-    def _on_pause_clicked(self):
+        if not self.case_data.path:
+            return
 
         case_path = Path(self.case_data.path) / "5.CHTFCase"
 
-        if self._is_paused:
+        self._set_control_dict_run_params(case_path, stop_at='writeNow')
 
-            self._set_control_dict_run_params(case_path, stop_at='endTime', start_from='latestTime')
+        self._is_stopping_gracefully = True
 
-            self._is_paused = False
+        if self.exec_widget and hasattr(self.exec_widget, '_commands'):
+            self.exec_widget._commands = []
 
-            if self.exec_widget:
+        self.ui.button_stop.setEnabled(False)
 
-                self.exec_widget._pause_all_proc = False
-
-            self._resume_from_pause(case_path)
-
-        else:
-
-            self._set_control_dict_run_params(case_path, stop_at='writeNow')
-
-            self._is_paused = True
-
-            if self.exec_widget:
-
-                self.exec_widget.stop_process(kill=True)
-
-            self.ui.button_pause.setText("Resume")
+        self.ui.edit_run_status.setText("Stopping...")
 
     def _set_control_dict_run_params(self, case_path: Path, stop_at: str, start_from: str = None):
 
@@ -332,18 +297,6 @@ class RunView:
         except Exception:
 
             traceback.print_exc()
-
-    def _resume_from_pause(self, case_path: Path):
-
-        """일시정지 후 재개: allrun_commands에서 mpirun(솔버) 단계부터 재실행."""
-
-        mpirun_idx = next(
-            (i for i, cmd in enumerate(self._allrun_commands)
-             if 'mpirun' in cmd or 'mpiexec' in cmd),
-            0
-        )
-
-        self._run_simulation_resume(mpirun_idx)
 
     def _on_proc_status_changed(self, proc_idx: int, cpu_id: int, pid: int, status: str):
 
@@ -507,9 +460,9 @@ class RunView:
 
         self.ui.button_stop.setEnabled(True)
 
-        self.ui.button_pause.setEnabled(True)
-
         self.ui.button_mesh_generate.setEnabled(False)
+
+        self._button_initialize.setEnabled(False)
 
         self.ui.edit_run_name.setText("Solver")
 
@@ -540,9 +493,10 @@ class RunView:
 
             self._log_file_path.symlink_to(self._solver_numbered_log)
 
-        # 새 솔버 실행 시 증분 파싱 상태 초기화
         if self.residual_graph and hasattr(self.residual_graph, 'reset_incremental'):
-            self.residual_graph.reset_incremental()
+            if not getattr(self, '_is_resuming_from_pause', False):
+                self.residual_graph.reset_incremental()
+        self._is_resuming_from_pause = False
 
         self._start_log_monitoring()
 
@@ -877,6 +831,9 @@ class RunView:
 
         """케이스 로드 시 이전 실행이 중단됐는지 감지하여 재개 상태를 설정."""
 
+        self._step_tracker = 0
+        self._last_run_completed = False
+
         if not self.case_data.path:
 
             return
@@ -914,6 +871,22 @@ class RunView:
         self._allrun_commands = self._parse_script(allrun_path, n_procs, use_hostfile, application)
 
         if not self._allrun_commands:
+
+            return
+
+        paused_marker = case_path / ".paused"
+
+        if paused_marker.exists():
+
+            mpirun_idx = next(
+                (i for i, cmd in enumerate(self._allrun_commands)
+                 if 'mpirun' in cmd or 'mpiexec' in cmd),
+                0
+            )
+
+            self._step_tracker = len(self._allclean_commands) + mpirun_idx + 1
+
+            self._last_run_completed = False
 
             return
 
@@ -975,7 +948,7 @@ class RunView:
 
         else:
 
-            self._step_tracker = len(self._allclean_commands) + 1
+            self._step_tracker = 0
 
         self._last_run_completed = False
 
@@ -1001,7 +974,6 @@ class RunView:
 
             return
 
-        # Watch the actual numbered log directly — Allclean may delete log.Solver symlink
         watch_target = self._solver_numbered_log if self._solver_numbered_log else self._log_file_path
 
         if watch_target.exists():
@@ -1046,8 +1018,8 @@ class RunView:
 
     def _on_simulation_finished(self):
 
-        if self._is_paused:
-
+        if self._is_stopping_gracefully:
+            self._restore_ui_after_run()
             return
 
         self._is_running = False
@@ -1064,11 +1036,9 @@ class RunView:
 
         self.ui.button_stop.setEnabled(False)
 
-        self.ui.button_pause.setEnabled(False)
-
-        self.ui.button_pause.setText("Pause")
-
         self.ui.button_mesh_generate.setEnabled(True)
+
+        self._button_initialize.setEnabled(True)
 
         self.ui.edit_run_status.setText("Finished")
 
@@ -1076,8 +1046,8 @@ class RunView:
 
     def _on_simulation_error(self):
 
-        if self._is_paused:
-
+        if self._is_stopping_gracefully:
+            self._restore_ui_after_run()
             return
 
         self._is_running = False
@@ -1090,11 +1060,9 @@ class RunView:
 
         self.ui.button_stop.setEnabled(False)
 
-        self.ui.button_pause.setEnabled(False)
-
-        self.ui.button_pause.setText("Pause")
-
         self.ui.button_mesh_generate.setEnabled(True)
+
+        self._button_initialize.setEnabled(True)
 
         self.ui.edit_run_status.setText("Error")
 
@@ -1102,23 +1070,36 @@ class RunView:
 
     def _restore_ui_after_run(self):
 
-        if self._is_paused:
+        if self._is_stopping_gracefully:
+
+            self._is_stopping_gracefully = False
 
             self._is_running = False
 
-            self.ui.button_run.setEnabled(False)
+            if self.case_data.path:
+                case_path = Path(self.case_data.path) / "5.CHTFCase"
+                marker = case_path / ".paused"
+                marker.touch()
+                self._set_control_dict_run_params(case_path, stop_at='endTime')
+                self._detect_resume_state()
 
-            self.ui.button_stop.setEnabled(True)
+            self.ui.button_run.setEnabled(True)
 
-            self.ui.button_pause.setEnabled(True)
+            self.ui.button_run.setText("Run Solver")
 
-            self.ui.button_pause.setText("Resume")
+            self.ui.button_stop.setEnabled(False)
 
-            self.ui.button_mesh_generate.setEnabled(False)
+            self.ui.button_mesh_generate.setEnabled(True)
 
-            self.ui.edit_run_status.setText("Paused")
+            self._button_initialize.setEnabled(True)
+
+            self.ui.edit_run_status.setText("Paused (writeNow)")
+
+            self.ui.edit_run_finished.setText(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
             self._stop_log_monitoring()
+
+            self._do_update_residual_graph()
 
             return
 
@@ -1130,9 +1111,9 @@ class RunView:
 
         self.ui.button_stop.setEnabled(False)
 
-        self.ui.button_pause.setEnabled(False)
-
         self.ui.button_mesh_generate.setEnabled(True)
+
+        self._button_initialize.setEnabled(True)
 
         self.ui.edit_run_status.setText("Ready")
 
@@ -1141,6 +1122,116 @@ class RunView:
         self._stop_log_monitoring()
 
         self._do_update_residual_graph()
+
+    def _on_initialize_clicked(self):
+
+        if self._is_running:
+            QMessageBox.warning(self.parent, "Initialize", "시뮬레이션이 실행 중입니다.\nStop 후 Initialize하세요.")
+            return
+
+        if self.exec_widget and self.exec_widget.is_running():
+            QMessageBox.warning(self.parent, "Initialize", "다른 작업이 실행 중입니다.")
+            return
+
+        if not self.case_data.path:
+            return
+
+        case_path = Path(self.case_data.path) / "5.CHTFCase"
+        allclean_path = case_path / "Allclean"
+
+        if not allclean_path.exists():
+            QMessageBox.information(self.parent, "Initialize", "Allclean 스크립트가 없습니다.")
+            return
+
+        reply = QMessageBox.question(
+            self.parent,
+            "Initialize",
+            "케이스를 초기화하면 기존 해석 결과가 삭제됩니다.\n계속하시겠습니까?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        n_procs = 4
+        try:
+            n_procs = int(self.ui.edit_number_of_subdomains_2.text())
+        except (ValueError, AttributeError):
+            pass
+
+        use_hostfile = self.ui.checkBox_host_2.isChecked()
+        application = self._get_application(case_path)
+
+        commands = self._parse_script(allclean_path, n_procs, use_hostfile, application)
+
+        if not commands:
+            QMessageBox.information(self.parent, "Initialize", "Allclean 스크립트에 실행할 명령이 없습니다.")
+            return
+
+        paused_marker = case_path / ".paused"
+        paused_marker.unlink(missing_ok=True)
+
+        self._step_tracker = 0
+        self._last_run_completed = False
+        self._allclean_commands = commands
+        self._allrun_commands = []
+
+        self._is_running = True
+        self._button_initialize.setEnabled(False)
+        self._button_initialize.setText("Initializing...")
+        self.ui.button_run.setEnabled(False)
+        self.ui.button_stop.setEnabled(False)
+        self.ui.button_mesh_generate.setEnabled(False)
+        self.ui.edit_run_status.setText("Initializing...")
+
+        self.exec_widget.set_working_path(str(case_path))
+        self.exec_widget.set_function_after_finished(self._on_initialize_finished)
+        self.exec_widget.set_function_after_error(self._on_initialize_error)
+
+        shell_wrapper = case_path / "shell_cmd.sh"
+        shell_wrapper.write_text('#!/bin/bash\neval "$@"\n', encoding='utf-8')
+        shell_wrapper.chmod(0o755)
+
+        of_wrapper = case_path / "of_cmd.sh"
+        of_wrapper.write_text(
+            '#!/bin/bash\n'
+            'source /usr/lib/openfoam/openfoam2212/etc/bashrc\n'
+            '. ${WM_PROJECT_DIR}/bin/tools/RunFunctions\n'
+            '. ${WM_PROJECT_DIR}/bin/tools/CleanFunctions\n'
+            '"$@"\n',
+            encoding='utf-8'
+        )
+        of_wrapper.chmod(0o755)
+
+        self.exec_widget.run(commands)
+
+    def _on_initialize_finished(self):
+
+        self._is_running = False
+        self._button_initialize.setEnabled(True)
+        self._button_initialize.setText("Initialize")
+        self.ui.button_run.setEnabled(True)
+        self.ui.button_stop.setEnabled(False)
+        self.ui.button_mesh_generate.setEnabled(True)
+        self.ui.edit_run_status.setText("Initialized")
+
+        if self.residual_graph:
+            if hasattr(self.residual_graph, 'reset_incremental'):
+                self.residual_graph.reset_incremental()
+            self.residual_graph.data = None
+            if hasattr(self.residual_graph, 'update_plot'):
+                self.residual_graph.update_plot()
+
+    def _on_initialize_error(self):
+
+        self._is_running = False
+        self._button_initialize.setEnabled(True)
+        self._button_initialize.setText("Initialize")
+        self.ui.button_run.setEnabled(True)
+        self.ui.button_stop.setEnabled(False)
+        self.ui.button_mesh_generate.setEnabled(True)
+        self.ui.edit_run_status.setText("Initialize Error")
 
     def _on_run_clicked(self):
 
@@ -1211,7 +1302,9 @@ class RunView:
 
             if allrun_resume < len(self._allrun_commands):
 
-                step_name = self._get_display_cmd(self._allrun_commands[allrun_resume])
+                paused_marker = Path(self.case_data.path) / "5.CHTFCase" / ".paused"
+
+                is_paused_state = paused_marker.exists()
 
                 total = len(self._allrun_commands)
 
@@ -1219,25 +1312,43 @@ class RunView:
 
                 msg.setWindowTitle("Run Solver")
 
-                msg.setText(
-                    f"이전 실행이 중단되었습니다.\n\n"
-                    f"중단 단계: {allrun_resume + 1} / {total}  ({step_name})\n\n"
-                    f"이 단계부터 이어서 실행하시겠습니까?"
-                )
+                if is_paused_state:
+
+                    msg.setText(
+                        "이전 실행이 일시정지(writeNow) 되었습니다.\n\n"
+                        "솔버부터 이어서 실행하시겠습니까?"
+                    )
+
+                else:
+
+                    step_name = self._get_display_cmd(self._allrun_commands[allrun_resume])
+
+                    msg.setText(
+                        f"이전 실행이 중단되었습니다.\n\n"
+                        f"중단 단계: {allrun_resume + 1} / {total}  ({step_name})\n\n"
+                        f"이 단계부터 이어서 실행하시겠습니까?"
+                    )
 
                 btn_resume = msg.addButton("이어서 실행", QMessageBox.ButtonRole.YesRole)
 
-                msg.addButton("처음부터 실행", QMessageBox.ButtonRole.NoRole)
+                btn_restart = msg.addButton("처음부터 실행", QMessageBox.ButtonRole.NoRole)
+
+                msg.addButton("취소", QMessageBox.ButtonRole.RejectRole)
 
                 msg.setDefaultButton(btn_resume)
 
                 msg.exec()
 
-                if msg.clickedButton() == btn_resume:
+                clicked = msg.clickedButton()
 
+                if clicked == btn_resume:
+                    paused_marker.unlink(missing_ok=True)
+                    self._is_resuming_from_pause = True
                     self._run_simulation_resume(allrun_resume)
-
-                    return
+                elif clicked == btn_restart:
+                    paused_marker.unlink(missing_ok=True)
+                    self._run_simulation()
+                return
 
         self._run_simulation()
 

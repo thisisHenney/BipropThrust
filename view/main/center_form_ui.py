@@ -1,12 +1,4 @@
-# -*- coding: utf-8 -*-
 
-################################################################################
-## Form generated from reading UI file 'center_form.ui'
-##
-## Created by: Qt User Interface Compiler version 6.9.0
-##
-## WARNING! All changes made in this file will be lost when recompiling UI file!
-################################################################################
 
 from PySide6.QtCore import (QCoreApplication, QDate, QDateTime, QLocale,
     QMetaObject, QObject, QPoint, QRect,
@@ -2504,7 +2496,6 @@ class Ui_Center(object):
 
 
         QMetaObject.connectSlotsByName(Center)
-    # setupUi
 
     def retranslateUi(self, Center):
         Center.setWindowTitle(QCoreApplication.translate("Center", u"Form", None))
@@ -2783,5 +2774,4 @@ class Ui_Center(object):
         self.button_run.setText(QCoreApplication.translate("Center", u"Run Solver", None))
         self.button_pause.setText(QCoreApplication.translate("Center", u"Pause", None))
         self.button_stop.setText(QCoreApplication.translate("Center", u"Stop", None))
-    # retranslateUi
 
