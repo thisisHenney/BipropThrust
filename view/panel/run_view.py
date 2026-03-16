@@ -394,6 +394,15 @@ class RunView:
 
             self._set_control_dict_run_params(case_path, stop_at='endTime', start_from='latestTime')
 
+            prev_log = None
+            if self._solver_numbered_log and self._solver_numbered_log.exists():
+                prev_log = self._solver_numbered_log
+            elif self._log_file_path and self._log_file_path.is_symlink():
+                resolved = self._log_file_path.resolve()
+                if resolved.exists():
+                    prev_log = resolved
+            self._resume_prev_log = prev_log
+
             self._execute_commands(case_path, commands)
 
         except Exception:
@@ -493,9 +502,23 @@ class RunView:
 
             self._log_file_path.symlink_to(self._solver_numbered_log)
 
+        prev_log = getattr(self, '_resume_prev_log', None)
+        if prev_log and self._solver_numbered_log and prev_log.exists():
+            import shutil
+            shutil.copy2(str(prev_log), str(self._solver_numbered_log))
+            log_wrapper = case_path / "log_cmd.sh"
+            log_wrapper.write_text(
+                '#!/bin/bash\n'
+                'set -o pipefail\n'
+                'LOG_FILE="$1"\n'
+                'shift\n'
+                'setsid "$@" 2>&1 | stdbuf -oL tee -a "$LOG_FILE"\n',
+                encoding='utf-8'
+            )
+        self._resume_prev_log = None
+
         if self.residual_graph and hasattr(self.residual_graph, 'reset_incremental'):
-            if not getattr(self, '_is_resuming_from_pause', False):
-                self.residual_graph.reset_incremental()
+            self.residual_graph.reset_incremental()
         self._is_resuming_from_pause = False
 
         self._start_log_monitoring()
