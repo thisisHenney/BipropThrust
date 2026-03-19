@@ -878,6 +878,7 @@ class GeometryView:
                     self.vtk_pre.camera.set_parallel_projection(True)
                     self.vtk_pre._projection_action.setChecked(True)
                 self.vtk_pre.fit_to_scene()
+                self.vtk_pre.escape_pressed.connect(self._on_cancel_clicked)
 
             self.ui.button_geometry_apply.setText("Apply")
 
@@ -921,6 +922,10 @@ class GeometryView:
                         if not self._saved_projection:
                             self.vtk_pre.camera.set_parallel_projection(False)
                             self.vtk_pre._projection_action.setChecked(False)
+                        try:
+                            self.vtk_pre.escape_pressed.disconnect(self._on_cancel_clicked)
+                        except RuntimeError:
+                            pass
 
                     if self.vtk_pre and hasattr(self, '_saved_view_style') and self._saved_view_style:
 
@@ -998,6 +1003,10 @@ class GeometryView:
                     if not self._saved_projection:
                         self.vtk_pre.camera.set_parallel_projection(False)
                         self.vtk_pre._projection_action.setChecked(False)
+                    try:
+                        self.vtk_pre.escape_pressed.disconnect(self._on_cancel_clicked)
+                    except RuntimeError:
+                        pass
 
                 if self.vtk_pre and hasattr(self, '_saved_view_style') and self._saved_view_style:
 

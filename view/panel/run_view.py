@@ -73,6 +73,8 @@ class RunView:
 
         self._step_tracker = 0
 
+        self._solver_step_num = 0
+
         self._last_run_completed = False
 
         self._init_connect()
@@ -261,12 +263,15 @@ class RunView:
 
         case_path = Path(self.case_data.path) / "5.CHTFCase"
 
-        self._set_control_dict_run_params(case_path, stop_at='writeNow')
-
         self._is_stopping_gracefully = True
 
-        if self.exec_widget and hasattr(self.exec_widget, '_commands'):
-            self.exec_widget._commands = []
+        if self._step_tracker > self._solver_step_num:
+            if self.exec_widget:
+                self.exec_widget.stop_process(kill=True)
+        else:
+            self._set_control_dict_run_params(case_path, stop_at='writeNow')
+            if self.exec_widget and hasattr(self.exec_widget, '_commands'):
+                self.exec_widget._commands = []
 
         self.ui.button_stop.setEnabled(False)
 
@@ -364,6 +369,13 @@ class RunView:
 
             self._last_run_completed = False
 
+            mpirun_idx = next(
+                (i for i, cmd in enumerate(self._allrun_commands)
+                 if 'mpirun' in cmd or 'mpiexec' in cmd),
+                0
+            )
+            self._solver_step_num = len(self._allclean_commands) + mpirun_idx + 1
+
             self._set_control_dict_run_params(case_path, stop_at='endTime', start_from='startTime')
 
             self._execute_commands(case_path, commands)
@@ -391,6 +403,8 @@ class RunView:
             self._step_tracker = len(self._allclean_commands) + allrun_start
 
             self._last_run_completed = False
+
+            self._solver_step_num = len(self._allclean_commands) + allrun_start + 1
 
             self._set_control_dict_run_params(case_path, stop_at='endTime', start_from='latestTime')
 
